@@ -11,7 +11,7 @@ from config import (
 from dungeon_config import DUNGEON_ORDER, DUNGEONS, DIFFICULTY_SELECTOR
 from utils import antibot_delay, log, parse_cooldown_time, safe_click, safe_click_element
 from popups import close_all_popups
-from backpack import cleanup_backpack_if_needed
+from backpack import cleanup_backpack_if_needed, repeat_craft_if_ready
 from combat import fight_in_hell_games
 
 
@@ -312,6 +312,9 @@ def go_to_next_dungeon(page, current_index, enter_failure_count=0):
 
     # 2) Проверяем рюкзак
     cleanup_backpack_if_needed(page)
+
+    # 2.5) Проверяем готовый крафт (железо)
+    repeat_craft_if_ready(page)
 
     # 3) Ищем следующий доступный данжен
     next_index = find_next_available_dungeon(page, current_index)

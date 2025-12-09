@@ -11,7 +11,25 @@ from config import (
     DUNGEONS_URL,
 )
 from utils import antibot_delay, log, safe_click, safe_click_element
+
+# Список предметов, которые НЕЛЬЗЯ выкидывать/продавать/разбирать
+PROTECTED_ITEMS = [
+    "Железо",
+    "Железная Руда",
+]
+
 from popups import close_achievement_popup, close_party_widget
+
+
+def is_protected_item(item_name):
+    """
+    Проверяет, является ли предмет защищённым (нельзя продавать/выкидывать).
+    """
+    if not item_name:
+        return False
+    return item_name in PROTECTED_ITEMS
+
+
 from stats import get_stats
 
 
@@ -111,6 +129,7 @@ def find_item_with_auction_button(page, skip_items=None):
     """
     Ищет предмет с кнопкой "На аукцион".
     skip_items — список названий предметов, которые нужно пропустить (для разборки).
+    Автоматически пропускает защищённые предметы (железо, руда).
     Возвращает (item_element, auction_button, is_green, item_name) или (None, None, False, None).
     """
     if skip_items is None:
@@ -124,6 +143,10 @@ def find_item_with_auction_button(page, skip_items=None):
 
             # Пропускаем предметы из списка skip
             if item_name and item_name in skip_items:
+                continue
+
+            # Пропускаем защищённые предметы (железо, руда)
+            if is_protected_item(item_name):
                 continue
 
             buttons = item.query_selector_all("a.go-btn")
@@ -252,8 +275,14 @@ def disassemble_or_drop_item(page, item_name):
     """
     Пытается разобрать предмет. Если не получается — выкидывает.
     После выкидывания возвращается в рюкзак.
+    НЕ трогает защищённые предметы (железо, руда).
     Возвращает True если успешно.
     """
+    # Защита: не трогаем железо и руду
+    if is_protected_item(item_name):
+        log(f"🛡️ Предмет '{item_name}' защищён — пропускаем")
+        return False
+
     item = find_item_by_name(page, item_name)
     if not item:
         log(f"⚠️ Предмет '{item_name}' не найден")
@@ -736,3 +765,54 @@ def cleanup_backpack_if_needed(page):
         print(f"❌ Не удалось вернуться в подземелья: {e}")
 
     return True
+
+
+def check_craft_ready(page):
+    """
+    Проверяет, есть ли готовый крафт на странице.
+    Ищет блок info-box с текстом "Готово" И кнопкой "Повторить".
+    Возвращает элемент кнопки "Повторить" или None.
+    """
+    try:
+        info_boxes = page.query_selector_all("div.info-box")
+        for box in info_boxes:
+            # Проверяем есть ли текст "Готово" в боксе
+            box_text = box.inner_text()
+            if "Готово" in box_text:
+                # Ищем кнопку "Повторить"
+                buttons = box.query_selector_all("a.go-btn")
+                has_repeat_btn = False
+                for btn in buttons:
+                    btn_text = btn.inner_text().strip()
+                    if "Повторить" in btn_text:
+                        has_repeat_btn = True
+                        return btn
+
+                # Готово есть, но кнопки "Повторить" нет — пропускаем
+                if not has_repeat_btn:
+                    log("⚒️ Крафт готов, но кнопки 'Повторить' нет — пропускаем")
+                    return None
+    except Exception as e:
+        print(f"⚠️ Ошибка при проверке крафта: {e}")
+    return None
+
+
+def repeat_craft_if_ready(page):
+    """
+    Если крафт готов — нажимает "Повторить".
+    Вызывать на странице города перед входом в данжены.
+    Возвращает True если крафт был перезапущен.
+    """
+    repeat_btn = check_craft_ready(page)
+    if not repeat_btn:
+        return False
+
+    log("⚒️ Крафт готов! Нажимаем 'Повторить'...")
+
+    if safe_click_element(repeat_btn):
+        log("✅ Крафт перезапущен!")
+        antibot_delay(1.5, 0.5)
+        return True
+    else:
+        log("⚠️ Не удалось нажать 'Повторить'")
+        return False
