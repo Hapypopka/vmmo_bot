@@ -32,7 +32,15 @@ def main():
         page.fill('input[name="password"]', PASSWORD)
         page.click('button[type="submit"]')
 
-        page.wait_for_load_state("networkidle")
+        # Ждём редиректа после логина (не networkidle — он зависает)
+        try:
+            page.wait_for_url("**/user/**", timeout=15000)
+        except:
+            pass
+
+        # Дополнительная пауза для загрузки кук
+        import time
+        time.sleep(3)
 
         cookies = context.cookies()
 
