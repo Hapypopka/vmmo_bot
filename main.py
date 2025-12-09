@@ -145,12 +145,15 @@ def main(headless=False, use_chromium=False):
 
         page = context.new_page()
 
+        # Увеличиваем таймаут для медленных соединений
+        page.set_default_timeout(60000)  # 60 сек
+
         # Заходим на главную, чтобы куки применились
-        page.goto(BASE_URL)
+        page.goto(BASE_URL, wait_until="domcontentloaded")
         time.sleep(2)
 
         # Переходим на данжены
-        page.goto(DUNGEONS_URL)
+        page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
         time.sleep(6)
 
         if "login" in page.url:
