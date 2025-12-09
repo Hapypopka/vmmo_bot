@@ -1,6 +1,8 @@
 from playwright.sync_api import sync_playwright
 import json
 import os
+import sys
+import argparse
 
 # Путь к папке скрипта
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -9,8 +11,18 @@ LOGIN = "nza"
 PASSWORD = "Agesevemu1313!"
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--chromium", action="store_true", help="Использовать Chromium")
+    parser.add_argument("--headless", action="store_true", help="Без GUI")
+    args = parser.parse_args()
+
     with sync_playwright() as p:
-        browser = p.firefox.launch(headless=False)
+        # Chromium для сервера, Firefox для Windows
+        if args.chromium:
+            browser = p.chromium.launch(headless=args.headless)
+        else:
+            browser = p.firefox.launch(headless=args.headless)
+
         context = browser.new_context()
         page = context.new_page()
 
