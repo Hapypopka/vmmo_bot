@@ -5,6 +5,56 @@
 import time
 import random
 import re
+import os
+from datetime import datetime
+
+# ========== ЛОГИРОВАНИЕ В ФАЙЛ ==========
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+LOG_FILE = None
+
+
+def init_logging():
+    """Инициализирует логирование в файл"""
+    global LOG_FILE
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_filename = datetime.now().strftime("bot_%Y-%m-%d_%H-%M-%S.log")
+    LOG_FILE = os.path.join(LOG_DIR, log_filename)
+    write_log("=== Логирование запущено ===")
+
+
+def write_log(message):
+    """Записывает сообщение в лог-файл"""
+    if LOG_FILE:
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(f"[{timestamp}] {message}\n")
+        except:
+            pass
+
+
+def save_debug_screenshot(page, reason="error"):
+    """Сохраняет скриншот для дебага"""
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = os.path.join(LOG_DIR, f"screenshot_{reason}_{timestamp}.png")
+        page.screenshot(path=filename)
+        write_log(f"📸 Скриншот сохранён: {filename}")
+        return filename
+    except Exception as e:
+        write_log(f"❌ Не удалось сохранить скриншот: {e}")
+        return None
+
+
+def log_error(message, page=None):
+    """Логирует ошибку + делает скриншот"""
+    error_msg = f"❌ ERROR: {message}"
+    print(error_msg)
+    write_log(error_msg)
+    if page:
+        save_debug_screenshot(page, "error")
+
 
 # ========== WATCHDOG СИСТЕМА ==========
 # Глобальный таймер для отслеживания активности бота
@@ -35,8 +85,10 @@ def antibot_delay(base=0.5, spread=1.2):
 
 
 def log(message):
-    """Вывод сообщения с временной меткой"""
-    print(f"{time.strftime('%H:%M:%S')} {message}")
+    """Вывод сообщения с временной меткой + запись в файл"""
+    formatted = f"{time.strftime('%H:%M:%S')} {message}"
+    print(formatted)
+    write_log(message)
 
 
 def parse_cooldown_time(cd_text):

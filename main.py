@@ -32,7 +32,7 @@ from config import (
     BROWSER_SCREEN,
 )
 from dungeon_config import DUNGEON_ORDER, DUNGEONS, START_DUNGEON_INDEX
-from utils import antibot_delay, log, safe_click, reset_watchdog, is_watchdog_triggered, get_watchdog_idle_time
+from utils import antibot_delay, log, safe_click, reset_watchdog, is_watchdog_triggered, get_watchdog_idle_time, init_logging, log_error, save_debug_screenshot
 from popups import collect_loot, close_all_popups, priority_checks, emergency_unstuck
 from backpack import cleanup_backpack_if_needed
 from combat import (
@@ -106,19 +106,52 @@ def keyboard_listener(controller):
 pause_controller = PauseController()
 
 
-def main(headless=False):
+def main(headless=False, use_chromium=False):
     with sync_playwright() as p:
-        # Запуск браузера
-        browser = p.firefox.launch(
-            headless=headless,
-            args=["--start-maximized"]
-        )
+        # Запуск браузера (Chromium легче по памяти)
+        if use_chromium:
+            browser = p.chromium.launch(
+                headless=headless,
+                args=[
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--metrics-recording-only",
+                    "--no-first-run",
+                ]
+            )
+        else:
+            browser = p.firefox.launch(
+                headless=headless,
+                args=["--start-maximized"]
+            )
 
         # Контекст с размером экрана
         context = browser.new_context(
             viewport=BROWSER_VIEWPORT,
             screen=BROWSER_SCREEN,
         )
+
+        # Блокируем тяжёлые ресурсы для экономии памяти
+        if use_chromium and headless:
+            page_temp = context.new_page()
+            page_temp.close()
+
+            def block_resources(route):
+                route.abort()
+
+            # Блокируем картинки, шрифты, медиа, стили
+            context.route("**/*.{png,jpg,jpeg,gif,webp,svg,ico}", block_resources)
+            context.route("**/*.{woff,woff2,ttf,otf,eot}", block_resources)
+            context.route("**/*.{mp3,mp4,webm,ogg,wav}", block_resources)
+            context.route("**/yandex.ru/**", block_resources)  # Яндекс метрика
+            context.route("**/mc.yandex.ru/**", block_resources)
+            context.route("**/google-analytics.com/**", block_resources)
+            context.route("**/googletagmanager.com/**", block_resources)
 
         # Загружаем куки
         cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
@@ -200,6 +233,7 @@ def main(headless=False):
             if is_watchdog_triggered():
                 idle_time = int(get_watchdog_idle_time())
                 log(f"🚨 WATCHDOG: Бот простаивает {idle_time} сек — запуск аварийного выхода")
+                save_debug_screenshot(page, "watchdog")
                 emergency_unstuck(page)
                 no_units_attempts = 0
                 continue
@@ -308,7 +342,7 @@ def main(headless=False):
                 antibot_delay(0.8, 0.4)
 
             except Exception as e:
-                print(f"Ошибка в основном цикле: {e}")
+                log_error(f"Ошибка в основном цикле: {e}", page)
                 # При ошибке пробуем восстановиться
                 log("🔄 Попытка восстановления после ошибки...")
                 if recover_to_dungeons(page):
@@ -335,14 +369,26 @@ if __name__ == "__main__":
         action="store_true",
         help="Режим сервера: headless + без клавиатурного управления"
     )
+    parser.add_argument(
+        "--chromium",
+        action="store_true",
+        help="Использовать Chromium вместо Firefox (меньше памяти)"
+    )
     args = parser.parse_args()
 
     # Устанавливаем режим headless
     headless_mode = args.headless or args.server
+    use_chromium = args.chromium or args.server  # На сервере по умолчанию Chromium
+
     if headless_mode:
         print("🖥️  Режим: HEADLESS (без GUI)")
     else:
         print("🖥️  Режим: с GUI")
+
+    if use_chromium:
+        print("🌐 Браузер: Chromium (оптимизирован по памяти)")
+    else:
+        print("🦊 Браузер: Firefox")
 
     # Запускаем слушатель клавиатуры только на Windows и не в серверном режиме
     if IS_WINDOWS and not args.server:
@@ -353,6 +399,10 @@ if __name__ == "__main__":
         print(f"{'='*50}\n")
     else:
         print("ℹ️  Клавиатурное управление отключено (сервер/Linux)")
+
+    # Инициализируем логирование в файл
+    init_logging()
+    log("🚀 Бот запущен")
 
     # Выводим накопленную статистику при запуске
     print_stats()
@@ -366,9 +416,9 @@ if __name__ == "__main__":
             print(f"{'='*50}\n")
 
             try:
-                main(headless=headless_mode)
+                main(headless=headless_mode, use_chromium=use_chromium)
             except Exception as e:
-                print(f"❌ Критическая ошибка: {e}")
+                log_error(f"Критическая ошибка: {e}")
 
             print(f"\n{time.strftime('%H:%M:%S')} ⏳ Пауза 10 сек перед перезапуском...")
             time.sleep(10)
