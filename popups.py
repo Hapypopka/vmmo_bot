@@ -203,9 +203,10 @@ def priority_checks(page):
     Проверяет и нажимает важные кнопки.
     Возвращает True если была нажата какая-либо кнопка.
     """
-    # Приоритет 0: Выход из туториала Shadow Guard (Голос Джека)
-    if check_shadow_guard_tutorial(page):
-        return True
+    # ОТКЛЮЧЕНО: Теперь умираем на боссе вместо выхода
+    # # Приоритет 0: Выход из туториала Shadow Guard (Голос Джека)
+    # if check_shadow_guard_tutorial(page):
+    #     return True
 
     # Приоритет 1: Начать бой (если мы в лобби данжена)
     if check_and_click_start_battle(page):
