@@ -186,10 +186,25 @@ def main(headless=False, use_chromium=False):
 
         current_dungeon = DUNGEON_ORDER[current_dungeon_index]
 
-        # Входим в данжен
-        if not enter_dungeon(page, current_dungeon):
-            print("❌ Не удалось войти в данжен")
-            return
+        # Входим в данжен (с повторными попытками)
+        enter_attempts = 0
+        max_enter_attempts = 3
+        while not enter_dungeon(page, current_dungeon):
+            enter_attempts += 1
+            log(f"❌ Не удалось войти в данжен (попытка {enter_attempts}/{max_enter_attempts})")
+
+            if enter_attempts >= max_enter_attempts:
+                log("🔄 Пробуем другой данжен...")
+                # Пробуем следующий данжен
+                current_dungeon_index = (current_dungeon_index + 1) % len(DUNGEON_ORDER)
+                current_dungeon = DUNGEON_ORDER[current_dungeon_index]
+                enter_attempts = 0
+
+                # Обновляем страницу
+                page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
+                time.sleep(3)
+
+            antibot_delay(2.0, 1.0)
 
         print("✅ Вошли в данжен — начинаем бой")
         print(f"\n💡 Нажми P для паузы/продолжения\n")
@@ -198,6 +213,8 @@ def main(headless=False, use_chromium=False):
         no_units_attempts = 0
         enter_failure_count = 0
         session_start_time = time.time()
+        consecutive_attacks = 0  # Счётчик атак без прогресса
+        MAX_CONSECUTIVE_ATTACKS = 60  # Если 60 атак без смены статуса - застряли
 
         # ========== ОСНОВНОЙ ЦИКЛ БОЯ ==========
         while True:
@@ -257,6 +274,7 @@ def main(headless=False, use_chromium=False):
                     stats.stage_completed()
                     click_continue_battle(page)
                     no_units_attempts = 0
+                    consecutive_attacks = 0  # Прогресс! Сброс счётчика атак
                     reset_watchdog()
                     continue
 
@@ -270,6 +288,7 @@ def main(headless=False, use_chromium=False):
                         current_dungeon_index = new_index
                         current_dungeon = DUNGEON_ORDER[current_dungeon_index]
                     no_units_attempts = 0
+                    consecutive_attacks = 0  # Прогресс! Сброс счётчика атак
                     reset_watchdog()
                     continue
 
@@ -280,6 +299,17 @@ def main(headless=False, use_chromium=False):
                 if units_present(page):
                     no_units_attempts = 0
                     enter_failure_count = 0
+                    consecutive_attacks += 1
+
+                    # Проверка застревания в бесконечном бою
+                    if consecutive_attacks >= MAX_CONSECUTIVE_ATTACKS:
+                        log(f"🚨 ЗАСТРЯЛИ В БОЮ! {consecutive_attacks} атак без прогресса")
+                        save_debug_screenshot(page, "stuck_in_battle")
+                        # Пробуем выйти через emergency_unstuck
+                        emergency_unstuck(page)
+                        consecutive_attacks = 0
+                        continue
+
                     reset_watchdog()  # Есть юниты = активность
                     log("⚔️ Есть юнит — атакуем!")
 

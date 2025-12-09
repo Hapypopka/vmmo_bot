@@ -190,7 +190,14 @@ def enter_dungeon(page, dungeon_id):
         print(f"❌ Не удалось кликнуть на данжен: {e}")
         return False
 
-    # 2) Повышаем сложность (если нужно)
+    # 2) Ждём загрузки попапа данжена
+    try:
+        page.wait_for_selector("a.go-btn", timeout=10000)
+        time.sleep(1)
+    except:
+        log("⚠️ Попап данжена не загрузился")
+
+    # 3) Повышаем сложность (если нужно)
     if dungeon_config.get("need_difficulty"):
         if safe_click(page, DIFFICULTY_SELECTOR, timeout=5000):
             log("⬆️ Повысили сложность")
@@ -199,10 +206,14 @@ def enter_dungeon(page, dungeon_id):
         else:
             print(f"⚠️ Не удалось повысить сложность")
 
-    # 3) Кликаем "Войти" - ищем кнопку по тексту
+    # 4) Кликаем "Войти" - ищем кнопку по тексту
     enter_clicked = False
     try:
         buttons = page.query_selector_all("a.go-btn")
+        # Дебаг: показываем какие кнопки есть
+        btn_texts = [btn.inner_text().strip() for btn in buttons]
+        log(f"🔍 Найдены кнопки: {btn_texts}")
+
         for btn in buttons:
             text = btn.inner_text().strip()
             if text == "Войти":
@@ -210,10 +221,19 @@ def enter_dungeon(page, dungeon_id):
                 enter_clicked = True
                 log("✅ Нажали 'Войти'")
                 break
+            # Иногда кнопка называется "В подземелье"
+            elif "подземелье" in text.lower():
+                btn.dispatch_event("click")
+                enter_clicked = True
+                log(f"✅ Нажали '{text}'")
+                break
     except Exception as e:
         print(f"⚠️ Ошибка при поиске кнопки 'Войти': {e}")
 
     if not enter_clicked:
+        # Делаем скриншот для дебага
+        from utils import save_debug_screenshot
+        save_debug_screenshot(page, "no_enter_button")
         print(f"❌ Не удалось нажать 'Войти'")
         return False
 

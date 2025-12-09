@@ -7,7 +7,7 @@ import argparse
 # Путь к папке скрипта
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-LOGIN = "nza"
+LOGIN = "Arilyn"
 PASSWORD = "Agesevemu1313!"
 
 def main():
