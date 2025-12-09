@@ -136,23 +136,6 @@ def main(headless=False, use_chromium=False):
             screen=BROWSER_SCREEN,
         )
 
-        # Блокируем тяжёлые ресурсы для экономии памяти
-        if use_chromium and headless:
-            page_temp = context.new_page()
-            page_temp.close()
-
-            def block_resources(route):
-                route.abort()
-
-            # Блокируем картинки, шрифты, медиа, стили
-            context.route("**/*.{png,jpg,jpeg,gif,webp,svg,ico}", block_resources)
-            context.route("**/*.{woff,woff2,ttf,otf,eot}", block_resources)
-            context.route("**/*.{mp3,mp4,webm,ogg,wav}", block_resources)
-            context.route("**/yandex.ru/**", block_resources)  # Яндекс метрика
-            context.route("**/mc.yandex.ru/**", block_resources)
-            context.route("**/google-analytics.com/**", block_resources)
-            context.route("**/googletagmanager.com/**", block_resources)
-
         # Загружаем куки
         cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
         print(f"📁 Загружаем куки из: {cookies_path}")
