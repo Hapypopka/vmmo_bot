@@ -38,6 +38,37 @@ def is_protected_item(item_name):
     return item_name in PROTECTED_ITEMS
 
 
+def load_auction_blacklist():
+    """
+    Загружает чёрный список предметов для аукциона.
+    Эти предметы не продались (истёк срок лота) и не будут выставляться повторно.
+    """
+    import json
+    import os
+
+    blacklist_file = os.path.join(os.path.dirname(__file__), "auction_blacklist.json")
+
+    try:
+        if os.path.exists(blacklist_file):
+            with open(blacklist_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        log(f"⚠️ Ошибка чтения чёрного списка: {e}")
+
+    return []
+
+
+def is_auction_blacklisted(item_name):
+    """
+    Проверяет, находится ли предмет в чёрном списке аукциона.
+    """
+    if not item_name:
+        return False
+
+    blacklist = load_auction_blacklist()
+    return item_name in blacklist
+
+
 from stats import get_stats
 
 
@@ -137,7 +168,7 @@ def find_item_with_auction_button(page, skip_items=None):
     """
     Ищет предмет с кнопкой "На аукцион".
     skip_items — список названий предметов, которые нужно пропустить (для разборки).
-    Автоматически пропускает защищённые предметы (железо, руда).
+    Автоматически пропускает защищённые предметы (железо, руда) и предметы из чёрного списка.
     Возвращает (item_element, auction_button, is_green, item_name) или (None, None, False, None).
     """
     if skip_items is None:
@@ -155,6 +186,11 @@ def find_item_with_auction_button(page, skip_items=None):
 
             # Пропускаем защищённые предметы (железо, руда)
             if is_protected_item(item_name):
+                continue
+
+            # Пропускаем предметы из чёрного списка аукциона (не продались)
+            if is_auction_blacklisted(item_name):
+                log(f"🚫 Пропускаем '{item_name}' (в чёрном списке аукциона)")
                 continue
 
             buttons = item.query_selector_all("a.go-btn")

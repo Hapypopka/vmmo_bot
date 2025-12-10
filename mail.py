@@ -187,6 +187,58 @@ def collect_message_items(page):
     return False
 
 
+def extract_expired_item_name(msg_text):
+    """
+    Извлекает название предмета из сообщения "Срок твоего лота истёк".
+    Формат: "Аукцион: Срок твоего лота истёк. (Название Предмета)"
+    Возвращает название предмета или None.
+    """
+    import re
+    try:
+        # Ищем текст в скобках после "истёк."
+        match = re.search(r'истёк\.\s*\(([^)]+)\)', msg_text)
+        if match:
+            item_name = match.group(1).strip()
+            return item_name
+    except Exception as e:
+        log(f"⚠️ Ошибка извлечения названия: {e}")
+    return None
+
+
+def add_to_auction_blacklist(item_name):
+    """
+    Добавляет предмет в чёрный список аукциона.
+    Эти предметы не будут выставляться на аукцион повторно.
+    """
+    import json
+    import os
+
+    blacklist_file = os.path.join(os.path.dirname(__file__), "auction_blacklist.json")
+
+    try:
+        # Читаем существующий список
+        if os.path.exists(blacklist_file):
+            with open(blacklist_file, 'r', encoding='utf-8') as f:
+                blacklist = json.load(f)
+        else:
+            blacklist = []
+
+        # Добавляем если ещё нет
+        if item_name not in blacklist:
+            blacklist.append(item_name)
+
+            # Сохраняем
+            with open(blacklist_file, 'w', encoding='utf-8') as f:
+                json.dump(blacklist, f, ensure_ascii=False, indent=2)
+
+            log(f"🚫 Добавлен в чёрный список аукциона: {item_name}")
+            return True
+    except Exception as e:
+        log(f"⚠️ Ошибка при добавлении в чёрный список: {e}")
+
+    return False
+
+
 def process_mailbox(page):
     """
     Обрабатывает все активные сообщения в почтовом ящике.
@@ -211,12 +263,21 @@ def process_mailbox(page):
         first_message = active_messages[0]
 
         # Получаем текст сообщения для лога
+        msg_text = ""
         try:
             msg_text = first_message.inner_text().strip()
-            # Обрезаем длинный текст
-            if len(msg_text) > 60:
-                msg_text = msg_text[:60] + "..."
-            log(f"📧 Обрабатываем: {msg_text}")
+
+            # Проверяем, истёк ли срок лота
+            if "Срок твоего лота истёк" in msg_text or "истёк" in msg_text.lower():
+                item_name = extract_expired_item_name(msg_text)
+                if item_name:
+                    add_to_auction_blacklist(item_name)
+
+            # Обрезаем длинный текст для лога
+            display_text = msg_text
+            if len(display_text) > 60:
+                display_text = display_text[:60] + "..."
+            log(f"📧 Обрабатываем: {display_text}")
         except:
             pass
 
