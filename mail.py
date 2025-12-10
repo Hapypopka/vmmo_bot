@@ -50,28 +50,29 @@ def open_profile(page):
 def open_mailbox(page):
     """
     Открывает почтовый ящик из профиля.
-    Ищет кнопку с классом side-bar-item-mail
+    Ищет div.side-bar-item-c с текстом "Почта"
     Возвращает True если успешно.
     """
     try:
-        # Ищем кнопку почты в сайдбаре
-        mail_button = page.query_selector("div.side-bar-item-mail")
-        if not mail_button:
-            log("⚠️ Кнопка почты не найдена")
-            return False
+        # Ищем все элементы сайдбара
+        sidebar_items = page.query_selector_all("div.side-bar-item-c")
 
-        # Кликаем на родительский элемент
-        parent = mail_button.query_selector("..")
-        if parent and safe_click_element(parent):
-            log("📬 Открыли почтовый ящик")
-            time.sleep(3)  # Ждём загрузки списка сообщений
-            antibot_delay(2.0, 1.0)
-            return True
-        elif safe_click_element(mail_button):
-            log("📬 Открыли почтовый ящик")
-            time.sleep(3)  # Ждём загрузки списка сообщений
-            antibot_delay(2.0, 1.0)
-            return True
+        for item in sidebar_items:
+            try:
+                # Проверяем текст элемента
+                text = item.inner_text()
+                if "Почта" in text:
+                    # Нашли нужный элемент — кликаем
+                    if safe_click_element(item):
+                        log("📬 Открыли почтовый ящик")
+                        time.sleep(3)  # Ждём загрузки списка сообщений
+                        antibot_delay(2.0, 1.0)
+                        return True
+            except:
+                continue
+
+        log("⚠️ Кнопка почты не найдена в сайдбаре")
+        return False
     except Exception as e:
         log(f"⚠️ Ошибка при открытии почты: {e}")
     return False
