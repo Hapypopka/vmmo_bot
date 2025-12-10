@@ -893,6 +893,9 @@ def cleanup_backpack_if_needed(page):
     except Exception as e:
         print(f"❌ Не удалось вернуться в подземелья: {e}")
 
+    # Проверяем готовый крафт (после очистки рюкзака)
+    repeat_craft_if_ready(page)
+
     return True
 
 
