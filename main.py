@@ -122,6 +122,13 @@ def main(headless=False, use_chromium=False):
                     "--disable-translate",
                     "--metrics-recording-only",
                     "--no-first-run",
+                    # Экономия памяти (безопасные флаги)
+                    "--js-flags=--max-old-space-size=256",
+                    "--disable-logging",
+                    "--disable-breakpad",
+                    "--disable-component-update",
+                    "--disable-client-side-phishing-detection",
+                    "--disable-hang-monitor",
                 ]
             )
         else:
@@ -175,24 +182,35 @@ def main(headless=False, use_chromium=False):
         log("🔍 Ищем доступный данжен...")
         current_dungeon_index = find_next_available_dungeon(page, START_DUNGEON_INDEX - 1)
 
-        if current_dungeon_index is None:
+        # Если бой уже начат через виджет — пропускаем вход
+        battle_already_started = (current_dungeon_index == "started_battle")
+        if battle_already_started:
+            log("⚔️ Бой уже начат через виджет — переходим к бою")
+            current_dungeon_index = START_DUNGEON_INDEX  # Используем стартовый индекс
+            current_dungeon = DUNGEON_ORDER[current_dungeon_index]
+        elif current_dungeon_index is None:
             # Все на КД — идём в Адские Игры
             min_cd, min_dungeon = get_min_cooldown_time(page)
             if min_cd and min_cd > 0:
                 log(f"🎯 Минимальный КД: {min_dungeon} ({min_cd // 60}м {min_cd % 60}с)")
                 fight_in_hell_games(page, min_cd)
                 current_dungeon_index = find_next_available_dungeon(page, START_DUNGEON_INDEX - 1)
+                if current_dungeon_index == "started_battle":
+                    battle_already_started = True
+                    current_dungeon_index = START_DUNGEON_INDEX
 
             if current_dungeon_index is None:
                 print("❌ Все данжены на КД даже после ожидания!")
                 return
 
-        current_dungeon = DUNGEON_ORDER[current_dungeon_index]
+            current_dungeon = DUNGEON_ORDER[current_dungeon_index]
+        else:
+            current_dungeon = DUNGEON_ORDER[current_dungeon_index]
 
-        # Входим в данжен (с повторными попытками)
+        # Входим в данжен (с повторными попытками), если бой ещё не начат
         enter_attempts = 0
         max_enter_attempts = 3
-        while not enter_dungeon(page, current_dungeon):
+        while not battle_already_started and not enter_dungeon(page, current_dungeon):
             enter_attempts += 1
             log(f"❌ Не удалось войти в данжен (попытка {enter_attempts}/{max_enter_attempts})")
 
@@ -334,7 +352,10 @@ def main(headless=False, use_chromium=False):
                         if action == "find_dungeon":
                             # Мы в подземельях - ищем новый данжен
                             new_index = find_next_available_dungeon(page, current_dungeon_index)
-                            if new_index is not None:
+                            if new_index == "started_battle":
+                                # Бой уже начат через виджет
+                                log("⚔️ Бой начат через виджет — продолжаем")
+                            elif new_index is not None:
                                 current_dungeon_index = new_index
                                 current_dungeon = DUNGEON_ORDER[current_dungeon_index]
                                 if enter_dungeon(page, current_dungeon):
@@ -367,7 +388,10 @@ def main(headless=False, use_chromium=False):
                 if recover_to_dungeons(page):
                     # Ищем новый данжен
                     new_index = find_next_available_dungeon(page, current_dungeon_index)
-                    if new_index is not None:
+                    if new_index == "started_battle":
+                        # Бой уже начат через виджет
+                        log("⚔️ Бой начат через виджет — продолжаем")
+                    elif new_index is not None:
                         current_dungeon_index = new_index
                         current_dungeon = DUNGEON_ORDER[current_dungeon_index]
                         enter_dungeon(page, current_dungeon)
