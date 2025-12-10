@@ -16,6 +16,9 @@ from utils import antibot_delay, log, safe_click, safe_click_element
 PROTECTED_ITEMS = [
     "Железо",
     "Железная Руда",
+    "Железный Слиток",
+    "Осколок Грёз",
+    "Осколок",  # На всякий случай
 ]
 
 from popups import close_achievement_popup, close_party_widget
@@ -725,6 +728,107 @@ def disassemble_items(page):
     return disassembled_count
 
 
+def drop_green_unusable_items(page):
+    """
+    Выкидывает зелёные предметы без кнопок "На аукцион" или "Разобрать".
+    Это предметы, которые нельзя ни продать, ни разобрать (типа quest items).
+    Пропускает защищённые предметы (железо, руда, осколки).
+    Возвращает количество выброшенных предметов.
+    """
+    dropped_count = 0
+
+    while True:
+        items = page.query_selector_all("div.p10")
+        found = False
+
+        for item in items:
+            try:
+                # Проверяем, зелёный ли предмет
+                if not is_item_green(item):
+                    continue
+
+                # Получаем название
+                item_name = get_item_name(item)
+
+                # Пропускаем защищённые
+                if is_protected_item(item_name):
+                    continue
+
+                # Проверяем наличие кнопок "На аукцион" и "Разобрать"
+                buttons = item.query_selector_all("a.go-btn")
+                has_auction = False
+                has_disassemble = False
+                has_drop = False
+
+                for btn in buttons:
+                    text = btn.inner_text().strip()
+                    if "На аукцион" in text:
+                        has_auction = True
+                    elif text == "Разобрать":
+                        has_disassemble = True
+                    elif text == "Выкинуть":
+                        has_drop = True
+
+                # Если нет ни аукциона, ни разборки, но есть "Выкинуть" — выкидываем
+                if not has_auction and not has_disassemble and has_drop:
+                    log(f"🗑️ Выбрасываем зелёный предмет без использования: {item_name}")
+                    if drop_single_item(page, item):
+                        dropped_count += 1
+                        found = True
+                        # После выброса нужно вернуться в рюкзак
+                        if not open_backpack(page):
+                            return dropped_count
+                        antibot_delay(0.5, 0.3)
+                        break  # DOM изменился, начинаем заново
+            except Exception as e:
+                log(f"⚠️ Ошибка при проверке предмета: {e}")
+                continue
+
+        if not found:
+            break
+
+    if dropped_count > 0:
+        log(f"🗑️ Выброшено бесполезных предметов: {dropped_count}")
+    return dropped_count
+
+
+def has_next_backpack_page(page):
+    """
+    Проверяет, есть ли следующая страница в рюкзаке.
+    Ищет ссылку <a class="page" ... title="Перейти на страницу 2">
+    Возвращает True если есть следующая страница.
+    """
+    try:
+        page_links = page.query_selector_all("a.page")
+        for link in page_links:
+            title = link.get_attribute("title")
+            if title and "Перейти на страницу" in title:
+                return True
+    except Exception as e:
+        log(f"⚠️ Ошибка при проверке пагинации: {e}")
+    return False
+
+
+def go_to_next_backpack_page(page):
+    """
+    Переходит на следующую страницу рюкзака.
+    Возвращает True если переход успешен.
+    """
+    try:
+        page_links = page.query_selector_all("a.page")
+        for link in page_links:
+            title = link.get_attribute("title")
+            if title and "Перейти на страницу" in title:
+                # Кликаем на ссылку
+                if safe_click_element(link):
+                    log("📄 Переход на следующую страницу рюкзака")
+                    antibot_delay(1.5, 0.5)
+                    return True
+    except Exception as e:
+        log(f"⚠️ Ошибка при переходе на следующую страницу: {e}")
+    return False
+
+
 def cleanup_backpack_if_needed(page):
     """
     Проверяет рюкзак и очищает при необходимости.
@@ -744,14 +848,34 @@ def cleanup_backpack_if_needed(page):
     if not open_backpack(page):
         return False
 
-    # Приоритет 0: Открываем бонусы (Бонус подземелий и т.д.)
-    open_bonus_items(page)
+    # Обрабатываем все страницы рюкзака
+    pages_processed = 0
+    max_pages = 5  # Защита от бесконечного цикла
 
-    # Приоритет 1: Выставляем на аукцион
-    sell_on_auction(page)
+    while pages_processed < max_pages:
+        pages_processed += 1
+        if pages_processed > 1:
+            log(f"📄 Обрабатываем страницу {pages_processed} рюкзака")
 
-    # Приоритет 2: Разбираем оставшееся
-    disassemble_items(page)
+        # Приоритет 0: Открываем бонусы (Бонус подземелий и т.д.)
+        open_bonus_items(page)
+
+        # Приоритет 1: Выставляем на аукцион
+        sell_on_auction(page)
+
+        # Приоритет 2: Разбираем оставшееся
+        disassemble_items(page)
+
+        # Приоритет 3: Выбрасываем зелёные предметы без использования
+        drop_green_unusable_items(page)
+
+        # Проверяем, есть ли ещё страницы
+        if has_next_backpack_page(page):
+            if not go_to_next_backpack_page(page):
+                log("⚠️ Не удалось перейти на следующую страницу")
+                break
+        else:
+            break
 
     log("✅ Рюкзак очищен!")
 
