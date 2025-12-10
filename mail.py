@@ -39,6 +39,7 @@ def open_profile(page):
 
         if safe_click_element(profile_link):
             log("👤 Открыли профиль")
+            time.sleep(3)  # Ждём загрузки страницы профиля
             antibot_delay(2.0, 1.0)
             return True
     except Exception as e:
@@ -63,10 +64,12 @@ def open_mailbox(page):
         parent = mail_button.query_selector("..")
         if parent and safe_click_element(parent):
             log("📬 Открыли почтовый ящик")
+            time.sleep(3)  # Ждём загрузки списка сообщений
             antibot_delay(2.0, 1.0)
             return True
         elif safe_click_element(mail_button):
             log("📬 Открыли почтовый ящик")
+            time.sleep(3)  # Ждём загрузки списка сообщений
             antibot_delay(2.0, 1.0)
             return True
     except Exception as e:
@@ -81,6 +84,12 @@ def find_active_messages(page):
     Возвращает список элементов <a class="task-section _label brass">
     """
     try:
+        # Ждём появления сообщений на странице
+        try:
+            page.wait_for_selector("a.task-section._label.brass", timeout=5000)
+        except:
+            log("⚠️ Сообщения не загрузились за 5 секунд")
+
         messages = page.query_selector_all("a.task-section._label.brass")
         active_messages = []
 
