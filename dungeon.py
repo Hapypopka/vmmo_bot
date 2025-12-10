@@ -61,12 +61,14 @@ def clear_blocking_widget(page):
             try:
                 start_btn = page.wait_for_selector("span.go-btn-in._font-art", timeout=5000)
                 if start_btn:
-                    # Проверяем текст
+                    # Проверяем текст и НАЖИМАЕМ "Начать бой!"
                     all_btns = page.query_selector_all("a.go-btn")
                     for btn in all_btns:
                         if "Начать бой" in btn.inner_text():
-                            log("✅ Вход успешен — есть 'Начать бой!'")
-                            return True
+                            btn.dispatch_event("click")
+                            log("⚔️ Нажали 'Начать бой!' (из виджета)")
+                            antibot_delay(3.0, 1.5)
+                            return "started_battle"  # Специальное значение — бой начат
             except:
                 pass
 
@@ -163,10 +165,13 @@ def check_dungeon_cooldown(page, dungeon_id):
 def find_next_available_dungeon(page, current_index):
     """
     Ищет следующий данжен без кулдауна.
-    Возвращает индекс доступного данжена или None если все на КД.
+    Возвращает индекс доступного данжена, "started_battle" если бой начат, или None если все на КД.
     """
     # Сначала убираем блокирующий виджет (если есть)
-    clear_blocking_widget(page)
+    widget_result = clear_blocking_widget(page)
+    if widget_result == "started_battle":
+        # Бой уже начат через виджет — не ищем данжены
+        return "started_battle"
 
     checked = 0
     next_index = current_index
@@ -296,11 +301,38 @@ def enter_dungeon(page, dungeon_id):
         return False
 
     # 2) Ждём загрузки попапа данжена
+    popup_loaded = False
     try:
         page.wait_for_selector("a.go-btn", timeout=10000)
         time.sleep(1)
+        popup_loaded = True
     except:
         log("⚠️ Попап данжена не загрузился")
+        # Дебаг: куда нас перенаправило?
+        log(f"🔗 URL после клика: {page.url}")
+        # Проверяем, не на лендинге ли мы уже
+        location = detect_location(page)
+        log(f"📍 Локация: {location}")
+        if location == "dungeon_landing":
+            log("📋 Мы уже на лендинге данжена!")
+            # Ищем кнопки "Войти" или "Начать бой"
+            try:
+                buttons = page.query_selector_all("a.go-btn")
+                for btn in buttons:
+                    text = btn.inner_text().strip()
+                    if "Начать бой" in text:
+                        btn.dispatch_event("click")
+                        log("⚔️ Начали бой! (с лендинга)")
+                        antibot_delay(2.0, 1.5)
+                        return True
+                    elif text == "Войти":
+                        btn.dispatch_event("click")
+                        log("✅ Нажали 'Войти' (с лендинга)")
+                        popup_loaded = True
+                        time.sleep(3)
+                        break
+            except Exception as e:
+                log(f"⚠️ Ошибка на лендинге: {e}")
 
     # 3) Повышаем сложность (если нужно)
     if dungeon_config.get("need_difficulty"):
@@ -424,6 +456,11 @@ def go_to_next_dungeon(page, current_index, enter_failure_count=0):
     # 3) Ищем следующий доступный данжен
     next_index = find_next_available_dungeon(page, current_index)
 
+    # Если бой уже начат через виджет — возвращаем текущий индекс
+    if next_index == "started_battle":
+        log("⚔️ Бой начат через виджет — продолжаем")
+        return current_index, 0
+
     if next_index is None:
         # Все на КД — идём в Адские Игры
         min_cd, min_dungeon = get_min_cooldown_time(page)
@@ -431,10 +468,15 @@ def go_to_next_dungeon(page, current_index, enter_failure_count=0):
             log(f"🎯 Минимальный КД: {min_dungeon} ({min_cd // 60}м {min_cd % 60}с)")
             fight_in_hell_games(page, min_cd)
             next_index = find_next_available_dungeon(page, current_index)
+            # Проверяем снова на started_battle
+            if next_index == "started_battle":
+                return current_index, 0
         else:
             log("💤 Не удалось получить время КД, ждём 60 секунд...")
             time.sleep(60)
             next_index = find_next_available_dungeon(page, current_index)
+            if next_index == "started_battle":
+                return current_index, 0
 
         if next_index is None:
             return None, enter_failure_count
