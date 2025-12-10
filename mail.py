@@ -198,16 +198,8 @@ def process_mailbox(page):
     max_messages = 20  # Защита от бесконечного цикла
 
     while processed_count < max_messages:
-        # Открываем почтовый ящик (возвращаемся к списку после каждого сообщения)
-        if processed_count > 0:
-            # Возвращаемся на страницу почты
-            try:
-                page.goto("https://vmmo.vten.ru/message/list")
-                time.sleep(2)
-                antibot_delay(1.0, 0.5)
-            except Exception as e:
-                log(f"⚠️ Не удалось вернуться в почту: {e}")
-                break
+        # После "Забрать и удалить" мы уже на странице /message/list
+        # Просто ищем следующее сообщение
 
         # Ищем активные сообщения
         active_messages = find_active_messages(page)
