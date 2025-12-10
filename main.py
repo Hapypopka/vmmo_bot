@@ -35,6 +35,7 @@ from dungeon_config import DUNGEON_ORDER, DUNGEONS, START_DUNGEON_INDEX
 from utils import antibot_delay, log, safe_click, reset_watchdog, is_watchdog_triggered, get_watchdog_idle_time, init_logging, log_error, save_debug_screenshot
 from popups import collect_loot, close_all_popups, priority_checks, emergency_unstuck
 from backpack import cleanup_backpack_if_needed, repeat_craft_if_ready
+from mail import check_and_collect_mail
 from combat import (
     units_present,
     use_skills,
@@ -174,6 +175,9 @@ def main(headless=False, use_chromium=False):
 
         # Проверяем рюкзак перед началом
         cleanup_backpack_if_needed(page)
+
+        # Проверяем и забираем почту (после очистки рюкзака)
+        check_and_collect_mail(page)
 
         # Проверяем готовый крафт (железо)
         repeat_craft_if_ready(page)
