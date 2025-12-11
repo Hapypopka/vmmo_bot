@@ -32,7 +32,7 @@ from config import (
     BROWSER_SCREEN,
 )
 from dungeon_config import DUNGEON_ORDER, DUNGEONS, START_DUNGEON_INDEX
-from utils import antibot_delay, log, safe_click, reset_watchdog, is_watchdog_triggered, get_watchdog_idle_time, init_logging, log_error, save_debug_screenshot
+from utils import antibot_delay, log, safe_click, reset_watchdog, is_watchdog_triggered, get_watchdog_idle_time, init_logging, log_error, save_debug_screenshot, increment_watchdog_cycle, get_watchdog_cycle_count, reset_watchdog_cycle
 from popups import collect_loot, close_all_popups, priority_checks, emergency_unstuck
 from backpack import cleanup_backpack_if_needed, repeat_craft_if_ready
 from mail import check_and_collect_mail
@@ -260,7 +260,26 @@ def main(headless=False, use_chromium=False):
             # ===== WATCHDOG: Проверка застревания =====
             if is_watchdog_triggered():
                 idle_time = int(get_watchdog_idle_time())
-                log(f"🚨 WATCHDOG: Бот простаивает {idle_time} сек — запуск аварийного выхода")
+                cycle_count = get_watchdog_cycle_count()
+
+                # Проверяем, не застряли ли в цикле (5+ срабатываний подряд)
+                if increment_watchdog_cycle():
+                    log(f"🚨 WATCHDOG ЦИКЛ: {cycle_count + 1} срабатываний подряд — HARD RESET!")
+                    save_debug_screenshot(page, "watchdog_cycle")
+                    # Принудительный переход на /dungeons без попыток нажать кнопки
+                    try:
+                        page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
+                        time.sleep(4)
+                        antibot_delay(1.0, 1.0)
+                        log("🔄 Выполнен hard reset на /dungeons")
+                    except Exception as e:
+                        log(f"❌ Ошибка hard reset: {e}")
+                    reset_watchdog_cycle()
+                    reset_watchdog()
+                    no_units_attempts = 0
+                    continue
+
+                log(f"🚨 WATCHDOG: Бот простаивает {idle_time} сек — запуск аварийного выхода (попытка {cycle_count + 1}/5)")
                 save_debug_screenshot(page, "watchdog")
                 emergency_unstuck(page)
                 no_units_attempts = 0

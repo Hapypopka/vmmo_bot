@@ -15,6 +15,17 @@ from backpack import cleanup_backpack_if_needed, repeat_craft_if_ready
 from combat import fight_in_hell_games
 
 
+# Счётчик попыток нажать "В подземелье!" для предотвращения бесконечного цикла
+_widget_enter_attempts = 0
+MAX_WIDGET_ENTER_ATTEMPTS = 3  # Максимум 3 попытки войти через виджет
+
+
+def reset_widget_attempts():
+    """Сбрасывает счётчик попыток виджета (вызывать после успешного входа в данжен)"""
+    global _widget_enter_attempts
+    _widget_enter_attempts = 0
+
+
 def clear_blocking_widget(page):
     """
     Если есть виджет с "В подземелье" — разбираемся с ним.
@@ -23,9 +34,12 @@ def clear_blocking_widget(page):
     Логика:
     1. Пробуем "В подземелье!" → если вход успешен (есть "Начать бой") — ок
     2. Если вход закрыт — покидаем банду
+    3. После MAX_WIDGET_ENTER_ATTEMPTS неудачных попыток — принудительно покидаем банду
 
     Возвращает True если виджет убран или его не было.
     """
+    global _widget_enter_attempts
+
     try:
         widget = page.query_selector("div.widget")
         if not widget:
@@ -50,7 +64,35 @@ def clear_blocking_widget(page):
             elif "Покинуть банду" in btn_text:
                 leave_btn = btn
 
+        # Проверяем лимит попыток
+        if _widget_enter_attempts >= MAX_WIDGET_ENTER_ATTEMPTS:
+            log(f"🚫 Достигнут лимит попыток ({MAX_WIDGET_ENTER_ATTEMPTS}) — принудительно покидаем банду")
+            _widget_enter_attempts = 0  # Сбрасываем счётчик
+
+            # Ищем кнопку "Покинуть банду" и нажимаем
+            leave_buttons = page.query_selector_all("a.go-btn")
+            for btn in leave_buttons:
+                if "Покинуть банду" in btn.inner_text():
+                    btn.dispatch_event("click")
+                    log("👋 Покинули банду (лимит попыток)")
+                    time.sleep(2)
+                    antibot_delay(1.0, 1.0)
+                    # После выхода из банды — возвращаемся в подземелья
+                    page.goto(DUNGEONS_URL)
+                    time.sleep(4)
+                    antibot_delay(1.0, 1.0)
+                    return True
+
+            # Если кнопки нет — принудительный переход
+            page.goto(DUNGEONS_URL)
+            time.sleep(4)
+            antibot_delay(1.0, 1.0)
+            return True
+
         if enter_btn:
+            _widget_enter_attempts += 1
+            log(f"🔄 Попытка входа через виджет {_widget_enter_attempts}/{MAX_WIDGET_ENTER_ATTEMPTS}")
+
             # Пробуем войти
             enter_btn.dispatch_event("click")
             log("✅ Нажали 'В подземелье!'")
@@ -68,6 +110,7 @@ def clear_blocking_widget(page):
                             btn.dispatch_event("click")
                             log("⚔️ Нажали 'Начать бой!' (из виджета)")
                             antibot_delay(3.0, 1.5)
+                            _widget_enter_attempts = 0  # Успех — сбрасываем счётчик
                             return "started_battle"  # Специальное значение — бой начат
             except:
                 pass
@@ -103,6 +146,7 @@ def clear_blocking_widget(page):
             log("👋 Покинули банду (виджет)")
             time.sleep(2)
             antibot_delay(1.0, 1.0)
+            _widget_enter_attempts = 0  # Сбрасываем счётчик
             # После выхода из банды — возвращаемся в подземелья
             log("🏰 Возвращаемся в подземелья...")
             page.goto(DUNGEONS_URL)
@@ -400,6 +444,9 @@ def enter_dungeon(page, dungeon_id):
         return False
 
     antibot_delay(4.0, 1.5)
+
+    # Успешный вход — сбрасываем счётчик попыток виджета
+    reset_widget_attempts()
 
     return True
 

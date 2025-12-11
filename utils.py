@@ -59,13 +59,18 @@ def log_error(message, page=None):
 # ========== WATCHDOG СИСТЕМА ==========
 # Глобальный таймер для отслеживания активности бота
 _last_action_time = time.time()
-WATCHDOG_TIMEOUT = 120  # 2 минуты без активности = застревание
+WATCHDOG_TIMEOUT = 90  # 90 секунд без активности = застревание (было 120)
+
+# Счётчик последовательных срабатываний watchdog для детекции циклов
+_watchdog_trigger_count = 0
+WATCHDOG_CYCLE_THRESHOLD = 5  # После 5 срабатываний подряд — принудительный hard reset
 
 
 def reset_watchdog():
     """Сбрасывает watchdog таймер. Вызывать после каждого успешного действия."""
-    global _last_action_time
+    global _last_action_time, _watchdog_trigger_count
     _last_action_time = time.time()
+    _watchdog_trigger_count = 0  # Сбрасываем счётчик циклов при успешном действии
 
 
 def get_watchdog_idle_time():
@@ -74,8 +79,26 @@ def get_watchdog_idle_time():
 
 
 def is_watchdog_triggered():
-    """Проверяет, сработал ли watchdog (2+ минуты без активности)"""
+    """Проверяет, сработал ли watchdog (90+ секунд без активности)"""
     return get_watchdog_idle_time() >= WATCHDOG_TIMEOUT
+
+
+def increment_watchdog_cycle():
+    """Увеличивает счётчик срабатываний watchdog. Возвращает True если достигнут порог цикла."""
+    global _watchdog_trigger_count
+    _watchdog_trigger_count += 1
+    return _watchdog_trigger_count >= WATCHDOG_CYCLE_THRESHOLD
+
+
+def get_watchdog_cycle_count():
+    """Возвращает текущее количество срабатываний watchdog подряд"""
+    return _watchdog_trigger_count
+
+
+def reset_watchdog_cycle():
+    """Принудительно сбрасывает счётчик циклов watchdog"""
+    global _watchdog_trigger_count
+    _watchdog_trigger_count = 0
 
 
 def antibot_delay(base=0.5, spread=1.2):
