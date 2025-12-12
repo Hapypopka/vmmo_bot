@@ -300,7 +300,8 @@ def main(headless=False, use_chromium=False):
                 collect_loot(page)
 
                 # Проверка смерти
-                if check_death(page):
+                dungeon_display_name = DUNGEONS.get(current_dungeon, {}).get("name", current_dungeon)
+                if check_death(page, dungeon_display_name):
                     stats.death_recorded(current_dungeon)
                     new_index, enter_failure_count = go_to_next_dungeon(
                         page, current_dungeon_index, enter_failure_count
