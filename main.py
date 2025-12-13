@@ -326,6 +326,11 @@ def main(headless=False, use_chromium=False):
                 elif status == "dungeon_complete":
                     # Записываем завершение данжена
                     stats.dungeon_completed(current_dungeon, DUNGEONS.get(current_dungeon, {}).get("name"))
+
+                    # Проверяем рюкзак и почту после завершения данжена
+                    cleanup_backpack_if_needed(page)
+                    check_and_collect_mail(page)
+
                     new_index, enter_failure_count = go_to_next_dungeon(
                         page, current_dungeon_index, enter_failure_count
                     )

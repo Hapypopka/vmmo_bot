@@ -247,7 +247,7 @@ def process_mailbox(page):
     Возвращает количество обработанных сообщений.
     """
     processed_count = 0
-    max_messages = 20  # Защита от бесконечного цикла
+    max_messages = 50  # Защита от бесконечного цикла (увеличено с 20)
 
     while processed_count < max_messages:
         # После "Забрать и удалить" мы уже на странице /message/list
