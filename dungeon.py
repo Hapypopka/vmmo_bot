@@ -106,8 +106,12 @@ def clear_blocking_widget(page):
                 if notice:
                     notice_text = notice.inner_text().lower()
                     if "уже прошла" in notice_text or "не может идти" in notice_text:
-                        log("⚠️ Персонаж уже прошёл подземелье — покидаем банду...")
+                        log("⚠️ Персонаж уже прошёл подземелье — переходим в /dungeons...")
                         already_completed = True
+                        # Переходим на /dungeons — там появится виджет с "Покинуть банду"
+                        page.goto(DUNGEONS_URL)
+                        time.sleep(3)
+                        antibot_delay(1.0, 1.0)
             except:
                 pass
 
