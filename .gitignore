@@ -6,6 +6,7 @@ __pycache__/
 cookies.json
 settings.json
 stats.json
+auction_blacklist.json
 
 # IDE/Editor
 .claude/
@@ -15,3 +16,16 @@ stats.json
 # Logs
 *.log
 logs/
+*.tar.gz
+logs_*/
+error/
+
+# Debug files
+debug_*.html
+debug_*.json
+*.har
+nul
+
+# HTML dumps
+*.htm
+*_files/
