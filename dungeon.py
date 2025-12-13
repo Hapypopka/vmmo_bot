@@ -99,21 +99,34 @@ def clear_blocking_widget(page):
             time.sleep(3)
             antibot_delay(1.0, 1.0)
 
-            # Проверяем — получилось войти? (есть кнопка "Начать бой!")
+            # Проверяем — не появился ли попап "уже прошла подземелье"
+            already_completed = False
             try:
-                start_btn = page.wait_for_selector("span.go-btn-in._font-art", timeout=5000)
-                if start_btn:
-                    # Проверяем текст и НАЖИМАЕМ "Начать бой!"
-                    all_btns = page.query_selector_all("a.go-btn")
-                    for btn in all_btns:
-                        if "Начать бой" in btn.inner_text():
-                            btn.dispatch_event("click")
-                            log("⚔️ Нажали 'Начать бой!' (из виджета)")
-                            antibot_delay(3.0, 1.5)
-                            _widget_enter_attempts = 0  # Успех — сбрасываем счётчик
-                            return "started_battle"  # Специальное значение — бой начат
+                notice = page.query_selector("div.notice-rich3")
+                if notice:
+                    notice_text = notice.inner_text().lower()
+                    if "уже прошла" in notice_text or "не может идти" in notice_text:
+                        log("⚠️ Персонаж уже прошёл подземелье — покидаем банду...")
+                        already_completed = True
             except:
                 pass
+
+            # Проверяем — получилось войти? (есть кнопка "Начать бой!")
+            if not already_completed:
+                try:
+                    start_btn = page.wait_for_selector("span.go-btn-in._font-art", timeout=5000)
+                    if start_btn:
+                        # Проверяем текст и НАЖИМАЕМ "Начать бой!"
+                        all_btns = page.query_selector_all("a.go-btn")
+                        for btn in all_btns:
+                            if "Начать бой" in btn.inner_text():
+                                btn.dispatch_event("click")
+                                log("⚔️ Нажали 'Начать бой!' (из виджета)")
+                                antibot_delay(3.0, 1.5)
+                                _widget_enter_attempts = 0  # Успех — сбрасываем счётчик
+                                return "started_battle"  # Специальное значение — бой начат
+                except:
+                    pass
 
             # Вход не удался (нет "Начать бой") — покидаем банду
             log("⚠️ Вход закрыт — покидаем банду...")
