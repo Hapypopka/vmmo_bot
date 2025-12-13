@@ -1,0 +1,172 @@
+[
+  {
+    "name": "JSESSIONID",
+    "value": "1269909CD3A7CD7080D3DA691C34AE27",
+    "domain": "passport.vmmo.ru",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "None"
+  },
+  {
+    "name": "remember-me",
+    "value": "bnphOjE3OTY5MjYwMzQzNDE6MmYxYmVkY2E5NGUwYmE5OWQxZTA2MjUwMWM2ZmVhNjY",
+    "domain": "passport.vmmo.ru",
+    "path": "/",
+    "expires": 1796926034.244,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "None"
+  },
+  {
+    "name": "yabs-sid",
+    "value": "897671311765390033",
+    "domain": "mc.yandex.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "i",
+    "value": "mOknRe8R6ruI9L9dnAx4g0aQkh214KK8iT9Re9l/gzhmFplIFlI7SikOJz8FU5j0GAX2hXzph99Eu94Q7hDzGQgdzCo=",
+    "domain": ".yandex.com",
+    "path": "/",
+    "expires": 1799950033.052,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "yandexuid",
+    "value": "4736337341765390033",
+    "domain": ".yandex.com",
+    "path": "/",
+    "expires": 1799950033.052,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "yuidss",
+    "value": "4736337341765390033",
+    "domain": ".yandex.com",
+    "path": "/",
+    "expires": 1796926033,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "ymex",
+    "value": "1796926033.yrts.1765390033#1796926033.yrtsi.1765390033",
+    "domain": ".yandex.com",
+    "path": "/",
+    "expires": 1796926033,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "bh",
+    "value": "YNHt5skGahfcyuH/CJLYobEDn8/14QzWkPGOA6WnAQ==",
+    "domain": ".yandex.com",
+    "path": "/",
+    "expires": 1799950033,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "JSESSIONID",
+    "value": "119C3CAB9C6C4B2A1B89328A93881A0C",
+    "domain": "vmmo.vten.ru",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "rch",
+    "value": "true",
+    "domain": ".vmmo.vten.ru",
+    "path": "/",
+    "expires": 1799950031.576,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "_ym_uid",
+    "value": "1765390033446166009",
+    "domain": ".vten.ru",
+    "path": "/",
+    "expires": 1796926032,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "None"
+  },
+  {
+    "name": "_ym_d",
+    "value": "1765390033",
+    "domain": ".vten.ru",
+    "path": "/",
+    "expires": 1796926032,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "None"
+  },
+  {
+    "name": "usr",
+    "value": "239299464:central:cWluZyBkeW5hc3R5:0:2:3:f:8497999:KSomD:0c5a707ffddbec03fdcea6d113471944:b7bdab34df418550d85fe037be3949a9",
+    "domain": ".vmmo.vten.ru",
+    "path": "/",
+    "expires": 1799950033.379,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "vmmo_logged_in",
+    "value": "true",
+    "domain": ".vmmo.vten.ru",
+    "path": "/",
+    "expires": 1796926033.379,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "uid",
+    "value": "BvOQqWIkxBevlffp",
+    "domain": ".vmmo.vten.ru",
+    "path": "/",
+    "expires": 1799950034.56,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "_ym_isad",
+    "value": "2",
+    "domain": ".vten.ru",
+    "path": "/",
+    "expires": 1765462035,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "None"
+  },
+  {
+    "name": "bh",
+    "value": "YNDt5skGahfcyuH/CJLYobEDn8/14QzWkPGOA6WnAQ==",
+    "domain": ".yandex.ru",
+    "path": "/",
+    "expires": 1799950032.52,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  }
+]
