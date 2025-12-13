@@ -2,8 +2,7 @@
 __pycache__/
 *.pyc
 
-# Sensitive data (cookies.json теперь в репе для удобства деплоя)
-settings.json
+# Sensitive data (cookies.json и settings.json теперь в репе для удобства деплоя)
 stats.json
 auction_blacklist.json
 
