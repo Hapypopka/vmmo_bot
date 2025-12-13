@@ -838,40 +838,43 @@ def drop_green_unusable_items(page):
     return dropped_count
 
 
-def has_next_backpack_page(page):
+def get_current_backpack_page(page):
     """
-    Проверяет, есть ли следующая страница в рюкзаке.
-    Ищет ссылку <a class="page" ... title="Перейти на страницу 2">
-    Возвращает True если есть следующая страница.
+    Определяет текущую страницу рюкзака.
+    Ищет активную страницу (span.page вместо a.page).
+    Возвращает номер страницы или 1 если не найдено.
     """
     try:
-        page_links = page.query_selector_all("a.page")
-        for link in page_links:
-            title = link.get_attribute("title")
-            if title and "Перейти на страницу" in title:
-                return True
+        # Активная страница — это span.page (не ссылка)
+        active_page = page.query_selector("span.page")
+        if active_page:
+            text = active_page.inner_text().strip()
+            if text.isdigit():
+                return int(text)
     except Exception as e:
-        log(f"⚠️ Ошибка при проверке пагинации: {e}")
-    return False
+        log(f"⚠️ Ошибка при определении текущей страницы: {e}")
+    return 1
 
 
-def go_to_next_backpack_page(page):
+def go_to_next_backpack_page(page, current_page):
     """
     Переходит на следующую страницу рюкзака.
+    current_page: номер текущей страницы
     Возвращает True если переход успешен.
     """
+    next_page = current_page + 1
     try:
         page_links = page.query_selector_all("a.page")
         for link in page_links:
             title = link.get_attribute("title")
-            if title and "Перейти на страницу" in title:
-                # Кликаем на ссылку
+            # Ищем именно следующую страницу
+            if title and f"Перейти на страницу {next_page}" in title:
                 if safe_click_element(link):
-                    log("📄 Переход на следующую страницу рюкзака")
+                    log(f"📄 Переход на страницу {next_page} рюкзака")
                     antibot_delay(1.5, 0.5)
                     return True
     except Exception as e:
-        log(f"⚠️ Ошибка при переходе на следующую страницу: {e}")
+        log(f"⚠️ Ошибка при переходе на страницу {next_page}: {e}")
     return False
 
 
@@ -894,14 +897,12 @@ def cleanup_backpack_if_needed(page):
     if not open_backpack(page):
         return False
 
-    # Обрабатываем все страницы рюкзака
-    pages_processed = 0
-    max_pages = 5  # Защита от бесконечного цикла
+    # Обрабатываем все страницы рюкзака (максимум 3)
+    max_pages = 3
 
-    while pages_processed < max_pages:
-        pages_processed += 1
-        if pages_processed > 1:
-            log(f"📄 Обрабатываем страницу {pages_processed} рюкзака")
+    for page_num in range(1, max_pages + 1):
+        if page_num > 1:
+            log(f"📄 Обрабатываем страницу {page_num} рюкзака")
 
         # Приоритет 0: Открываем бонусы (Бонус подземелий и т.д.)
         open_bonus_items(page)
@@ -915,13 +916,11 @@ def cleanup_backpack_if_needed(page):
         # Приоритет 3: Выбрасываем зелёные предметы без использования
         drop_green_unusable_items(page)
 
-        # Проверяем, есть ли ещё страницы
-        if has_next_backpack_page(page):
-            if not go_to_next_backpack_page(page):
-                log("⚠️ Не удалось перейти на следующую страницу")
+        # Пробуем перейти на следующую страницу (если она есть)
+        if page_num < max_pages:
+            if not go_to_next_backpack_page(page, page_num):
+                # Следующей страницы нет — выходим
                 break
-        else:
-            break
 
     log("✅ Рюкзак очищен!")
 
