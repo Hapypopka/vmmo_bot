@@ -396,6 +396,10 @@ def enter_dungeon(page, dungeon_id):
                         break
             except Exception as e:
                 log(f"⚠️ Ошибка на лендинге: {e}")
+        else:
+            # Попап не загрузился и мы НЕ на лендинге — выходим с ошибкой
+            log("❌ Попап не загрузился, локация неизвестна — выход")
+            return False
 
     # 3) Повышаем сложность (если нужно)
     if dungeon_config.get("need_difficulty"):
@@ -407,6 +411,8 @@ def enter_dungeon(page, dungeon_id):
             print(f"⚠️ Не удалось повысить сложность")
 
     # 4) Кликаем "Войти" - ищем кнопку по тексту
+    # ВАЖНО: Сначала ищем ТОЧНО "Войти", и только потом fallback на "В подземелье"
+    # Потому что может быть виджет от старой банды с "В подземелье!" который НЕ для этого данжена
     enter_clicked = False
     try:
         buttons = page.query_selector_all("a.go-btn")
@@ -414,6 +420,7 @@ def enter_dungeon(page, dungeon_id):
         btn_texts = [btn.inner_text().strip() for btn in buttons]
         log(f"🔍 Найдены кнопки: {btn_texts}")
 
+        # Первый проход: ищем ТОЧНО "Войти"
         for btn in buttons:
             text = btn.inner_text().strip()
             if text == "Войти":
@@ -421,12 +428,17 @@ def enter_dungeon(page, dungeon_id):
                 enter_clicked = True
                 log("✅ Нажали 'Войти'")
                 break
-            # Иногда кнопка называется "В подземелье"
-            elif "подземелье" in text.lower():
-                btn.dispatch_event("click")
-                enter_clicked = True
-                log(f"✅ Нажали '{text}'")
-                break
+
+        # Второй проход: если "Войти" нет, ищем "В подземелье" (fallback)
+        # Но ТОЛЬКО если нет кнопки "Войти" в списке вообще!
+        if not enter_clicked and "Войти" not in btn_texts:
+            for btn in buttons:
+                text = btn.inner_text().strip()
+                if "подземелье" in text.lower() and "Покинуть" not in text:
+                    btn.dispatch_event("click")
+                    enter_clicked = True
+                    log(f"✅ Нажали '{text}'")
+                    break
     except Exception as e:
         print(f"⚠️ Ошибка при поиске кнопки 'Войти': {e}")
 
