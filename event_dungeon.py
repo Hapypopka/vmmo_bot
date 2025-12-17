@@ -12,6 +12,32 @@ BACKPACK_URL = f"{BASE_URL}/user/rack"
 # Кэш КД ивента (timestamp когда снова проверять)
 _event_cooldown_until = 0
 
+
+def parse_cooldown_to_seconds(cd_text):
+    """
+    Парсит время КД из строки типа "33 мин 58 сек" или "1 ч 5 мин".
+    Возвращает секунды или 0 если не распознано.
+    """
+    import re
+    seconds = 0
+
+    # Часы
+    h_match = re.search(r'(\d+)\s*ч', cd_text)
+    if h_match:
+        seconds += int(h_match.group(1)) * 3600
+
+    # Минуты
+    m_match = re.search(r'(\d+)\s*мин', cd_text)
+    if m_match:
+        seconds += int(m_match.group(1)) * 60
+
+    # Секунды
+    s_match = re.search(r'(\d+)\s*сек', cd_text)
+    if s_match:
+        seconds += int(s_match.group(1))
+
+    return seconds
+
 # Селекторы ивента
 EVENT_WIDGET_SELECTOR = 'a.city-menu-l-link[href*="HellStalker"]'
 EVENT_DUNGEON_SELECTOR = 'a.event-map-widget[href*="EventCemetery"]'
@@ -148,8 +174,9 @@ def enter_event_dungeon(page):
             import re
             cd_match = re.search(r"войти через\s+(.+?)\.", page_text)
             cd_time = cd_match.group(1) if cd_match else "неизвестно"
-            log(f"⏳ Ивент на КД: {cd_time}")
-            return "cooldown"  # Специальное значение для КД
+            cd_seconds = parse_cooldown_to_seconds(cd_time)
+            log(f"⏳ Ивент на КД: {cd_time} (~{cd_seconds}с)")
+            return ("cooldown", cd_seconds)  # Возвращаем кортеж с секундами
 
         # 4) Нажимаем "Войти"
         enter_clicked = False
@@ -280,10 +307,11 @@ def try_event_dungeon(page):
             # Успешно вошли — сбрасываем кэш (после боя будет новый КД)
             _event_cooldown_until = 0
             return "entered"
-        elif result == "cooldown":
-            # Ивент на КД — кэшируем на 30 минут (КД ивента ~35 мин)
-            _event_cooldown_until = current_time + 30 * 60
-            log("🔄 Ивент на КД — надеваем Кристалл Тикуана")
+        elif isinstance(result, tuple) and result[0] == "cooldown":
+            # Ивент на КД — кэшируем на реальное время КД
+            cd_seconds = result[1] if result[1] > 0 else 30 * 60
+            _event_cooldown_until = current_time + cd_seconds
+            log(f"🔄 Ивент на КД (~{cd_seconds // 60}м) — надеваем Кристалл Тикуана")
             equip_tikuan_crystal(page)
             return "on_cooldown"
         else:
