@@ -127,8 +127,17 @@ def clear_blocking_widget(page):
                                 btn.dispatch_event("click")
                                 log("⚔️ Нажали 'Начать бой!' (из виджета)")
                                 antibot_delay(3.0, 1.5)
-                                _widget_enter_attempts = 0  # Успех — сбрасываем счётчик
-                                return "started_battle"  # Специальное значение — бой начат
+
+                                # Проверяем, реально ли бой начался (появились юниты)
+                                from combat import units_present
+                                time.sleep(2)  # Даём время на загрузку боя
+                                if units_present(page):
+                                    _widget_enter_attempts = 0  # Успех — сбрасываем счётчик
+                                    return "started_battle"  # Специальное значение — бой начат
+                                else:
+                                    # Инстанс багнутый — юнитов нет, нужно покинуть банду
+                                    log("⚠️ Бой не начался (юнитов нет) — инстанс багнутый!")
+                                    break  # Выходим из цикла, идём покидать банду
                 except:
                     pass
 
