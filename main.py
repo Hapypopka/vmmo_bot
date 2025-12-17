@@ -25,6 +25,7 @@ from config import (
     SCRIPT_DIR,
     BASE_URL,
     DUNGEONS_URL,
+    LOGIN_URL,
     RESTART_INTERVAL,
     MAX_NO_UNITS_ATTEMPTS,
     ATTACK_SELECTOR,
@@ -107,6 +108,64 @@ def keyboard_listener(controller):
 pause_controller = PauseController()
 
 
+def load_credentials():
+    """Загружает логин и пароль из settings.json"""
+    settings_path = os.path.join(SCRIPT_DIR, "settings.json")
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+            return settings.get("login"), settings.get("password")
+    except:
+        return None, None
+
+
+def do_login(page, context):
+    """
+    Выполняет авторизацию и сохраняет куки.
+    Возвращает True если успешно.
+    """
+    login, password = load_credentials()
+    if not login or not password:
+        print("❌ Креды не найдены в settings.json (login/password)")
+        return False
+
+    print("🔐 Выполняем авторизацию...")
+
+    try:
+        page.goto(LOGIN_URL, wait_until="domcontentloaded")
+        time.sleep(2)
+
+        page.fill('input[name="login"]', login)
+        page.fill('input[name="password"]', password)
+        page.click('button[type="submit"]')
+
+        # Ждём редиректа после логина
+        try:
+            page.wait_for_url("**/user/**", timeout=15000)
+        except:
+            pass
+
+        time.sleep(3)
+
+        # Проверяем успешность логина
+        if "login" in page.url.lower():
+            print("❌ Авторизация не удалась")
+            return False
+
+        # Сохраняем куки
+        cookies = context.cookies()
+        cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
+        with open(cookies_path, "w", encoding="utf-8") as f:
+            json.dump(cookies, f, ensure_ascii=False, indent=2)
+        print(f"✅ Авторизация успешна, куки сохранены → {cookies_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Ошибка авторизации: {e}")
+        return False
+
+
 def main(headless=False, use_chromium=False):
     with sync_playwright() as p:
         # Запуск браузера (Chromium легче по памяти)
@@ -144,17 +203,24 @@ def main(headless=False, use_chromium=False):
             screen=BROWSER_SCREEN,
         )
 
-        # Загружаем куки
-        cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
-        print(f"📁 Загружаем куки из: {cookies_path}")
-        with open(cookies_path, "r", encoding="utf-8") as f:
-            saved_cookies = json.load(f)
-        context.add_cookies(saved_cookies)
-
         page = context.new_page()
 
         # Увеличиваем таймаут для медленных соединений
         page.set_default_timeout(60000)  # 60 сек
+
+        # Пробуем загрузить куки
+        cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
+        cookies_loaded = False
+
+        if os.path.exists(cookies_path):
+            try:
+                print(f"📁 Загружаем куки из: {cookies_path}")
+                with open(cookies_path, "r", encoding="utf-8") as f:
+                    saved_cookies = json.load(f)
+                context.add_cookies(saved_cookies)
+                cookies_loaded = True
+            except Exception as e:
+                print(f"⚠️ Ошибка загрузки кук: {e}")
 
         # Заходим на главную, чтобы куки применились
         page.goto(BASE_URL, wait_until="domcontentloaded")
@@ -164,9 +230,21 @@ def main(headless=False, use_chromium=False):
         page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
         time.sleep(6)
 
+        # Проверяем, нужна ли авторизация
         if "login" in page.url:
-            print("❌ Куки не сработали — логин")
-            return
+            if cookies_loaded:
+                print("⚠️ Куки устарели — выполняем авторизацию...")
+            else:
+                print("📝 Куки не найдены — выполняем авторизацию...")
+
+            if not do_login(page, context):
+                print("❌ Не удалось авторизоваться")
+                browser.close()
+                return
+
+            # После авторизации переходим на данжены
+            page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
+            time.sleep(4)
 
         print("✅ Бот запущен — страница данженов загружена")
 
