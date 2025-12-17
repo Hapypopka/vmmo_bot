@@ -9,6 +9,9 @@ from utils import antibot_delay, log, safe_click
 # URLs
 BACKPACK_URL = f"{BASE_URL}/user/rack"
 
+# Кэш КД ивента (timestamp когда снова проверять)
+_event_cooldown_until = 0
+
 # Селекторы ивента
 EVENT_WIDGET_SELECTOR = 'a.city-menu-l-link[href*="HellStalker"]'
 EVENT_DUNGEON_SELECTOR = 'a.event-map-widget[href*="EventCemetery"]'
@@ -253,7 +256,16 @@ def try_event_dungeon(page):
         "not_available" — если ивент не доступен
         "error" — если ошибка
     """
+    global _event_cooldown_until
+
     try:
+        # Проверяем кэш КД — если недавно были на КД, пропускаем проверку
+        current_time = time.time()
+        if current_time < _event_cooldown_until:
+            remaining = int(_event_cooldown_until - current_time)
+            log(f"⏭️ Ивент на КД (кэш), осталось ~{remaining // 60}м — пропускаем")
+            return "on_cooldown"
+
         # Проверяем доступность ивента
         if not check_event_available(page):
             return "not_available"
@@ -265,9 +277,12 @@ def try_event_dungeon(page):
         result = enter_event_dungeon(page)
 
         if result == True:
+            # Успешно вошли — сбрасываем кэш (после боя будет новый КД)
+            _event_cooldown_until = 0
             return "entered"
         elif result == "cooldown":
-            # Ивент на КД — надеваем Кристалл Тикуана для обычных данженов
+            # Ивент на КД — кэшируем на 30 минут (КД ивента ~35 мин)
+            _event_cooldown_until = current_time + 30 * 60
             log("🔄 Ивент на КД — надеваем Кристалл Тикуана")
             equip_tikuan_crystal(page)
             return "on_cooldown"
