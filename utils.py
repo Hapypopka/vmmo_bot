@@ -6,11 +6,29 @@ import time
 import random
 import re
 import os
+import json
 from datetime import datetime
 
 # ========== ЛОГИРОВАНИЕ В ФАЙЛ ==========
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 LOG_FILE = None
+
+# ========== НАСТРОЙКИ СКРИНШОТОВ ==========
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "settings.json")
+
+def _load_screenshot_setting():
+    """Загружает настройку скриншотов из settings.json"""
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+                return settings.get('save_screenshots', False)  # По умолчанию ВЫКЛЮЧЕНО
+        except:
+            pass
+    return False
+
+SAVE_SCREENSHOTS = _load_screenshot_setting()
 
 
 def init_logging():
@@ -34,7 +52,9 @@ def write_log(message):
 
 
 def save_debug_screenshot(page, reason="error"):
-    """Сохраняет скриншот для дебага"""
+    """Сохраняет скриншот для дебага (если включено в settings.json)"""
+    if not SAVE_SCREENSHOTS:
+        return None  # Скриншоты отключены
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

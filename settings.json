@@ -3,5 +3,6 @@
   "restart_interval": 86400,
   "max_no_units": 5,
   "headless": true,
-  "start_dungeon_index": 0
+  "start_dungeon_index": 0,
+  "save_screenshots": false
 }
