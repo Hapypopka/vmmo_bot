@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?><ajax-response><component id="id1c6" ><![CDATA[<div class="battlefield-head-right" id="id1c6"><div id="id1c7">
+<div>
+
+<span class="foot-info-link-profile">
+<img draggable="false" src="/images/npcs/wolf2.png">
+</span>
+
+<div class="battlefield-head-name" id="id23f">
+<a class="shuffle-group-link" draggable="false" id="id23e" ignoreWebView="true" href="javascript:;" style="display: none;" title="Сменить противника"></a>
+Волк
+</div>
+<div class="battlefield-head-hp">
+<div class="battlefield-head-hp-fill" style="width: 100%" id="id240">
+<div class="shadowDeath-lvl" style="display: none;"></div>
+<div class="battlefield-head-hp-delta" style="width: 0%"></div>
+</div>
+<div class="battlefield-head-hp-text" id="id241">240 / 240</div>
+</div>
+
+<div class="battlefield-head-buffs" id="id242">
+
+
+</div>
+</div>
+</div></div>]]></component><component id="id1a0" ><![CDATA[<div class="attack-button _attack-prepare" id="id1a0">
+<div class="attack-button-text" id="id20b">1</div>
+<div class="wrap-attack-button-counter">
+<svg version="1.1" baseProfile="full" class="attack-button-counter" xmlns="http://www.w3.org/2000/svg" id="id20c">
+<circle cx="50%" cy="50%" r="45%" style="stroke-dasharray: 0%, 300%;" id="id20d"></circle>
+</svg>
+</div>
+</div>]]></component><component id="id212" ><![CDATA[<div class="time-counter" id="id212"></div>]]></component><component id="id208" ><![CDATA[<div class="ammo-counter" id="id208" style="display: none;"></div>]]></component><component id="id215" ><![CDATA[<div class="time-counter" id="id215"></div>]]></component><component id="id228" ><![CDATA[<div class="charge-display" id="id228">3</div>]]></component><component id="id1e5" ><![CDATA[<div class="combat-entity-panel" id="id1e5"></div>]]></component><component id="id1d7" ><![CDATA[<div class="combat-entity-panel" id="id1d7"></div>]]></component><component id="id1d5" ><![CDATA[<div class="combat-entity-panel" id="id1d5"></div>]]></component><component id="id1d3" ><![CDATA[<div class="combat-entity-panel" id="id1d3"></div>]]></component><component id="id202" ><![CDATA[<div class="combat-entity-panel" id="id202"></div>]]></component><component id="id1ec" ><![CDATA[<div class="unit-show _wolf _black _fleshlike _another1 _prepare-to-appear _health0" id="id1ec">
+<div class="unit-strip-props"></div>
+<div class="unit-attack-props">
+<div class="unit-attack-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-attack-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-cast-props">
+<div class="unit-cast-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-cast-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-death-props">
+<div class="death-props-explosion"></div>
+<div class="death-props-smoke"></div>
+<div class="death-props-particles"></div>
+<div class="death-props-spots"></div>
+<div class="death-props-drops"></div>
+</div>
+
+<div class="unit-layer-1">
+<div class="get-img-1"></div>
+<div class="get-img-2"></div>
+<div class="get-img-3"></div>
+<div class="bite-img-1"></div>
+<div class="bite-img-2"></div>
+<div class="buff-img-1"></div>
+<div class="buff-img-2"></div>
+<div class="buff-img-3"></div>
+<div class="debuff-img-1"></div>
+<div class="debuff-img-2"></div>
+<div class="debuff-img-3"></div>
+<div class="cast-aura-1"></div>
+<div class="get-aura-1"></div>
+<div class="proc-img-1"></div>
+<div class="unit-marker"></div>
+<div class="unit-layer-2">
+<div class="unit-talk"></div>
+<div class="unit-layer-3">
+
+<img id="id1ed" style="display:none"></img>
+<div class="unit-img" id="id1ee">
+<div class="preload-img"></div>
+</div>
+
+<div class="frames-img"></div>
+<div class="unit-idle-effects">
+<div class="unit-idle-effect-1"></div>
+<div class="unit-idle-effect-2"></div>
+</div>
+<div class="attack-plume"></div>
+<div class="cast-plume"></div>
+<div class="cast-img-wrap">
+<div class="cast-img-1"></div>
+<div class="cast-img-2"></div>
+<div class="cast-img-3"></div>
+<div class="cast-img-4"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="unit-hp _dangerous-hp-level" id="id1ef">
+<div class="unit-hp-fill" style="width: 0%" id="id1f0"></div>
+<div class="unit-amount" id="id1f1" title="0">0</div>
+</div>
+
+<div class="unit-death-img"></div>
+</div>]]></component><component id="id200" ><![CDATA[<div class="combat-entity-panel" id="id200"></div>]]></component><component id="id1e8" ><![CDATA[<div class="combat-entity-panel" id="id1e8"></div>]]></component><component id="id22f" ><![CDATA[<div id="id22f">
+
+<span id="id230" style="position:absolute;bottom:100vh;opacity:0;pointer-events:none;"></span>
+
+<span id="id231">
+<ol id="fightLog">
+<li>
+
+        <img src="/images/icons/skull_gray.png" width="12" height="12" alt="."/> Ты уничтожил магическим ударом черного Волка на 640 <span class="minor" id="id245">24:30</span>
+</li>
+</ol>
+</span>
+
+</div>]]></component><component id="id1bb" ><![CDATA[<div class="battlefield-head-left _breath" id="id1bb"><div id="id1bc">
+<div>
+
+<a class="foot-info-link-profile" draggable="false" href="https://vmmo.vten.ru/user/245438717?u=https://vmmo.vten.ru/dungeon/combat/dSanctuary%3F17%261%3Dnormal">
+<div class="menu-ava-img" id="id1bd" style="background-image:url(&#039;/manekenimage/x129/y16/w55/h55/decorBg:Igles_back_Profile_640_380/mnkmhdl02:body-l_m_skin-0/mnkml02:body-l_m_cloth-0/imch00:Tunika9/ishldr00:Nakidka10/ihdgft00:Diadema_Magistr/ish00:Svitok1/iwpn00:MagMolot/727706417.jpg&#039;)"></div>
+<div class="foot-menu-lvl">29 ур.</div>
+<div class="battlefield-head-pet" id="id1be" style="background-image:url(&#039;/images/pets/iconpet/jadeguard_icon.png&#039;)">
+<div class="wrap-battlefield-head-pet-hp">
+<svg version="1.1" baseProfile="full" class="battlefield-head-pet-hp" xmlns="http://www.w3.org/2000/svg" id="id1bf">
+<circle cx="50%" cy="50%" r="43%" style="stroke-dasharray: 283%, 300%;"></circle>
+</svg>
+</div>
+</div>
+</a>
+
+<div class="battlefield-head-name" id="id1c0">
+<a class="shuffle-group-link" draggable="false" id="id19b" ignoreWebView="true" href="javascript:;" style="display: none;" title="Сменить противника"></a>
+Arilyn
+</div>
+<div class="battlefield-head-hp">
+<div class="battlefield-head-hp-fill" style="width: 100%" id="id1c1">
+<div class="shadowDeath-lvl" style="display: none;"></div>
+<div class="battlefield-head-hp-delta" style="width: 0%"></div>
+</div>
+<div class="battlefield-head-hp-text" id="id1c2">54.8K / 54.8K</div>
+</div>
+
+<div class="battlefield-head-buffs" id="id1c3">
+
+
+<div class="buff" id="id246">
+<div>
+<img class="buff-img" width="12" height="12" src="/images/icons/enchant.png">
+<div class="buff-counter">
+<svg version="1.1" baseProfile="full" class="circle-progress-fill" xmlns="http://www.w3.org/2000/svg" id="id247">
+<circle cx="50%" cy="50%" r="43%" style="stroke-dasharray: 282%, 300%;"></circle>
+</svg>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div>]]></component><header-contribution><![CDATA[<head xmlns:wicket="http://wicket.apache.org"><script type="text/javascript" src="https://vmmo.vten.ru/wicket/resource/org.apache.wicket.resource.JQueryResourceReference/jquery/jquery-3.7.0.min-ver-1C71D2942C207CDFC2FD416BCE974F5D.js"></script>
+<script type="text/javascript" src="https://vmmo.vten.ru/wicket/resource/org.apache.wicket.ajax.AbstractDefaultAjaxBehavior/res/js/wicket-event-jquery.min-ver-7C4C4A31B92F211E7D61B1BF2BA81B39.js"></script>
+</head>]]></header-contribution><priority-evaluate><![CDATA[(() => {const ts = 13163417890601;const unit = document.getElementById('unit_0__unit-pos-22'); Ptx.setTimeout(() => {try { Ptx.Shadows.Combat.death({placeId: Ptx.nvlC(Ptx.Shadows.Rich2.getPlaceBlockU(unit), (e) => e.id), unit: unit, amount: 0, type: 'critical', deathTs: ts}); } catch (e) {} }, 100);})();]]></priority-evaluate><evaluate><![CDATA[(() => {Wicket.Ajax.ajax({"c":"id23e","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?17-1.IBehaviorListener.0-combatPanel-container-battlefield-targetPanel-container-nameBlock-shuffle&1=normal","e":"click"});(() => {let lnk=document.getElementById('id23e');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id23e found');}})();})();(() => {Wicket.Ajax.ajax({"c":"id19b","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?17-1.IBehaviorListener.0-combatPanel-container-battlefield-actorPanel-container-nameBlock-shuffle&1=normal","e":"click"});(() => {let lnk=document.getElementById('id19b');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id19b found');}})();})();(() => {Wicket.Focus.setFocusOnId('ptx_combat_rich2_attack_link');})();(() => {Ptx.nvlC(document.getElementById('id22b'), (el) => { el.classList.remove('_time-lock'); });})();(() => {Ptx.nvlC(document.getElementById('id1a6'), (el) => { el.classList.remove('_potion-link-empty'); el.classList.remove('_time-lock'); });})();(() => {Ptx.nvlC(document.getElementById('id1aa'), (el) => { el.classList.remove('_potion-link-empty'); el.classList.remove('_time-lock'); });})();(() => {Ptx.nvlC(document.getElementById('id1ac'), (el) => { el.classList.remove('_time-lock'); });})();(() => {Ptx.nvlC(document.getElementById('id1a8'), (el) => { el.classList.remove('_potion-link-empty'); el.classList.remove('_time-lock'); });})();(() => {Ptx.setTimeout(() => {(() => {
+    'use strict';
+    var unitSrc = document.getElementById('unit_0__unit-pos-14');
+    var unitDst = document.getElementById('unit_0__unit-pos-22');
+    var idPlSrc = Ptx.nvlC(Ptx.Shadows.Rich2.getPlaceBlockU(unitSrc), (e) => e.id);
+    var idPlDst = Ptx.nvlC(Ptx.Shadows.Rich2.getPlaceBlockU(unitDst), (e) => e.id);
+    Ptx.setTimeout(() => {
+        if (document.hidden === false) {
+            Ptx.Shadows.Combat.Animate.unitStrip({fromPlace: idPlSrc, fromUnit: unitSrc, toPlace: idPlDst, type: 'attack', priority: 97});
+            try { trySound('_mage _tlm _fleshlike _attack'); } catch (e) {}
+        }
+    }, 0);
+    Ptx.setTimeout(() => {
+        if (document.hidden === false) {
+            try { trySound("_wolf _black _fleshlike _another1 _bite _from-mage _death"); } catch (e) {}
+        }
+    }, 100);
+    Ptx.setTimeout(() => {
+        if (document.hidden === false) {
+            Ptx.Shadows.Combat.Animate.unitEffect({fromPlace: idPlDst, fromUnit: unitDst, toPlace: idPlSrc, type: 'bite', subtype: 'mage'});
+        }
+    }, 100);
+    Ptx.setTimeout(() => {
+        if (document.hidden === false) {
+            Ptx.Shadows.Rich2.addCombatText(Ptx.Shadows.Rich2.getTextBlockU(unitDst), '640', '_100', '');
+        }
+    }, 100);
+})();}, 0);})();(() => {Ptx.setTimeout(() => {updateClsGntl('id1f7', 'unit-show _wolf _gray _fleshlike _another2 _current _prepare-to-appear _health100');}, 0);})();(() => {Ptx.setTimeout(() => {try { Ptx.nvlC(document.getElementById('id22e'), (el) => el.style.display = ''); } catch (e) {}}, 0);})();]]></evaluate></ajax-response>

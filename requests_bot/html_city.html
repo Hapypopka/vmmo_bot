@@ -1,0 +1,2004 @@
+<!DOCTYPE html PUBLIC "-//WAPFORUM//DTD XHTML Mobile 1.0//EN" "http://www.wapforum.org/DTD/xhtml-mobile10.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<head><script type="text/javascript" >
+/*<![CDATA[*/
+
+(() => {
+    'use strict';
+
+    console.warn('Starting variables definition', 'https://vmmo.vten.ru/entrance?4');
+
+    if (!window.ptxTimestamp) {
+        window.ptxTimestamp = Number(new Date());
+    }
+
+    if (window.ptxWebGLAllowed === undefined) {
+        try {
+            const canvas = document.createElement('canvas')
+            window.ptxWebGLAllowed = !!window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+        } catch (e) {
+            window.ptxWebGLAllowed = false
+        }
+    }
+
+    window.ptxUserLoggedInJustNow = false;
+    window.ptxPageId = 4;
+    window.ptxShadowsLang = 'ru';
+    window.ptxShadowsCountry = 'RU';
+    window.ptxShadowsLocale = 'ru-RU';
+    window.ptxShadowsCssVS = '?v=1765963391098';
+    window.ptxShadowsCssVP = '&v=1765963391098';
+    window.ptxIsERLogged = false;
+    window.ptxComeFromCombatPage = window.ptxIsCombatPage === true;
+    window.ptxIsCombatPage = false;
+    window.ptxIsCityPage = false;
+    window.ptxPageUrl = 'https://vmmo.vten.ru/entrance?4';
+    window.ptxPageUrlPPF5 = 'https://vmmo.vten.ru/entrance?4';
+    window.ptxPagePath = 'https://vmmo.vten.ru/entrance';
+    window.ptxPageUrlCln = 'https://vmmo.vten.ru/entrance?4';
+    window.ptxPagePathCln = 'https://vmmo.vten.ru/entrance';
+    window.ptxPageRenderedPingUrl = 'https://vmmo.vten.ru/entrance?4-IEndpointBehaviorListener.1-';
+    window.ptxPageHomeUrl = 'https://vmmo.vten.ru/';
+    window.ptxJSessionId = 'D81195E7C5E393DD0D01E7D36F94E585';
+    window.ptxSoundSettingOnReportUrl = 'https://vmmo.vten.ru/user/settings/sound/true';
+    window.ptxSoundSettingOffReportUrl = 'https://vmmo.vten.ru/user/settings/sound/false';
+    window.ptxEventReportUrl = 'https://vmmo.vten.ru/tech/report/ev';
+    window.ptxLogsOn = false || false;
+    window.ptxIgnoreWebView = false;
+    window.ptxBackButtonOverrideAllowed = false;
+    window.ptxActualTimestampPostfix = 1765963391098;
+    window.ptxUserLogin = '';
+    window.ptxUserId = '0';
+    window.ptxUserLevel = 0;
+    window.ptxYmCounterId = '94691268';
+    window.ptxComeAsSPA = false;
+    window.ptxVmmoWidgetsRestricted = false;
+    window.ptxGoogleStatsRestricted = true;
+    
+
+    window.ptxPageWasUpdated = (
+        window.ptxVmmoWidgetsRestrictedStored !== undefined
+            && window.ptxVmmoWidgetsRestrictedStored !== ptxVmmoWidgetsRestricted
+    ) || (
+        window.ptxGoogleStatsRestrictedStored !== undefined
+            && window.ptxGoogleStatsRestrictedStored !== ptxGoogleStatsRestricted
+    );
+
+    // console.info(window.ptxPageWasUpdated, window.ptxGoogleStatsRestricted, window.ptxGoogleStatsRestrictedStored, window.ptxVmmoWidgetsRestricted, window.ptxVmmoWidgetsRestrictedStored);
+
+    window.ptxVmmoWidgetsRestrictedStored = ptxVmmoWidgetsRestricted;
+    window.ptxGoogleStatsRestrictedStored = ptxGoogleStatsRestricted;
+
+    console.warn('Finished variables definition');
+
+    window.ptxValidatePageById = (pageId) => {
+        if (window.ptxPageId && window.ptxPageId !== pageId) {
+            var err = new Error('Page already changed from ' + pageId + ' to ' + window.ptxPageId);
+            err.bypassInWicketAjaxHandler = true;
+            err.ptxPageChangedAlready = true;
+            throw err;
+        }
+    };
+
+    window.ptxEventReport = (eId) => {
+        if (eId
+            && eId !== '') {
+            let url = new URL(ptxEventReportUrl);
+            url.searchParams.set('id', eId);
+            fetch(url.toString(), { method: "GET", headers: { Accept: 'application/json,*/*' }});
+        }
+    };
+})();
+
+    if (window.ptxIsCombatPage !== true) {
+        (() => {
+            var apply = () => {
+                console.debug('Configuring PWA handlers');
+                Ptx.eventListenerDrop(document, 'DOMContentLoaded', apply);
+                Ptx.eventListenerDrop(document, 'readystatechange', apply);
+                Ptx.eventListenerAddPB(document, 'pwa_beforeinstallprompt', () => {
+                    console.debug('Event "pwa_beforeinstallprompt" was fired', window.PwaConfig);
+
+                    ptxEventReport('pwa_install_prompt_working');
+
+                    if (window.PwaConfig) {
+                        PwaConfig.customPromptEnabled = true;
+                        window.showInstallPromotion = () => {};
+                        window.hideInstallPromotion = () => {
+                            Ptx.setTimeout(() => {
+                                console.debug('PWA was successfully installed');
+
+                                ptxEventReport('pwa_installed');
+
+                                if (Ptx.Pwa.onActionPage === true) {
+                                    ptxLocLoad(ptxPageHomeUrl);
+                                }
+                            }, 0);
+                        };
+                    }
+                });
+                console.debug('Configured PWA handlers');
+            };
+
+            if (document.addEventListener) {
+                document.addEventListener('DOMContentLoaded', apply);
+            } else {
+                document.attachEvent('onreadystatechange', apply);
+            }
+
+            console.debug('PWA handlers configurator set up');
+        })();
+    }
+
+    (() => {
+        if (window.ptxPageRenderedPingUrl === undefined) {
+            return;
+        }
+
+        var apply = () => {
+            Ptx.eventListenerDrop(document, 'DOMContentLoaded', apply);
+            Ptx.eventListenerDrop(document, 'readystatechange', apply);
+
+            const webSocketErr = Ptx.Utils.Console({type: 'error', source: 'WebSocket'});
+            const webSocketLog = Ptx.Utils.Console({source: 'WebSocket'});
+
+            if (Wicket.WebSocket
+                    && Ptx.Shadows.WebSocket.connection_state_open) {
+                try {
+                    Wicket.WebSocket.send('pageId: ' + window.ptxPageId);
+                    webSocketLog('Notified backend abount page rendered:', window.ptxPageId);
+                } catch (e) {
+                    webSocketErr('Unable to report back page display');
+                }
+            } else {
+                webSocketErr('Unable to report back page display - no valid open WebSocket connection');
+            }
+
+            window.onerror = function (msg, url, line, column, error) {
+                if (window.ptxPageRenderedPingUrl
+                        && error
+                        && error.bypassInWicketAjaxHandler === true
+                        && error.ptxPageChangedAlready === true) {
+                    try {
+                        Wicket.WebSocket.send('pageId: ' + window.ptxPageId);
+                        webSocketLog('Notified backend abount page rendered:', window.ptxPageId);
+                    } catch (e) {
+                        webSocketErr('Unable to report back page display');
+                    }
+
+                    if (window.ptxLogsOn) { console.info('Notify backend that page already changed'); }
+                }
+
+                return false;
+            }
+        };
+
+        if (document.addEventListener) {
+            document.addEventListener('DOMContentLoaded', apply);
+        } else {
+            document.attachEvent('onreadystatechange', apply);
+        }
+
+        console.debug('Backend pinger on page display set up');
+    })();
+
+    (() => {
+        var apply = () => {
+            console.debug('Fix VMMO widgets state');
+            Ptx.eventListenerDrop(document, 'DOMContentLoaded', apply);
+            Ptx.eventListenerDrop(document, 'readystatechange', apply);
+
+            if (window.ptxIsCombatPage !== true) {
+    window.isVmmoWidgetsDisabled = false;
+}
+
+            console.debug('VMMO widgets state fixed');
+        };
+
+        if (document.addEventListener) {
+            document.addEventListener('DOMContentLoaded', apply);
+        } else {
+            document.attachEvent('onreadystatechange', apply);
+        }
+
+        console.debug('VMMO widgets state fix routine set up');
+    })();
+
+/*]]>*/
+</script>
+<script type="text/javascript" spa_ignore="true" src="/scripts/shared_1_009.js?v=1765963391098"></script>
+
+<style id="com-playtox-shadows-wicket-pages-auth-SocialAuthorizationPanel-0">
+/*<![CDATA[*/
+
+.gsi-material-button {
+-moz-user-select: none;
+-webkit-user-select: none;
+-ms-user-select: none;
+-webkit-appearance: none;
+background-color: WHITE;
+background-image: none;
+border: 1px solid #747775;
+-webkit-border-radius: 4px;
+border-radius: 4px;
+-webkit-box-sizing: border-box;
+box-sizing: border-box;
+color: #1f1f1f;
+cursor: pointer;
+font-family: 'Roboto', arial, sans-serif;
+font-size: 14px;
+height: 40px;
+letter-spacing: 0.25px;
+outline: none;
+overflow: hidden;
+padding: 0;
+position: relative;
+text-align: center;
+-webkit-transition: background-color .218s, border-color .218s, box-shadow .218s;
+transition: background-color .218s, border-color .218s, box-shadow .218s;
+vertical-align: middle;
+white-space: nowrap;
+width: 40px;
+max-width: 400px;
+min-width: min-content;
+}
+.gsi-material-button .gsi-material-button-icon {
+height: 20px;
+margin-right: 12px;
+min-width: 20px;
+width: 20px;
+margin: 0;
+padding: 9px;
+}
+.gsi-material-button .gsi-material-button-content-wrapper {
+-webkit-align-items: center;
+align-items: center;
+display: flex;
+-webkit-flex-direction: row;
+flex-direction: row;
+-webkit-flex-wrap: nowrap;
+flex-wrap: nowrap;
+height: 100%;
+justify-content: space-between;
+position: relative;
+width: 100%;
+}
+.gsi-material-button .gsi-material-button-contents {
+-webkit-flex-grow: 1;
+flex-grow: 1;
+font-family: 'Roboto', arial, sans-serif;
+font-weight: 500;
+overflow: hidden;
+text-overflow: ellipsis;
+vertical-align: top;
+}
+.gsi-material-button .gsi-material-button-state {
+-webkit-transition: opacity .218s;
+transition: opacity .218s;
+bottom: 0;
+left: 0;
+opacity: 0;
+position: absolute;
+right: 0;
+top: 0;
+}
+.gsi-material-button:disabled {
+cursor: default;
+background-color: #ffffff61;
+border-color: #1f1f1f1f;
+}
+.gsi-material-button:disabled .gsi-material-button-contents {
+opacity: 38%;
+}
+.gsi-material-button:disabled .gsi-material-button-icon {
+opacity: 38%;
+}
+.gsi-material-button:not(:disabled):active .gsi-material-button-state,
+.gsi-material-button:not(:disabled):focus .gsi-material-button-state {
+background-color: #303030;
+opacity: 12%;
+}
+.gsi-material-button:not(:disabled):hover {
+-webkit-box-shadow: 0 1px 2px 0 rgba(60, 64, 67, .30), 0 1px 3px 1px rgba(60, 64, 67, .15);
+box-shadow: 0 1px 2px 0 rgba(60, 64, 67, .30), 0 1px 3px 1px rgba(60, 64, 67, .15);
+}
+.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+background-color: #303030;
+opacity: 8%;
+}
+
+/*]]>*/
+</style>
+
+<style id="com-playtox-shadows-wicket-pages-entrance-EntrancePagePanelNew-0">
+/*<![CDATA[*/
+
+@font-face {
+font-family: 'Trajan';
+src: url("/fonts/TrajanPro3-Regular.woff") format("woff");
+font-weight: normal;
+font-style: normal;
+font-display: swap;
+}
+@font-face {
+font-family: 'Trajan';
+src: url("/fonts/TrajanPro3-Bold.woff") format("woff");
+font-weight: bold;
+font-style: normal;
+font-display: swap;
+}
+html,
+body {
+display: block;
+margin: 0;
+padding: 0;
+}
+body {
+background: black;
+color: #FFF;
+font-family: Arial, sans-serif;
+font-size: 22px;
+}
+img {
+vertical-align: middle;
+border: 0;
+}
+ul {
+margin: 0;
+padding: 0;
+list-style-type: none;
+}
+a,
+span,
+div,
+input,
+button {
+-webkit-tap-highlight-color: rgba(255, 255, 255, 0);
+}
+:active,
+:hover,
+:focus {
+outline: 0;
+outline-offset: 0;
+}
+button {
+cursor: default;
+-webkit-box-sizing: border-box;
+box-sizing: border-box;
+margin: 0em;
+border-width: 0;
+border-style: outset;
+border-color: transparent;
+-o-border-image: initial;
+border-image: initial;
+}
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+-webkit-text-fill-color: #fff;
+-webkit-transition: background-color 5000s ease-in-out 0s;
+transition: background-color 5000s ease-in-out 0s;
+}
+.grecaptcha-badge {
+visibility: hidden;
+}
+@-webkit-keyframes blik {
+from {
+-webkit-transform: translateX(0);
+}
+40% {
+opacity: 0;
+-webkit-transform: translateX(0);
+}
+45%, 55% {
+opacity: 1;
+}
+60% {
+opacity: 0;
+-webkit-transform: translateX(200%);
+}
+to {
+-webkit-transform: translateX(200%);
+}
+}
+@keyframes blik {
+from {
+-webkit-transform: translateX(0);
+transform: translateX(0);
+}
+40% {
+opacity: 0;
+-webkit-transform: translateX(0);
+transform: translateX(0);
+}
+45%, 55% {
+opacity: 1;
+}
+60% {
+opacity: 0;
+-webkit-transform: translateX(200%);
+transform: translateX(200%);
+}
+to {
+-webkit-transform: translateX(200%);
+transform: translateX(200%);
+}
+}
+.container {
+max-width: 480px;
+margin: 0 auto;
+background: black;
+position: relative;
+overflow: hidden;
+}
+.response-layer {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background-color: rgba(0, 0, 0, 1);
+z-index: 10000;
+}
+.response-layer .response-layer-info {
+position: absolute;
+left: 0;
+top: 45%;
+width: 100%;
+flex-direction: column;
+display: flex;
+justify-content: center;
+align-items: center;
+}
+.response-layer .response-layer-text {
+margin-bottom: 3%;
+color: #fff;
+//font-family: "Trajan", Arial, sans-serif;
+font-size: 16px !important;
+}
+@media screen and (max-width: 480px) {
+.response-layer .response-layer-text {
+font-size: calc(100vw / (480 / 16)) !important;
+}
+}
+.response-layer-dots {
+display: flex;
+justify-content: center;
+align-items: center;
+width: 100%;
+}
+.response-layer-dot {
+position: relative;
+width: 16px !important;
+height: 16px !important;
+margin: 0 1%;
+opacity: 0;
+border: 1px solid #c1c1c1;
+}
+@media screen and (max-width: 480px) {
+.response-layer-dot {
+width: calc(100vw / (480 / 16)) !important;
+}
+}
+@media screen and (max-width: 480px) {
+.response-layer-dot {
+height: calc(100vw / (480 / 16)) !important;
+}
+}
+.response-layer-dot:nth-child(1) {
+animation: responseDot1 1s linear infinite;
+}
+@keyframes responseDot1 {
+from {
+transform: rotate(0deg);
+opacity: 0;
+}
+25%, to {
+transform: rotate(45deg);
+opacity: 1;
+}
+}
+.response-layer-dot:nth-child(2) {
+animation: responseDot2 1s linear infinite;
+}
+@keyframes responseDot2 {
+from, 25% {
+transform: rotate(0deg);
+opacity: 0;
+}
+50%, to {
+transform: rotate(45deg);
+opacity: 1;
+}
+}
+.response-layer-dot:nth-child(3) {
+animation: responseDot3 1s linear infinite;
+}
+@keyframes responseDot3 {
+from, 50% {
+transform: rotate(0deg);
+opacity: 0;
+}
+75%, to {
+transform: rotate(45deg);
+opacity: 1;
+}
+}
+.landing {
+width: 100%;
+height: 100dvh;
+}
+.vmmo-mobi .landing {
+background: url("/images/landing/oct_2020/VTENLending_960.jpg") 50% -70px/100% auto no-repeat;
+}
+.vmmo-ru .landing {
+background: url("/images/landing/oct_2020/VTENLending_960.jpg") 50% -70px/100% auto no-repeat;
+}
+.landing-overlay {
+position: absolute;
+top: 0;
+left: 0;
+background: rgba(0, 0, 0, 0.85);
+height: 100dvh;
+width: 100%;
+z-index: 3;
+display: block;
+-webkit-transition: 0.3s all ease;
+-o-transition: 0.3s all ease;
+transition: 0.3s all ease;
+opacity: 0;
+visibility: hidden;
+}
+.notice-show .landing-overlay {
+-webkit-transition: none;
+-o-transition: none;
+transition: none;
+opacity: 1;
+visibility: visible;
+}
+.auth-show .landing-overlay,
+.about-show .landing-overlay {
+opacity: 1;
+visibility: visible;
+}
+.landing-about-show {
+padding-bottom: 3%;
+text-decoration: underline;
+cursor: pointer;
+display: none;
+}
+.landing-about-links {
+padding: 10% 7% 33% 7%;
+}
+.landing-auth,
+.landing-about {
+-webkit-box-sizing: border-box;
+box-sizing: border-box;
+font-size: 21px;
+text-align: left;
+padding: 4%;
+background-image: url("/images/landing/oct_2020/backnew_480_rs.png"), -o-linear-gradient(bottom, #09070f 0%, #2e2e37 100%);
+background-image: url("/images/landing/oct_2020/backnew_480_rs.png"), -webkit-gradient(linear, left bottom, left top, from(#09070f), to(#2e2e37));
+background-image: url("/images/landing/oct_2020/backnew_480_rs.png"), linear-gradient(to top, #09070f 0%, #2e2e37 100%);
+background-repeat: no-repeat;
+background-position: center 95%, center;
+background-size: 100% auto, 100%;
+position: absolute;
+bottom: 0;
+left: 0;
+width: 100%;
+border-radius: 24px 24px 0 0;
+z-index: 4;
+-webkit-transition: all 0.4s ease-out;
+-o-transition: all 0.4s ease-out;
+transition: all 0.4s ease-out;
+overflow: hidden;
+-webkit-transform: translateY(100%);
+-ms-transform: translateY(100%);
+transform: translateY(100%);
+-webkit-box-shadow: 0 0 8px 6px rgba(0, 0, 0, 0.5);
+box-shadow: 0 0 8px 6px rgba(0, 0, 0, 0.5);
+}
+.landing-auth .response-layer-dots {
+display: none;
+}
+.landing-auth.captcha-loading .landing-auth-description,
+.landing-auth.captcha-loading form,
+.landing-auth.captcha-loading .landing-auth-social {
+opacity: 0;
+pointer-events: none;
+}
+.landing-auth.captcha-loading .response-layer-dots {
+display: flex;
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+}
+.landing-about {
+display: none;
+}
+.vmmo-mobi .landing-about-show {
+display: inline-block;
+}
+.vmmo-mobi .landing-about {
+display: block;
+}
+.auth-show .landing-auth {
+-webkit-transform: translateY(0);
+-ms-transform: translateY(0);
+transform: translateY(0);
+}
+.about-show .landing-about {
+-webkit-transform: translateY(0);
+-ms-transform: translateY(0);
+transform: translateY(0);
+}
+.landing-auth-title,
+.landing-about-title {
+font-size: 25px;
+font-weight: bold;
+position: relative;
+text-align: center;
+}
+.landing-auth-title img {
+margin-top: -5px;
+}
+.landing-auth-description {
+font-size: 16px;
+color: RGB(190, 198, 229);
+padding: 0 5%;
+margin: 20px 0 24px 0;
+text-align: center;
+transition: opacity 0.25s linear;
+}
+.landing-auth form {
+position: relative;
+transition: opacity 0.25s linear;
+}
+.landing-auth input {
+-webkit-box-sizing: border-box;
+box-sizing: border-box;
+display: block;
+margin: auto;
+background-color: #4b4d5b;
+border-radius: 18px;
+font-size: 1em;
+line-height: 1.65rem;
+font-weight: bold;
+padding: 6px 14px;
+width: 95%;
+color: #ffffff;
+border: 2px solid #4b4d5b;
+-webkit-transition: background-color 5000s ease-in-out 5000s, 0.3s border-color ease;
+-o-transition: background-color 5000s ease-in-out 5000s, 0.3s border-color ease;
+transition: background-color 5000s ease-in-out 5000s, 0.3s border-color ease;
+}
+.landing-auth input:focus {
+outline: none;
+border: 2px solid #ffffff;
+}
+.landing-auth input:not(:first-child) {
+padding-right: 10%;
+margin-top: 24px;
+}
+.landing-auth input::-webkit-input-placeholder {
+color: RGB(190, 198, 229);
+}
+.landing-auth input::-moz-placeholder {
+color: RGB(190, 198, 229);
+}
+.landing-auth input:-ms-input-placeholder {
+color: RGB(190, 198, 229);
+}
+.landing-auth input::-ms-input-placeholder {
+color: RGB(190, 198, 229);
+}
+.landing-auth input::placeholder {
+color: RGB(190, 198, 229);
+}
+.landing-icons {
+background-image: url("/images/landing/oct_2020/eye-close.png");
+width: 28px;
+height: 23px;
+position: absolute;
+cursor: pointer;
+}
+.landing-auth-close,
+.landing-about-close {
+position: absolute;
+cursor: pointer;
+width: 21px;
+height: 21px;
+background-position: -4px -48px;
+right: 0;
+margin-top: 1%;
+}
+#password-view.landing-icons {
+background-position: 0 -23px;
+top: 75px;
+right: 6%;
+}
+#password-view.landing-icons.show {
+background-position: 0 0;
+}
+.landing-auth-forgot {
+color: #bec6e5;
+display: inline-block;
+margin: 5px 0 26px 6%;
+}
+.landing-auth-forgot span {
+text-decoration: underline;
+}
+.landing-about-link {
+color: #bec6e5;
+display: inline-block;
+padding: 5% 0;
+}
+.landing-about-link span {
+text-decoration: underline;
+}
+.input.input-error,
+.input.input-error:focus {
+border: 2px solid RGB(255, 82, 118);
+}
+.input-error-text {
+color: RGB(255, 82, 118);
+font-size: 0.86em;
+margin: 4px 0 0 6%;
+}
+.landing-auth-social {
+margin-top: 8%;
+transition: opacity 0.25s linear;
+}
+.landing-auth-social .landing-login-label {
+color: #FFFFFF;
+font-weight: bold;
+text-align: center;
+}
+.landing-auth-politics {
+font-size: 16px;
+color: RGB(190, 198, 229);
+margin: 5% 0 0 0;
+text-align: center;
+}
+.landing-auth-politics a {
+color: white;
+}
+.landing-notice {
+background-image: url("/images/landing/oct_2020/backsogl_rs.png"), -o-linear-gradient(top, #09070f 0%, #2e2e37 100%);
+background-image: url("/images/landing/oct_2020/backsogl_rs.png"), -webkit-gradient(linear, left top, left bottom, from(#09070f), to(#2e2e37));
+background-image: url("/images/landing/oct_2020/backsogl_rs.png"), linear-gradient(to bottom, #09070f 0%, #2e2e37 100%);
+background-repeat: no-repeat;
+background-position: center 100%, center;
+background-size: 100% auto, 100%;
+width: 90%;
+position: absolute;
+top: 50%;
+left: 50%;
+-webkit-transform: translate(-50%, -50%);
+-ms-transform: translate(-50%, -50%);
+transform: translate(-50%, -50%);
+z-index: 3;
+display: none;
+border-radius: 6%;
+padding: 6%;
+font-size: 21px;
+-webkit-box-sizing: border-box;
+box-sizing: border-box;
+text-align: center;
+}
+.landing-notice-header {
+font-family: 'Trajan', Arial, sans-serif;
+font-size: 1.143em;
+font-weight: 600;
+}
+.landing-notice-description {
+font-size: 1em;
+margin-top: 5%;
+margin-bottom: 7%;
+color: RGB(190, 198, 229);
+}
+.landing-notice-links {
+margin-bottom: 15%;
+}
+.landing-notice-agreement,
+.landing-notice-confidentiality {
+font-size: 1.1em;
+color: #fff;
+display: block;
+font-weight: bold;
+}
+.landing-notice-confidentiality {
+margin-top: 4%;
+}
+.landing-notice-button .go-btn {
+width: 65%;
+padding: 5% 0 2.5% 0;
+}
+.notice-show .landing-notice {
+display: block;
+}
+.landing-hint {
+position: absolute;
+width: 100%;
+left: 0;
+font-family: 'Trajan', Arial, sans-serif;
+top: calc(71% - 24px);
+font-size: 0.91em;
+text-align: center;
+font-weight: 700;
+color: #FFF;
+text-shadow: 2px 0 2px rgba(0, 0, 0, 0.8), 0 2px 2px rgba(0, 0, 0, 0.8), -2px 0 2px rgba(0, 0, 0, 0.8), 0 -2px 2px rgba(0, 0, 0, 0.8);
+}
+.landing-btn-start {
+-webkit-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+user-select: none;
+cursor: pointer;
+z-index: 2;
+background-size: contain;
+background-repeat: no-repeat;
+background-position: 50% 50%;
+font-family: 'Trajan', Arial, sans-serif;
+font-size: 1.1em;
+color: #fff;
+font-weight: 900;
+text-shadow: -1px -1px 0 #097500, 1px -1px 0 #097500, -1px 1px 0 #097500, 1px 1px 0 #097500, 0 0 18px #1f8200;
+text-decoration: none;
+-webkit-transition: opacity 0.4s linear;
+-o-transition: opacity 0.4s linear;
+transition: opacity 0.4s linear;
+width: 52%;
+min-width: 120px;
+position: absolute;
+left: 50%;
+-webkit-transform: translateX(-50%);
+-ms-transform: translateX(-50%);
+transform: translateX(-50%);
+top: 73%;
+text-align: center;
+padding: 8% 0 7% 0;
+text-transform: uppercase;
+}
+.landing-btn-start:active {
+-webkit-transform: translate(-50%, 1px);
+-ms-transform: translate(-50%, 1px);
+transform: translate(-50%, 1px);
+}
+.landing-btn-start:after {
+content: '';
+position: absolute;
+top: 0;
+left: -4%;
+width: 35.08%;
+height: 100%;
+background: url("/images/landing/jan_2020/blik.png") 50% 50% /auto 100% no-repeat;
+opacity: 0;
+-webkit-animation: blik 4s infinite linear;
+animation: blik 4s infinite linear;
+}
+.landing-logo {
+background-repeat: no-repeat;
+background-size: 100% auto;
+position: absolute;
+top: 10%;
+width: 90%;
+left: 5%;
+}
+.lang-en .landing-logo {
+background-repeat: no-repeat;
+background-size: 100% auto;
+width: 66%;
+left: 17%;
+}
+.landing-lang {
+position: absolute;
+top: 8px;
+right: 8px;
+font-size: 16px;
+z-index: 2;
+}
+#selector-closed {
+display: block;
+background: #0078c5;
+border-radius: 16px;
+padding: 6px 15px 6px 25px;
+font-weight: bold;
+-webkit-box-shadow: inset 0 0 16px #00297d;
+box-shadow: inset 0 0 16px #00297d;
+cursor: pointer;
+}
+#selector-closed:after {
+content: "";
+background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAKCAYAAAC9vt6cAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAALEgAACxIB0t1+/AAAABl0RVh0U29mdHdhcmUAcGFpbnQubmV0IDQuMC4xOdTWsmQAAABnSURBVChTrZDBDYAwDAPz7ihdCkaDoWAT3uFaBSEgKRXiJH8S+2HLb6jqhHqZLXbCMaGlvtusKFnsCo+MtuIKKL9sdh8MQ7X6jGZrg9Hb49k7AvN9j7h3BIFjj/feEQTLHn29vyGyA36x4yNNwGLLAAAAAElFTkSuQmCC");
+position: absolute;
+top: 11px;
+right: 5px;
+width: 16px;
+height: 10px;
+}
+.selector-opened {
+display: none;
+color: #094066;
+font-size: 16px;
+font-weight: bold;
+background: #fff;
+border-radius: 16px;
+padding: 6px 12px;
+-webkit-box-shadow: 0px 0px 6px #006fbd;
+box-shadow: 0px 0px 6px #006fbd;
+position: absolute;
+top: -2px;
+width: 145px;
+right: 0;
+-webkit-transition: all 0.4s ease-out;
+-o-transition: all 0.4s ease-out;
+transition: all 0.4s ease-out;
+opacity: 0;
+}
+.selector-opened.show {
+opacity: 1;
+}
+.selector-opened span {
+display: block;
+padding: 4px;
+cursor: pointer;
+}
+.lang-ru span.selector-opened-ru:after {
+content: "";
+padding-left: 5px;
+background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAYAAABr5z2BAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAALEgAACxIB0t1+/AAAABl0RVh0U29mdHdhcmUAcGFpbnQubmV0IDQuMC4xOdTWsmQAAAEPSURBVDhPYyAHcDlmJHE6pH3nckyfBRUiHnA6pYUCNf8B4v9A/BkqTBzgdk535XRM+wnV/J/LMa0JKkUYADWaA/FXuGaHtNn///9nhEozMKBw0AC3S5ouUMN7JM1rQkNXMUOlgYHikD4fKPGD2yk9ESoEB3wOWSpADc+QNO/WCm1gg0pDAFDiO1TBH07H9CCoMFA8VwYodhsqB9J8QtInjQsqjQBAFzTDFIECidsx3ZnPvVAIqOESkuZLAg4FAlAtqADkf6Ahc5AM+QoM4YtwPtAVXK45UlDl2AEoUICa1iJpguHHoHCAKsMPQIED1LAHphnoqjegGIBKEwdAgQT07zagAfc5nTLMoMI4AAMDAFpzeeNHcM6bAAAAAElFTkSuQmCC");
+position: absolute;
+top: 11px;
+right: 5px;
+width: 12px;
+height: 12px;
+}
+.lang-ru span.selector-opened-en:after {
+content: "";
+background: transparent;
+}
+.lang-en span.selector-opened-ru:after {
+content: "";
+background: transparent;
+}
+.lang-en span.selector-opened-en:after {
+content: "";
+padding-left: 5px;
+background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAYAAABr5z2BAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAALEgAACxIB0t1+/AAAABl0RVh0U29mdHdhcmUAcGFpbnQubmV0IDQuMC4xOdTWsmQAAAEPSURBVDhPYyAHcDlmJHE6pH3nckyfBRUiHnA6pYUCNf8B4v9A/BkqTBzgdk535XRM+wnV/J/LMa0JKkUYADWaA/FXuGaHtNn///9nhEozMKBw0AC3S5ouUMN7JM1rQkNXMUOlgYHikD4fKPGD2yk9ESoEB3wOWSpADc+QNO/WCm1gg0pDAFDiO1TBH07H9CCoMFA8VwYodhsqB9J8QtInjQsqjQBAFzTDFIECidsx3ZnPvVAIqOESkuZLAg4FAlAtqADkf6Ahc5AM+QoM4YtwPtAVXK45UlDl2AEoUICa1iJpguHHoHCAKsMPQIED1LAHphnoqjegGIBKEwdAgQT07zagAfc5nTLMoMI4AAMDAFpzeeNHcM6bAAAAAElFTkSuQmCC");
+position: absolute;
+top: 39px;
+right: 5px;
+width: 12px;
+height: 12px;
+}
+div.selector-closed-ru {
+display: block;
+}
+div.selector-closed-en {
+display: none;
+}
+.lang-en div.selector-closed-ru {
+display: none;
+}
+.lang-en div.selector-closed-en {
+display: block;
+}
+.landing-admin-link {
+display: block;
+text-align: center;
+color: #0078c5;
+font-weight: 700;
+position: absolute;
+top: 10px;
+left: 10px;
+}
+.landing-footer {
+position: absolute;
+margin: 0 auto;
+bottom: 0;
+width: 100%;
+max-width: 480px;
+text-align: center;
+}
+.landing-login {
+//white-space: nowrap;
+padding: 0 3% 3% 2%;
+line-height: 14px;
+}
+.landing-login-label,
+.landing-about-show {
+color: #fff;
+font-weight: 500;
+font-size: 0.7em;
+font-family: 'Trajan', Arial, sans-serif;
+}
+.landing-auth .landing-login-label {
+padding: 10px;
+display: block;
+}
+.landing-login-label img {
+position: relative;
+margin: -5px 5px 0 5px;
+display: inline-block;
+}
+.landing-login-button {
+-webkit-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+user-select: none;
+cursor: pointer;
+width: 22%;
+display: inline-block;
+padding: 4% 0 3% 0;
+background: url("/images/landing/oct_2020/button-vmmo_x2.jpg") 50% 50% /contain no-repeat;
+text-decoration: none;
+text-align: center;
+font-family: 'Trajan', Arial, sans-serif;
+font-size: 1.1em;
+font-weight: 600;
+color: #fff;
+}
+.go-btn:hover,
+.landing-login-button:hover {
+-webkit-filter: brightness(110%);
+filter: brightness(110%);
+}
+.landing-login-button:active {
+-webkit-transform: translateY(1px);
+-ms-transform: translateY(1px);
+transform: translateY(1px);
+}
+.landing-auth .landing-login-button,
+.landing-notice .landing-login-button {
+width: 53%;
+margin: 0 auto;
+font-size: 1.1em;
+padding: 7% 0 5% 0;
+text-transform: uppercase;
+}
+.landing-notice .landing-login-button {
+width: 65%;
+}
+@-webkit-keyframes purpleGlowFilter {
+from {
+-webkit-filter: drop-shadow(0 0 1px #960190) drop-shadow(0 0 1px #960190) drop-shadow(0 0 1px #960190);
+}
+to {
+-webkit-filter: drop-shadow(0 0 2px #960190) drop-shadow(0 0 4px #960190) drop-shadow(0 0 8px #960190);
+}
+}
+@keyframes purpleGlowFilter {
+from {
+filter: drop-shadow(0 0 1px #960190) drop-shadow(0 0 1px #960190) drop-shadow(0 0 1px #960190);
+}
+to {
+filter: drop-shadow(0 0 2px #960190) drop-shadow(0 0 4px #960190) drop-shadow(0 0 8px #960190);
+}
+}
+@-webkit-keyframes greenGlowFilter {
+from {
+-webkit-filter: drop-shadow(0 0 1px #18ff00) drop-shadow(0 0 1px #18ff00) drop-shadow(0 0 1px #18ff00);
+}
+to {
+-webkit-filter: drop-shadow(0 0 2px #18ff00) drop-shadow(0 0 4px #18ff00) drop-shadow(0 0 8px #18ff00);
+}
+}
+@keyframes greenGlowFilter {
+from {
+filter: drop-shadow(0 0 1px #18ff00) drop-shadow(0 0 1px #18ff00) drop-shadow(0 0 1px #18ff00);
+}
+to {
+filter: drop-shadow(0 0 2px #18ff00) drop-shadow(0 0 4px #18ff00) drop-shadow(0 0 8px #18ff00);
+}
+}
+.go-btn {
+display: block;
+text-decoration: none;
+cursor: pointer;
+outline: 0;
+text-shadow: 1px 1px 1px black;
+}
+.vmmo-mobi .go-btn,
+.vmmo-ru .go-btn {
+background-image: url("/images/buttons/button_pink_x2.png");
+-webkit-animation: purpleGlowFilter .8s ease-out infinite alternate;
+animation: purpleGlowFilter .8s ease-out infinite alternate;
+}
+.lang-ru .text-ru {
+display: inline-block;
+}
+.lang-ru .text-en {
+display: none;
+}
+.lang-en .text-ru {
+display: none;
+}
+.lang-en .text-en {
+display: inline-block;
+}
+.social-list {
+display: -webkit-box;
+display: -ms-flexbox;
+display: flex;
+-webkit-box-pack: center;
+-ms-flex-pack: center;
+justify-content: center;
+-webkit-box-align: center;
+-ms-flex-align: center;
+align-items: center;
+-ms-flex-wrap: wrap;
+flex-wrap: wrap;
+margin: -5px;
+}
+.social-list-item {
+padding: 5px;
+}
+.btn-soc {
+display: inline-block;
+overflow: hidden;
+border-radius: 10%;
+font-size: 0;
+text-decoration: none;
+}
+.soc-img {
+width: 52px;
+height: 52px;
+position: relative;
+display: inline-block;
+background-size: cover;
+}
+.soc-img-vk {
+background-image: url("/images/landing/vk_2023.png")
+}
+.soc-img-ok {
+background-image: url("/images/landing/oct_2020/odnoklassniki-64x64.png");
+}
+.soc-img-fb {
+background-image: url("/images/landing/fb_64x64.png")
+}
+.soc-img-tw {
+background-image: url("/images/landing/oct_2020/twitter.svg");
+}
+@media screen and (max-width: 480px) {
+body {
+font-size: 18px;
+}
+.landing-login-label img {
+height: 15px;
+}
+.landing-auth,
+.landing-about {
+font-size: 20px;
+}
+.landing-notice {
+font-size: 20px;
+}
+.landing-notice-ok {
+width: 50%;
+}
+}
+@media screen and (max-width: 340px) {
+body {
+font-size: 15px;
+}
+.landing-login-label img {
+height: 14px;
+}
+.landing-auth,
+.landing-about {
+font-size: 16px;
+}
+.landing-auth-title,
+.landing-about-title {
+font-size: 18px;
+}
+.landing-auth-description {
+font-size: 14px;
+}
+}
+@media screen and (min-height: 500px) and (max-width: 320px) {
+.landing-hint {
+top: calc(73% - 30px);
+}
+.landing-btn-start {
+top: 73%;
+}
+}
+@media screen and (min-height: 550px) {
+.vmmo-mobi .landing {
+background-position: 50% calc(((100vh - 550px) / (1000 - 550)) * 70 - 70px) !important;
+}
+}
+@media screen and (min-height: 1000px) {
+.vmmo-mobi .landing {
+background-position: 50% 0 !important;
+}
+.landing-hint {
+top: calc(64% - 24px);
+}
+.landing-btn-start {
+top: 66%;
+}
+}
+
+/*]]>*/
+</style>
+
+
+<script type="text/javascript" spa_ignore="true">
+/*<![CDATA[*/
+
+Ptx.eventListenerAdd(window, 'unload', () => {
+'use strict';
+if (window.ptxLogsOn) { console.log('Clearing GSAP3 info'); }
+gsap.killTweensOf("*");
+gsap.globalTimeline.clear().kill();
+});
+
+/*]]>*/
+</script>
+
+<script type="text/javascript" spa_ignore="true">
+/*<![CDATA[*/
+
+(() => {
+'use strict';
+window.ptxWindowTimestampPostfix = 1765963391098;
+})();
+
+/*]]>*/
+</script>
+
+
+
+    <!-- Yandex.Metrika counter -->
+    
+        <script type="text/javascript">
+            (() => {
+                'use strict';
+                if (window.ptxIsCombatPage !== true) {
+                        var proc = () => {
+                            if (window.ym === undefined) {
+                                (function(m,e,t,r,i,k,a){m[i]=m[i]||function()
+                                {(m[i].a=m[i].a||[]).push(Array.prototype.slice.call(arguments))};
+                                m[i].l=1*new Date();
+                                for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+                                k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+                                (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+                                window.ym.ptxCount = 0;
+                            }
+
+                            if ((window.ym.ptxCount++) % 30 === 0) {
+                                ym(94691268, "init", {
+                                    clickmap: false,
+                                    trackLinks: false,
+                                    accurateTrackBounce: false,
+                                    webvisor: false,
+                                    ecommerce: "dataLayer"
+                                });
+                                window.dataLayer = window.dataLayer || [];
+                            }
+
+                            if (window.ymr === undefined) {
+                                window.ymr = function() {
+                                    if (window.ptxIsCombatPage !== true) { ym.call(null, Array.prototype.slice.call(arguments)) }
+                                };
+                            }
+                        };
+
+                        if (window.dataLayer && dataLayer instanceof Array && dataLayer.length > 100) {
+                            console.info('Drop collected data YTM', dataLayer.length);
+                            setTimeout(() => {
+                                delete window.dataLayer;
+                                window.dataLayer = window.dataLayer || [];
+                                if (window.ptxLogsOn) { console.info('Dropped collected data YTM'); }
+                            }, 0);
+                        }
+
+                        if (window.ym && ym.a && ym.a instanceof Array && ym.a.length > 100) {
+                            console.info('Forcing send collected data YM', ym.a.length);
+                            ym(94691268, "hit", "/forced-data-submit", {
+                                transport: 'beacon'
+                            });
+
+                            setTimeout(() => {
+                                delete window.ym.a;
+                                delete window.dataLayer;
+                                window.dataLayer = window.dataLayer || [];
+                                if (window.ptxLogsOn) { console.info('Dropped collected data YM'); }
+                            }, 0);
+                            setTimeout(proc, 0);
+                            return;
+                        }
+
+                        proc();
+                } else if (window.ym) {
+                    ym(94691268, 'disable');
+                    Ptx.eventListenerAddPB(window, 'beforeunload', () => ym(94691268, 'enable'));
+
+                    if (ym.a && ym.a instanceof Array && ym.a.length > 10) {
+                        ym.a = Array.prototype.slice.call(ym.a, ym.a.length - 10);
+                        ym(94691268, 'disable');
+                    }
+
+                    if (window.dataLayer && dataLayer instanceof Array && dataLayer.length > 10) {
+                        dataLayer = Array.prototype.slice.call(dataLayer, dataLayer.length - 10);
+                    }
+                }
+            })();
+        </script>
+        <script type="text/javascript">
+            if (window.ptxIsCombatPage !== true
+                    && window.ym) {
+                ym(94691268, "hit", window.ptxPagePathCln, {
+                    callback: () => {
+                        if (window.ptxLogsOn) { console.log('Hit call stacktrace:', (new Error()).stack); }
+
+                        setTimeout(() => {
+                            if (ym.a && ym.a instanceof Array && ym.a.length > 10) {
+                                ym.a = Array.prototype.slice.call(ym.a, ym.a.length - 10);
+                            }
+                        }, 100);
+                    }
+                });
+            }
+        </script>
+        <script type="text/javascript">
+            (() => {
+                'use strict';
+                if (window.ptxIsCombatPage === true) {
+                    Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+                        let el = document.getElementById('body_id');
+
+                        if (el) {
+                            el.classList.add('ym-hide-content');
+                            el.classList.add('ym-disable-clickmap');
+                            el.classList.add('ym-disable-keys');
+                            el.classList.add('ym-disable-tracklink');
+                            if (window.ptxLogsOn) { console.debug('Suppressed YM content store'); }
+                        }
+                    });
+                } else {
+                    Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+                        let el = document.getElementById('body_id');
+
+                        if (el) {
+                            el.classList.remove('ym-hide-content');
+                            el.classList.remove('ym-disable-clickmap');
+                            el.classList.remove('ym-disable-keys');
+                            el.classList.remove('ym-disable-tracklink');
+                        }
+                    });
+                }
+            })();
+        </script>
+    
+    <!-- /Yandex.Metrika counter -->
+    
+
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<meta charset="utf-8" />
+<meta name="theme-color" content="#000000"/>
+<title>Игра &quot;Мир Теней&quot; - Мир Теней Онлайн-игра</title>
+<meta name="language" content="russian, ru, русский"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=0"/>
+<meta name="description" content="Мир Теней - культовая мобильная MMORPG в стиле фэнтези для настоящих ценителей оружия, магии и кровопролитных войн! Покоряй подземелья, создавай оружие, участвуй в эпических сражениях с другими игроками!">
+<meta property="og:title" content="Игра &quot;Мир Теней&quot;">
+<meta property="og:type" content="игра">
+<meta property="og:url" content="https://m.vten.ru">
+<meta property="og:description" content="Мир Теней - культовая мобильная MMORPG в стиле фэнтези для настоящих ценителей оружия, магии и кровопролитных войн! Покоряй подземелья, создавай оружие, участвуй в эпических сражениях с другими игроками!">
+<meta name="keywords" content="игры, RPG, MMORPG, фэнтези, онлайн, wap, бесплатно, мир теней, магия, играть онлайн, ролевые игры, лучшие онлайн игры, браузерная игра">
+<link rel="manifest" href="/manifest_p.json"/>
+<meta name="theme-color" content="#000000" />
+<link rel="icon" sizes="192x192" href="/images/game-icon_vten2021_192x192.png"/>
+<meta name="robots" content="INDEX, FOLLOW"/>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" id="quicktip_vars">
+/*<![CDATA[*/
+
+        (() => {
+    'use strict';
+    
+    Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+        'use strict';
+        var CDATALog = Ptx.Utils.Console({source: 'CDATA'});
+
+        if (!window.Ptx) {
+            window.Ptx = {};
+        }
+
+        if (!Ptx.Shadows) {
+            Ptx.Shadows = {};
+        }
+
+        CDATALog('Quicktip object:', Ptx.Shadows.Quicktip);
+
+        if (!Ptx.Shadows.Quicktip) {
+            Ptx.Shadows.Quicktip = {};
+        }
+
+        Ptx.Shadows.Quicktip.urlGetQuicktip = 'https://vmmo.vten.ru/entrance?4-IEndpointBehaviorListener.0-';
+
+
+        CDATALog('Quicktip object after:', Ptx.Shadows.Quicktip);
+    });
+})();
+    
+/*]]>*/
+</script>
+</head>
+<body id="body_id" class="body">
+<span id="pageTopA"></span>
+
+        
+    <!-- Yandex.Metrika counter -->
+    <noscript>
+        <div><img src="https://mc.yandex.ru/watch/94691268" style="position:absolute; left:-9999px;" alt=""/></div>
+    </noscript>
+    <!-- /Yandex.Metrika counter -->
+    
+
+
+
+<div class="fake">
+
+</div>
+
+
+<div class="viewport">
+<div id="background" class="bg-layer">
+
+</div>
+</div>
+<div class="b-container" id="bodyContainer">
+
+<div>
+
+</div>
+
+
+
+<div id="idb" style="display: none;">
+
+
+<script id="ptxScriptFB1" type="text/javascript">
+/*<![CDATA[*/
+
+Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+'use strict';
+var nodeFB = document.getElementById('ptxScriptFB1').parentNode;
+if (window.ptxLogsOn) {console.log("Feedback node: ", nodeFB, ", style: " + nodeFB.style + ", display: " + nodeFB.style.display);}
+if (!(nodeFB.hidden || nodeFB.style.display === 'none')
+&& nodeFB.querySelector('._notification-cta') !== null) {
+var el = document.getElementById('bodyContainer');
+if (el && el !== null) {
+el.classList.add('_notifications-present');
+}
+}
+});
+
+/*]]>*/
+</script>
+</div>
+
+
+<div id="idc"><div>
+<div id="mainBody" class="lang-ru">
+<script type="text/javascript">(() => {
+    'use strict';
+    if (!window.Ptx) {
+        window.Ptx = {};
+    }
+
+    if (!Ptx.Shadows) {
+        Ptx.Shadows = {};
+    }
+
+    if (!Ptx.Shadows.Auth) {
+        Ptx.Shadows.Auth = {};
+    }
+
+    Ptx.Shadows.Auth.autologin_url = 'https://vmmo.vten.ru/j_spring_openid_security_check?openid_identifier=http%3A%2F%2Fpassport.vmmo.ru%2F&spring-security-redirect=https%3A%2F%2Fvmmo.vten.ru%2F%3Fforce%3D&mode=autologin&vmmo.app=vten&vmmo.sign=45b17d415ea564d5ca53e92e54698e486f6989b5f89f372b4746fc38b3a9f4dd';
+})();</script>
+<div class="main-container" id="rootContainer">
+<div class="container">
+<div class="response-layer">
+<div class="response-layer-info">
+<span class="response-layer-text">Загрузка</span>
+<div class="response-layer-dots">
+<div class="response-layer-dot"></div>
+<div class="response-layer-dot"></div>
+<div class="response-layer-dot"></div>
+</div>
+</div>
+</div>
+<div class="landing"></div>
+<div class="landing-logo"></div>
+<div class="landing-hint">
+<span class="text-ru">Сражайтесь. Стройте. Создавайте.</span>
+</div>
+<a class="landing-btn-start go-btn" href="https://vmmo.vten.ru/entrance/start?4-1.ILinkListener-panel-container-mainContainer-start" ignoreWebView="true">
+Начать игру
+</a>
+<div class="landing-footer">
+<div class="landing-login">
+<span class="landing-login-label">
+<span class="text-ru">У меня уже есть аккаунт <span><img src="/images/vmmo-logo.png" alt="VMMO" /></span></span>
+<a class="landing-login-button">
+Войти</a>
+</span>
+</div>
+</div>
+<div class="landing-overlay"></div>
+<div class="landing-auth captcha-loading">
+<div class="landing-auth-title">
+<span class="text-ru">Вход в аккаунт <span><img src="/images/vmmo-logo.png" alt="VMMO" /></span></span>
+<span id="landing-auth-close" class="landing-auth-close landing-icons"></span>
+</div>
+<div class="landing-auth-description">
+<span class="text-ru">Войди в свой аккаунт VMMO, чтобы привязать к нему текущую игру или
+попасть
+в ранее сохранённую игру.</span>
+</div>
+<form method="post" action="https://vmmo.vten.ru/entrance/login?4-1.IFormSubmitListener-panel-container-mainContainer-loginForm" autocomplete="on" id="idd"><div style="width:0px;height:0px;position:absolute;left:-100px;top:-100px;overflow:hidden"><input type="hidden" name="idd_hf_0" id="idd_hf_0" /></div>
+<input id="login" type="text" class="input" value="" name="login" placeholder="Логин" disabled="disabled"/>
+<input id="password" type="password" class="input" value="" name="password" placeholder="Пароль" disabled="disabled"/>
+<span id="password-view" class="landing-icons"></span>
+
+<a class="landing-auth-forgot" href="https://vmmo.vten.ru/passwordrecovery/form">
+<span class="text-ru">Забыли пароль?</span>
+</a>
+<input type="hidden" id="captchaToken" name="captchaToken">
+<button type="submit" class="landing-login-button go-btn">Войти</button>
+</form>
+
+<div class="landing-auth-social">
+<span class="landing-login-label">
+<span class="text-ru">
+Вход через социальные сети
+</span>
+</span>
+
+<div class="social-links">
+<ul class="social-list">
+<li class="social-list-item">
+
+<a class="btn-soc" href="https://vmmo.vten.ru/entrance?ppAction=authfb">
+<span class="soc-img soc-img-fb"></span>
+</a>
+
+</li>
+<li class="social-list-item">
+
+<a class="btn-soc" href="https://passport.vmmo.ru/login/vk?openid.return_to=https%3A%2F%2Fvmmo.vten.ru%2F%3Fwmkt%3DiiPSXOqhK&amp;appId=vten">
+<span class="soc-img soc-img-vk"></span>
+</a>
+
+</li>
+<li class="social-list-item">
+
+<a class="btn-soc" href="https://passport.vmmo.ru/login/odkl?openid.return_to=https%3A%2F%2Fvmmo.vten.ru%2F%3Fwmkt%3DQcOPJujBI&amp;appId=vten">
+<span class="soc-img soc-img-ok"></span>
+</a>
+
+</li>
+
+
+</ul>
+</div>
+
+</div>
+
+<div class="response-layer-dots">
+<div class="response-layer-dot"></div>
+<div class="response-layer-dot"></div>
+<div class="response-layer-dot"></div>
+</div>
+<div class="landing-auth-politics" spa_ignore="true">
+<span class="text-ru">Регистрируясь и/или авторизуясь, ты подтверждаешь, что ты ознакомился
+и принимаешь условия <a ignoreWebView="true" target="_blank" href="https://vmmo.ru/reference/fromapp/agreement?vmmo.app=vten&amp;vmmo.sign=6919d19447ecce92f026592bac30a7183477003b2aaf8d78ce981e64c708a4da&amp;vmmo.domain=vmmo.vten.ru">Соглашения</a> и <a href="https://vmmo.ru/reference/fromapp/privacy?vmmo.app=vten&amp;vmmo.sign=6919d19447ecce92f026592bac30a7183477003b2aaf8d78ce981e64c708a4da&amp;vmmo.domain=vmmo.vten.ru" ignoreWebView="true" target="_blank">Политики
+конфиденциальности</a>.</span>
+</div>
+</div>
+<div class="landing-about">
+<div class="landing-about-title">
+<span class="landing-about-close landing-icons" id="landing-about-close"></span>
+</div>
+<div class="landing-about-links" spa_ignore="true">
+<a class="landing-about-link" href="https://vmmo.mobi/agreement" target="_blank"><span class="text-ru">Лицензионное соглашение</span></a>
+<a class="landing-about-link" href="https://vmmo.mobi/privacy" target="_blank"><span class="text-ru">Политика конфиденциальности</span></a>
+<a class="landing-about-link" href="/docs/mirteney_lifecycles.pdf"><span class="text-ru">Жизненные циклы Мобильной игры "Мир Теней"</span></a>
+<a class="landing-about-link" href="/docs/mirteney_docs.pdf"><span class="text-ru">Функциональные характеристики Мобильной игры "Мир Теней"</span></a>
+<a class="landing-about-link" href="/docs/prices.pdf"><span class="text-ru">Стоимость использования</span></a>
+</div>
+</div>
+<div class="landing-notice">
+<div class="landing-notice-header">
+Важная информация
+</div>
+<div class="landing-notice-description">
+<span class="text-ru">
+Нажми на кнопку "ОК", чтобы подтвердить, что ты ознакомился и принимаешь условия
+Соглашения
+и Политики конфиденциальности.
+</span>
+<span class="text-en">
+Click on the "OK" button to confirm that you have read and accept the terms of the
+Agreement and the Privacy Policy.
+</span>
+</div>
+<div class="landing-notice-links">
+<span class="text-ru" spa_ignore="true">
+<a class="landing-notice-agreement" ignoreWebView="true" target="_blank" href="https://vmmo.ru/reference/fromapp/agreement?vmmo.app=vten&amp;vmmo.sign=6919d19447ecce92f026592bac30a7183477003b2aaf8d78ce981e64c708a4da&amp;vmmo.domain=vmmo.vten.ru">
+Соглашение
+</a>
+<a class="landing-notice-confidentiality" href="https://vmmo.ru/reference/fromapp/privacy?vmmo.app=vten&amp;vmmo.sign=6919d19447ecce92f026592bac30a7183477003b2aaf8d78ce981e64c708a4da&amp;vmmo.domain=vmmo.vten.ru" ignoreWebView="true" target="_blank">
+Политика конфиденциальности
+</a>
+</span>
+<span class="text-en" spa_ignore="true">
+<a class="landing-notice-agreement" href="https://vmmo.ru/agreement-en" target="_blank">
+Agreement
+</a>
+<a class="landing-notice-confidentiality" href="#" target="_blank">
+Privacy policy
+</a>
+</span>
+</div>
+<div class="landing-notice-button">
+<span id="landing-notice-ok"
+class="landing-auth-button landing-login-button go-btn">Ок</span>
+</div>
+</div>
+<script>
+        Ptx.nvlC(document.querySelector('.landing-auth'), e => e.classList.remove('captcha-loading'));
+        Ptx.nvlC(document.getElementById('login'), e => e.disabled = false);
+        Ptx.nvlC(document.getElementById('password'), e => e.disabled = false);
+    </script>
+</div>
+</div>
+<script>
+/*<![CDATA[*/
+
+(() => {
+'use strict';
+Ptx.eventListenerAddPB(document, 'landingBodyClassSet', () => {
+const bgURL = getComputedStyle(document.querySelector('.landing')).backgroundImage;
+const bgEl = document.createElement('img');
+bgEl.style.display = 'none';
+bgEl.src = bgURL ? bgURL.split('"')[1] : '';
+document.body.appendChild(bgEl);
+bgEl.onload = () => showLanding();
+bgEl.onerror = () => showLanding();
+function showLanding() {
+document.querySelector('.response-layer').style.display = 'none';
+}
+});
+/** Определяем, какой трансишн использует браузер */
+var transitionEndEventName = getTransitionEndEventName();
+function getTransitionEndEventName() {
+var transitions = {
+"transition": "transitionend",
+"OTransition": "oTransitionEnd",
+"MozTransition": "transitionend",
+"WebkitTransition": "webkitTransitionEnd"
+};
+var bodyStyle = document.body.style;
+for (var transition in transitions) {
+if (bodyStyle[transition] != undefined) {
+return transitions[transition];
+}
+}
+}
+/** Конец! Определяем, какой трансишн использует браузер */
+/** Логика просмотра пароля */
+var passwordViewBtn = document.getElementById('password-view');
+if (passwordViewBtn) {
+passwordViewBtn.onclick = () => {
+if (passwordViewBtn.classList.contains('show')) {
+passwordViewBtn.classList.remove('show');
+document.getElementById('password').setAttribute('type', 'password');
+} else {
+passwordViewBtn.classList.add('show');
+document.getElementById('password').setAttribute('type', 'text');
+}
+};
+}
+/** Конец логики просмотра пароля */
+/** Логика открытия и закрытия попапа регистрации */
+var authBlock = document.querySelector('.landing-auth');
+var aboutBlock = document.querySelector('.landing-about');
+var authClass = 'auth-show';
+var aboutClass = 'about-show';
+var landingBlock = document.querySelector('.landing');
+var footerBlock = document.querySelector('.landing-footer');
+var mainBlock = document.getElementById('mainBody');
+var buttons = {
+authClose: document.querySelector(".landing-auth-close"),
+aboutClose: document.querySelector(".landing-about-close"),
+login: document.querySelector(".landing-login-button"),
+about: document.querySelector(".landing-about-show"),
+}
+if (buttons.authClose) {
+buttons.authClose.onclick = () => {
+closeBlock();
+};
+}
+if (buttons.aboutClose) {
+buttons.aboutClose.onclick = () => {
+closeBlock();
+};
+}
+document.documentElement.addEventListener('mousedown', (event) => {
+var isTargetElem = false;
+var node = event.target;
+while (node && !isTargetElem) {
+isTargetElem = node === authBlock || node === aboutBlock || node === footerBlock;
+node = node.parentNode;
+}
+if (!isTargetElem) closeBlock();
+});
+function closeBlock() {
+landingBlock.style.height = window.innerHeight + 'px';
+if (mainBlock.classList.contains(authClass)) {
+mainBlock.classList.remove(authClass);
+authBlock.addEventListener(transitionEndEventName, callback(authBlock));
+}
+if (mainBlock.classList.contains(aboutClass)) {
+mainBlock.classList.remove(aboutClass);
+aboutBlock.addEventListener(transitionEndEventName, callback(aboutBlock));
+}
+}
+function callback(block) {
+block.removeEventListener(transitionEndEventName, callback);
+block.style.bottom = null;
+block.style.top = null;
+}
+if (buttons.login) {
+buttons.login.onclick = (event) => {
+event.preventDefault();
+let url = Ptx.nvlC(window.Ptx, e => Ptx.nvlC(e.Shadows, f => Ptx.nvlC(f.Auth, g => g.autologin_url)));
+if (!url) {
+mainBlock.classList.add(authClass);
+landingHeight();
+} else {
+delete Ptx.Shadows.Auth.autologin_url;
+window.location.href = url;
+}
+};
+}
+if (buttons.about) {
+buttons.about.onclick = (event) => {
+event.preventDefault();
+mainBlock.classList.add(aboutClass);
+landingHeight();
+};
+}
+/** Конец логики попапа регистрации */
+window.onload = () => {
+landingHeight();
+};
+var timer;
+window.onresize = () => {
+if (timer) {
+//Need to delay action until user done resizing.
+window.clearTimeout(timer);
+}
+timer = window.setTimeout(() => {
+//This is where you execute the code that fires when the size is steady.
+landingHeight();
+}, 200);
+};
+function landingHeight() {
+if (mainBlock.classList.contains(authClass)) {
+restyleBlock(authBlock);
+} else if (mainBlock.classList.contains(aboutClass)) {
+restyleBlock(aboutBlock);
+} else {
+landingBlock.style.height = window.innerHeight + 'px';
+}
+}
+function restyleBlock(block) {
+if (window.innerHeight < block.offsetHeight) {
+landingBlock.style.height = block.offsetHeight + 'px';
+block.style.bottom = 'auto';
+block.style.top = '0';
+scroll();
+} else {
+landingBlock.style.height = window.innerHeight + 'px';
+block.style.bottom = '0';
+block.style.top = 'auto';
+}
+}
+function scroll() {
+V = 1;
+var windowPositionY = window.pageYOffset,
+targetPositionY = 0,
+start = null;
+requestAnimationFrame(step);
+function step(time) {
+if (start === null) start = time;
+var progress = time - start,
+r = targetPositionY < 0 ? Math.max(windowPositionY - progress / V, windowPositionY + t) : Math.min(windowPositionY + progress / V, windowPositionY + targetPositionY);
+window.scrollTo(0, r);
+if (r !== windowPositionY + targetPositionY) {
+requestAnimationFrame(step);
+}
+}
+}
+/** переход к элементу при клике на него */
+})();
+
+/*]]>*/
+</script>
+
+</div>
+</div></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div spa_ignore="true" ignoreWebView="true"><span class="">
+
+</span></div>
+</div>
+
+
+
+<div>
+<div></div>
+</div>
+
+
+    <script type="text/javascript">
+        (function() {
+            'use strict';
+            Ptx.eventListenerAddPB(document, "DOMContentLoaded", function() {
+                var el = document.getElementById('idc');
+
+                if (el
+                        && el !== null) {
+                    el.className = 'vmmo-ru';
+                }
+
+                document.dispatchEvent(new CustomEvent('landingBodyClassSet'));
+            });
+        })();
+    </script>
+    <script type="text/javascript">
+    (() => {
+        'use strict';
+        if (!window.Ptx) {
+            window.Ptx = {};
+        }
+
+        if (!Ptx.Utils) {
+            Ptx.Utils = {};
+        }
+
+        Ptx.performOnLoadPB(() => {
+            if (Ptx.Utils.leash) {
+                if (!Ptx.Utils.leash.itvlIdx) {
+                    Ptx.Utils.leash.itvlIdx = Ptx.setInterval(
+                        () => {
+                            if (window.ptxIsCombatPage === true
+                                || window.ptxUserLevel === 0
+                                || window.ptxUserLevel >= 30) {
+                                return;
+                            }
+
+                            console.debug('Searching for leashable elements');
+                            const els = Array.from(document.querySelectorAll('._quest-leash'));
+
+                            if (els
+                                    && els.length > 0) {
+                                console.debug(els.length, 'leashable elements found');
+
+                                let max = 0;
+                                let elM = null;
+
+                                els.forEach((el) => {
+                                    if (window.ptxElCheckVisibility(el) === false) {
+                                        return;
+                                    }
+
+                                    let val = Number(Ptx.nvlC(el.dataset, (e) => e.leash) || 0);
+
+                                    if (val && val > max) {
+                                        max = val;
+                                        elM = el;
+                                    }
+                                });
+
+                                if (max > 0) {
+                                    Ptx.Utils.leash.create({target: elM, priority: 10});
+                                    console.debug('Created leash for ', elM)
+                                } else {
+                                    Ptx.Utils.leash.destroy();
+                                }
+                            } else {
+                                console.debug('No leashable elements found');
+                            }
+                        },
+                        1000,
+                        () => {
+                            Ptx.Utils.leash.destroy();
+                            delete Ptx.Utils.leash.itvlIdx;
+                        }
+                    );
+                }
+            }
+        }, undefined, true);
+    })();
+</script><script type="text/javascript">
+        Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+            'use strict';
+
+            if (!window.Ptx) {
+                window.Ptx = {};
+            }
+
+            if (!Ptx.Ui) {
+                Ptx.Ui = {};
+            }
+
+            if (!Ptx.Ui.urlQuicktipHandler) {
+                Ptx.Ui.urlQuicktipHandler = (ev) => {
+                    if(ev.target.dataset.quicktip) {
+                        Ptx.Utils.Quicktip.create({target: ev.target});
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        ev.stopImmediatePropagation();
+                        return false;
+                    }
+                    if (Ptx.Utils.Quicktip.el && !Ptx.Utils.Quicktip.el.contains(ev.target) && !Ptx.Utils.Quicktip.el.scrollbar?.active) {
+                        Ptx.Utils.Quicktip.destroy()
+                    }
+
+                    return null;
+                }
+            }
+        })();
+    </script>
+<span id="pageBottomA"></span>
+</body>
+</html>
