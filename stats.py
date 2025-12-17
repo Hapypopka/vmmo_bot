@@ -27,8 +27,9 @@ def load_stats():
         "total_deaths": 0,
         "total_items_auctioned": 0,
         "total_items_disassembled": 0,
-        "total_bonuses_opened": 0,
         "total_hell_games_time": 0,  # в секундах
+        "total_mail_gold": 0,  # золото с почты (аукцион)
+        "total_mail_silver": 0,  # серебро с почты (аукцион)
         "dungeons": {},  # статистика по каждому данжену
         "sessions": [],  # история сессий
         "first_run": None,
@@ -107,14 +108,21 @@ class BotStats:
         self.stats["total_items_disassembled"] += count
         save_stats(self.stats)
 
-    def bonuses_opened(self, count):
-        """Записывает открытые бонусы"""
-        self.stats["total_bonuses_opened"] += count
-        save_stats(self.stats)
-
     def hell_games_time(self, seconds):
         """Записывает время в Адских Играх"""
         self.stats["total_hell_games_time"] += seconds
+        save_stats(self.stats)
+
+    def mail_money_collected(self, gold=0, silver=0):
+        """Записывает деньги, собранные с почты (продажи на аукционе)"""
+        # Миграция старых данных
+        if "total_mail_gold" not in self.stats:
+            self.stats["total_mail_gold"] = 0
+        if "total_mail_silver" not in self.stats:
+            self.stats["total_mail_silver"] = 0
+
+        self.stats["total_mail_gold"] += gold
+        self.stats["total_mail_silver"] += silver
         save_stats(self.stats)
 
     def end_session(self):
@@ -146,6 +154,10 @@ class BotStats:
         hell_hours = s["total_hell_games_time"] // 3600
         hell_mins = (s["total_hell_games_time"] % 3600) // 60
 
+        # Деньги с почты (миграция)
+        mail_gold = s.get("total_mail_gold", 0)
+        mail_silver = s.get("total_mail_silver", 0)
+
         lines = [
             "=" * 50,
             "📊 СТАТИСТИКА БОТА",
@@ -155,7 +167,7 @@ class BotStats:
             f"💀 Смертей: {s['total_deaths']}",
             f"💰 Выставлено на аукцион: {s['total_items_auctioned']}",
             f"🔧 Разобрано предметов: {s['total_items_disassembled']}",
-            f"🎁 Открыто бонусов: {s['total_bonuses_opened']}",
+            f"💵 Собрано с почты: {mail_gold}з {mail_silver}с",
             f"🔥 Время в Адских Играх: {hell_hours}ч {hell_mins}м",
             "-" * 50,
         ]

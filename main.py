@@ -24,6 +24,7 @@ else:
 from config import (
     SCRIPT_DIR,
     BASE_URL,
+    CITY_URL,
     DUNGEONS_URL,
     LOGIN_URL,
     RESTART_INTERVAL,
@@ -43,6 +44,7 @@ from combat import (
     check_dungeon_status,
     click_continue_battle,
     check_death,
+    check_and_use_stalker_seal,
 )
 from dungeon import (
     find_next_available_dungeon,
@@ -53,6 +55,7 @@ from dungeon import (
 from combat import fight_in_hell_games
 from navigation import smart_recovery, recover_to_dungeons
 from stats import init_stats, get_stats, print_stats
+from event_dungeon import try_event_dungeon
 
 
 # ========== УПРАВЛЕНИЕ ПАУЗОЙ ==========
@@ -222,13 +225,9 @@ def main(headless=False, use_chromium=False):
             except Exception as e:
                 print(f"⚠️ Ошибка загрузки кук: {e}")
 
-        # Заходим на главную, чтобы куки применились
-        page.goto(BASE_URL, wait_until="domcontentloaded")
-        time.sleep(2)
-
-        # Переходим на данжены
-        page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
-        time.sleep(6)
+        # Заходим в город (для проверки ивента)
+        page.goto(CITY_URL, wait_until="domcontentloaded")
+        time.sleep(4)
 
         # Проверяем, нужна ли авторизация
         if "login" in page.url:
@@ -242,35 +241,55 @@ def main(headless=False, use_chromium=False):
                 browser.close()
                 return
 
-            # После авторизации переходим на данжены
-            page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
+            # После авторизации переходим в город
+            page.goto(CITY_URL, wait_until="domcontentloaded")
             time.sleep(4)
 
-        print("✅ Бот запущен — страница данженов загружена")
+        print("✅ Бот запущен — страница города загружена")
 
         # Инициализируем статистику
         stats = init_stats()
 
-        # Проверяем рюкзак перед началом
-        cleanup_backpack_if_needed(page)
+        # === ИВЕНТ: Сталкер Адского Кладбища (ПЕРВЫЙ ПРИОРИТЕТ!) ===
+        log("🎃 Проверяем ивент 'Сталкер'...")
+        event_result = try_event_dungeon(page)
+        log(f"🎃 Результат: {event_result}")
 
-        # Проверяем и забираем почту (после очистки рюкзака)
-        check_and_collect_mail(page)
-
-        # Проверяем готовый крафт (железо)
-        repeat_craft_if_ready(page)
-
-        # Ищем первый доступный данжен
-        log("🔍 Ищем доступный данжен...")
-        current_dungeon_index = find_next_available_dungeon(page, START_DUNGEON_INDEX - 1)
-
-        # Если бой уже начат через виджет — пропускаем вход
-        battle_already_started = (current_dungeon_index == "started_battle")
-        if battle_already_started:
-            log("⚔️ Бой уже начат через виджет — переходим к бою")
-            current_dungeon_index = START_DUNGEON_INDEX  # Используем стартовый индекс
+        if event_result == "entered":
+            log("🎃 Вошли в ивентовое подземелье!")
+            battle_already_started = True
+            current_dungeon_index = START_DUNGEON_INDEX
             current_dungeon = DUNGEON_ORDER[current_dungeon_index]
-        elif current_dungeon_index is None:
+        else:
+            if event_result == "on_cooldown":
+                log("⏳ Ивент на кулдауне")
+            elif event_result == "not_available":
+                log("ℹ️ Ивент не активен")
+
+            battle_already_started = False
+
+            # Теперь проверяем рюкзак и почту
+            page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
+            time.sleep(3)
+
+            cleanup_backpack_if_needed(page)
+            check_and_collect_mail(page)
+            repeat_craft_if_ready(page)
+
+            # Ищем первый доступный данжен
+            log("🔍 Ищем доступный данжен...")
+            current_dungeon_index = find_next_available_dungeon(page, START_DUNGEON_INDEX - 1)
+
+        # Если бой уже начат через виджет или ивент — пропускаем вход
+        if not battle_already_started:
+            # Проверяем, не начат ли бой через виджет
+            battle_already_started = (current_dungeon_index == "started_battle")
+            if battle_already_started:
+                log("⚔️ Бой уже начат через виджет — переходим к бою")
+                current_dungeon_index = START_DUNGEON_INDEX  # Используем стартовый индекс
+                current_dungeon = DUNGEON_ORDER[current_dungeon_index]
+
+        if not battle_already_started and current_dungeon_index is None:
             # Все на КД — идём в Адские Игры
             min_cd, min_dungeon = get_min_cooldown_time(page)
             if min_cd and min_cd > 0:
@@ -317,7 +336,7 @@ def main(headless=False, use_chromium=False):
         enter_failure_count = 0
         session_start_time = time.time()
         consecutive_attacks = 0  # Счётчик атак без прогресса
-        MAX_CONSECUTIVE_ATTACKS = 60  # Если 60 атак без смены статуса - застряли
+        MAX_CONSECUTIVE_ATTACKS = 240  # Если 240 атак без прогресса (лут/этап) - застряли
 
         # ========== ОСНОВНОЙ ЦИКЛ БОЯ ==========
         while True:
@@ -374,8 +393,10 @@ def main(headless=False, use_chromium=False):
                 # Закрытие попапов (включая "Банда собрана")
                 close_all_popups(page)
 
-                # Сбор лута
-                collect_loot(page)
+                # Сбор лута (сброс счётчика если собрали что-то)
+                loot_collected = collect_loot(page)
+                if loot_collected > 0:
+                    consecutive_attacks = 0  # Лут = прогресс!
 
                 # Проверка смерти
                 dungeon_display_name = DUNGEONS.get(current_dungeon, {}).get("name", current_dungeon)
@@ -422,6 +443,11 @@ def main(headless=False, use_chromium=False):
 
                 # Используем скиллы
                 use_skills(page)
+
+                # Проверяем Печать Сталкера в ивенте (появляется вместе с врагами)
+                if check_and_use_stalker_seal(page):
+                    reset_watchdog()
+                    # Продолжаем бой — враги ещё есть
 
                 # Проверяем юнитов
                 if units_present(page):

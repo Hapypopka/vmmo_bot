@@ -6,6 +6,7 @@ import time
 from config import DUNGEONS_URL
 from utils import antibot_delay, log, safe_click, safe_click_element
 from backpack import need_cleanup_backpack, cleanup_backpack_if_needed
+from stats import get_stats
 
 
 def has_mail_notification(page):
@@ -125,6 +126,53 @@ def find_active_messages(page):
     return []
 
 
+def parse_mail_money(page):
+    """
+    Парсит деньги из открытого сообщения.
+    Ищет блок "Деньги:" с иконками gold/silver.
+    Возвращает (gold, silver) или (0, 0) если не найдено.
+    """
+    gold = 0
+    silver = 0
+
+    try:
+        # Ищем блок с деньгами (div.p2 с текстом "Деньги:")
+        money_blocks = page.query_selector_all("div.p2")
+        for block in money_blocks:
+            text = block.inner_text()
+            if "Деньги:" not in text:
+                continue
+
+            # Ищем золото (i12-money_gold)
+            gold_icon = block.query_selector("span.i12-money_gold, span.i12.i12-money_gold")
+            if gold_icon:
+                # Следующий span после иконки содержит число
+                gold_span = gold_icon.evaluate("el => el.nextElementSibling?.innerText || el.parentElement?.innerText")
+                if gold_span:
+                    # Извлекаем число
+                    import re
+                    gold_match = re.search(r'(\d+)', str(gold_span))
+                    if gold_match:
+                        gold = int(gold_match.group(1))
+
+            # Ищем серебро (i12-money_silver)
+            silver_icon = block.query_selector("span.i12-money_silver, span.i12.i12-money_silver")
+            if silver_icon:
+                silver_span = silver_icon.evaluate("el => el.nextElementSibling?.innerText || el.parentElement?.innerText")
+                if silver_span:
+                    import re
+                    silver_match = re.search(r'(\d+)', str(silver_span))
+                    if silver_match:
+                        silver = int(silver_match.group(1))
+
+            break  # Нашли блок денег, выходим
+
+    except Exception as e:
+        log(f"⚠️ Ошибка парсинга денег: {e}")
+
+    return gold, silver
+
+
 def collect_message_items(page):
     """
     Забирает предметы из текущего открытого сообщения.
@@ -133,6 +181,10 @@ def collect_message_items(page):
     Возвращает True если успешно, "backpack_full" если рюкзак полон.
     """
     try:
+        # Парсим деньги ДО нажатия кнопки
+        gold, silver = parse_mail_money(page)
+        if gold > 0 or silver > 0:
+            log(f"💰 В письме: {gold}з {silver}с")
         # Ищем кнопку "Забрать и удалить сообщение"
         buttons = page.query_selector_all("a.btn.nav-btn")
         collect_btn = None
@@ -176,6 +228,9 @@ def collect_message_items(page):
                     return "backpack_full"
 
             log("✅ Предметы забраны из сообщения")
+            # Записываем деньги в статистику
+            if gold > 0 or silver > 0:
+                get_stats().mail_money_collected(gold, silver)
             return True
 
         except Exception as e:

@@ -27,6 +27,7 @@ _settings = _load_settings()
 # URLs
 # ============================================
 BASE_URL = "https://vmmo.vten.ru"
+CITY_URL = f"{BASE_URL}/city"
 DUNGEONS_URL = f"{BASE_URL}/dungeons?52"
 HELL_GAMES_URL = f"{BASE_URL}/basin/combat"
 LOGIN_URL = f"{BASE_URL}/login"

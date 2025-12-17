@@ -31,6 +31,9 @@ PROTECTED_ITEMS = [
     "Печать Сталкера II",
     "Печать Сталкера III",
     "Печать Сталкера",  # На всякий случай без уровня
+    # Новогодние ивентовые
+    "Ледяной Кристалл",
+    "Уголь Эфирного Древа",
 ]
 
 from popups import close_achievement_popup, close_party_widget
@@ -730,7 +733,6 @@ def open_bonus_items(page):
 
     if opened_count > 0:
         log(f"🎁 Открыто бонусов: {opened_count}")
-        get_stats().bonuses_opened(opened_count)
     return opened_count
 
 

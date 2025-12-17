@@ -13,6 +13,7 @@ from utils import antibot_delay, log, parse_cooldown_time, safe_click, safe_clic
 from popups import close_all_popups
 from backpack import cleanup_backpack_if_needed, repeat_craft_if_ready
 from combat import fight_in_hell_games
+from event_dungeon import try_event_dungeon
 
 
 # Счётчик попыток нажать "В подземелье!" для предотвращения бесконечного цикла
@@ -537,6 +538,21 @@ def go_to_next_dungeon(page, current_index, enter_failure_count=0):
 
     # 2.5) Проверяем готовый крафт (железо)
     repeat_craft_if_ready(page)
+
+    # 2.6) Проверяем ивент "Сталкер" (приоритет перед обычными данженами!)
+    log("🎃 Проверяем ивент 'Сталкер'...")
+    event_result = try_event_dungeon(page)
+    if event_result == "entered":
+        log("🎃 Вошли в ивентовое подземелье!")
+        return current_index, 0  # Возвращаем текущий индекс, бой начат
+    elif event_result == "on_cooldown":
+        log("⏳ Ивент на кулдауне — идём в обычные данжены")
+    elif event_result == "not_available":
+        log("ℹ️ Ивент не активен")
+
+    # Возвращаемся на страницу данженов после проверки ивента
+    page.goto(DUNGEONS_URL, wait_until="domcontentloaded")
+    time.sleep(3)
 
     # 3) Ищем следующий доступный данжен
     next_index = find_next_available_dungeon(page, current_index)
