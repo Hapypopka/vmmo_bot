@@ -211,39 +211,16 @@ def main(headless=False, use_chromium=False):
         # Увеличиваем таймаут для медленных соединений
         page.set_default_timeout(60000)  # 60 сек
 
-        # Пробуем загрузить куки
-        cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
-        cookies_loaded = False
+        # Принудительный логин в начале каждой сессии
+        print("🔐 Выполняем авторизацию...")
+        if not do_login(page, context):
+            print("❌ Не удалось авторизоваться")
+            browser.close()
+            return
 
-        if os.path.exists(cookies_path):
-            try:
-                print(f"📁 Загружаем куки из: {cookies_path}")
-                with open(cookies_path, "r", encoding="utf-8") as f:
-                    saved_cookies = json.load(f)
-                context.add_cookies(saved_cookies)
-                cookies_loaded = True
-            except Exception as e:
-                print(f"⚠️ Ошибка загрузки кук: {e}")
-
-        # Заходим в город (для проверки ивента)
+        # После авторизации переходим в город
         page.goto(CITY_URL, wait_until="domcontentloaded")
         time.sleep(4)
-
-        # Проверяем, нужна ли авторизация
-        if "login" in page.url:
-            if cookies_loaded:
-                print("⚠️ Куки устарели — выполняем авторизацию...")
-            else:
-                print("📝 Куки не найдены — выполняем авторизацию...")
-
-            if not do_login(page, context):
-                print("❌ Не удалось авторизоваться")
-                browser.close()
-                return
-
-            # После авторизации переходим в город
-            page.goto(CITY_URL, wait_until="domcontentloaded")
-            time.sleep(4)
 
         print("✅ Бот запущен — страница города загружена")
 
