@@ -151,7 +151,7 @@ def test_dungeons():
                                     if enter_data.get("status") == "redirect" and enter_data.get("url"):
                                         landing_url = enter_data["url"]
 
-                                        # Добавляем /normal для обычного режима (не brutal)
+                                        # Добавляем /normal для корректной работы
                                         if not landing_url.endswith("/normal"):
                                             landing_url = landing_url + "/normal"
 

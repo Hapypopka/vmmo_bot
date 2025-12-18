@@ -23,11 +23,12 @@ SKIP_DUNGEONS = [
     # "dng:RestMonastery",  # Монастырь покоя - тест на смерть
 ]
 
-# Лимиты действий для разных данженов
+# Лимиты действий для разных данженов (Брутал сложность = дольше бои)
 DUNGEON_ACTION_LIMITS = {
     "dng:ShadowGuard": 500,    # Большой данжен с несколькими этапами
-    "dng:Barony": 250,         # Владения Барона тоже большой
-    "default": 300,            # По умолчанию
+    "dng:Barony": 500,         # Владения Барона - 3 этапа на Брутал
+    "dng:HighDungeon": 500,    # Высокая Темница - 3+ этапов
+    "default": 500,            # По умолчанию - 500 для всех
 }
 
 
@@ -43,20 +44,36 @@ class DungeonRunner:
         self.loot_collected = 0
 
     def collect_loot(self):
-        """Собирает лут во время боя"""
+        """
+        Собирает лут во время боя.
+        Лут собирается через lootTakeUrl + pdti=item_id
+        """
+        html = self.client.current_page
+        if not html:
+            return 0
+
+        # Находим lootTakeUrl
+        loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", html)
+        if not loot_url_match:
+            return 0
+
+        loot_base_url = loot_url_match.group(1)
+
+        # Находим все лут-боксы с id
         soup = self.client.soup()
         if not soup:
             return 0
 
         collected = 0
-        # Лут появляется как a.combat-loot или div.combat-loot
-        loot_items = soup.select("a.combat-loot, div.combat-loot a, a[href*='lootLink']")
+        loot_boxes = soup.select("div.combat-loot[id^='loot_box_']")
 
-        for loot in loot_items:
-            href = loot.get("href")
-            if href:
-                url = urljoin(self.client.current_url, href)
-                self.client.get(url)
+        for loot_box in loot_boxes:
+            loot_id = loot_box.get("id", "")
+            # Извлекаем числовой ID из "loot_box_182124"
+            if loot_id.startswith("loot_box_"):
+                item_id = loot_id.replace("loot_box_", "")
+                take_url = loot_base_url + item_id
+                self.client.get(take_url)
                 collected += 1
 
         if collected > 0:
@@ -65,36 +82,43 @@ class DungeonRunner:
 
         return collected
 
-    def _increase_difficulty(self):
+    def _set_brutal_difficulty(self):
         """
-        Повышает сложность данжена до максимальной.
-        Кликает на switch-level-left пока есть возможность.
+        Устанавливает сложность Брутал.
+        Кликает на левую стрелку пока не достигнет Брутал.
+        Сложности идут по кругу: Норма -> Брутал -> Герой -> Норма...
         """
-        max_attempts = 5  # Максимум переключений (normal -> hard -> impossible и т.д.)
+        max_attempts = 10  # Защита от бесконечного цикла
 
         for attempt in range(max_attempts):
             soup = self.client.soup()
             if not soup:
                 break
 
-            # Ищем кнопку повышения сложности (левая стрелка = выше)
+            # Получаем текущую сложность
+            level_text = soup.select_one(".switch-level-text")
+            current_level = level_text.get_text(strip=True).lower() if level_text else ""
+
+            # Если уже Брутал - останавливаемся
+            if "брутал" in current_level:
+                print(f"[*] Сложность: Брутал")
+                return
+
+            # Ищем кнопку переключения (левая стрелка)
             switch_left = soup.select_one("a.switch-level-left")
             if not switch_left:
-                # Нет кнопки - уже максимальная сложность или данжен не поддерживает
-                break
+                # Нет кнопки - данжен не поддерживает переключение (только Норма)
+                print(f"[*] Сложность: {current_level.title()} (без переключения)")
+                return
 
             href = switch_left.get("href")
             if not href:
                 break
 
-            # Получаем текущую сложность для лога
-            level_text = soup.select_one(".switch-level-text")
-            current_level = level_text.get_text(strip=True) if level_text else "?"
-
-            print(f"[*] Повышаю сложность: {current_level} -> ...")
+            print(f"[*] Переключаю: {current_level.title()} -> ...")
             self.client.get(href)
 
-        # Показываем итоговую сложность
+        # Показываем итоговую сложность если не нашли Брутал
         soup = self.client.soup()
         if soup:
             level_text = soup.select_one(".switch-level-text")
@@ -228,6 +252,7 @@ class DungeonRunner:
                 return False
 
             landing_url = data["url"]
+            # Добавляем /normal если нет - нужно для корректной работы
             if not landing_url.endswith("/normal"):
                 landing_url += "/normal"
 
@@ -241,8 +266,8 @@ class DungeonRunner:
         resp = self.client.get(landing_url)
         print(f"[*] Landing page loaded: {resp.url}")
 
-        # 3. Повышаем сложность если возможно
-        self._increase_difficulty()
+        # 3. Устанавливаем сложность Брутал
+        self._set_brutal_difficulty()
 
         # 4. Ищем кнопку входа (несколько вариантов)
         html = self.client.current_page
@@ -509,8 +534,8 @@ class DungeonRunner:
                     print(f"\n[?] Unknown state after {actions} actions")
                     return "unknown", actions
 
-            # Лут собирается автоматически на сервере
-            # self.collect_loot()  # Не нужно в requests версии
+            # Собираем лут с пола
+            self.collect_loot()
 
             # Проверяем Печать Сталкера (в ивенте)
             if self.check_and_use_stalker_seal():
@@ -607,6 +632,23 @@ class DungeonRunner:
                     elif "подземелье" in text:
                         print(f"[*] Dungeon complete: {text}")
                         return "completed"
+
+        # Проверяем URL - на странице между этапами (step)
+        if "/dungeon/step/" in url:
+            # Это интерстеп страница - ищем кнопку "Продолжить бой"
+            if soup:
+                for btn in soup.select("a.go-btn"):
+                    btn_text = btn.get_text(strip=True)
+                    href = btn.get("href", "")
+                    if "Продолжить бой" in btn_text and href and not href.startswith("javascript"):
+                        print(f"[*] Interstep: clicking 'Продолжить бой'")
+                        resp = self.client.get(href)
+                        if "/combat" in resp.url:
+                            self.combat_url = resp.url
+                            return "next_stage"
+                        # Может потребоваться запустить бой
+                        if self._start_combat():
+                            return "next_stage"
 
         # Проверяем URL - всё ещё в бою
         if "/combat" in url:
