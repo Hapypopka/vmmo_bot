@@ -1,0 +1,23 @@
+{
+    "name": "Second Character",
+    "description": "Второй персонаж - без ивента, другие КД",
+
+    "event_dungeon_enabled": false,
+
+    "skill_cooldowns": {
+        "1": 15.0,
+        "2": 20.0,
+        "3": 30.0,
+        "4": 45.0,
+        "5": 35.0
+    },
+
+    "skip_dungeons": [],
+
+    "dungeon_action_limits": {
+        "dng:ShadowGuard": 500,
+        "dng:Barony": 500,
+        "dng:HighDungeon": 500,
+        "default": 500
+    }
+}

@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from requests_bot.client import VMMOClient
 from requests_bot.combat import CombatParser
 from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_watchdog
-from requests_bot.config import BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR
+from requests_bot.config import BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR, get_skill_cooldowns
 
 
 class DungeonRunner:
@@ -558,14 +558,20 @@ class DungeonRunner:
         ATTACK_CD = 1.5  # Задержка между атаками
         consecutive_no_units = 0  # Счётчик попыток без юнитов
 
-        # Индивидуальные КД скиллов (измерено skill_cd_observer.py + 0.5s буфер)
-        SKILL_CDS = {
-            1: 15.5,
-            2: 24.5,
-            3: 39.5,
-            4: 54.5,
-            5: 42.5,
-        }
+        # Индивидуальные КД скиллов (из профиля или дефолтные)
+        profile_cds = get_skill_cooldowns()
+        if profile_cds:
+            SKILL_CDS = profile_cds
+            print(f"[*] Using profile skill CDs: {SKILL_CDS}")
+        else:
+            # Дефолтные КД (измерено skill_cd_observer.py + 0.5s буфер)
+            SKILL_CDS = {
+                1: 15.5,
+                2: 24.5,
+                3: 39.5,
+                4: 54.5,
+                5: 42.5,
+            }
 
         print(f"\n{'='*50}")
         print(f"COMBAT STARTED - Stage {stage}")

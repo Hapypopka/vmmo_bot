@@ -2,13 +2,21 @@
 # VMMO Bot - Configuration (requests version)
 # ============================================
 # Все константы и настройки в одном месте
+# Поддержка профилей: --profile char1
 # ============================================
 
 import os
 import json
 
-# Пути
+# Пути (базовые, могут быть переопределены профилем)
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROFILES_DIR = os.path.join(SCRIPT_DIR, "profiles")
+
+# Текущий профиль (устанавливается через set_profile)
+_current_profile = None
+_profile_config = {}
+
+# Пути по умолчанию (переопределяются при загрузке профиля)
 LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
 COOKIES_FILE = os.path.join(SCRIPT_DIR, "cookies.json")
 SETTINGS_FILE = os.path.join(SCRIPT_DIR, "settings.json")
@@ -84,3 +92,73 @@ def get_setting(key, default=None):
     """Получает настройку по ключу"""
     settings = load_settings()
     return settings.get(key, default)
+
+
+# ============================================
+# Profile Management
+# ============================================
+
+def set_profile(profile_name):
+    """
+    Устанавливает профиль и обновляет все пути.
+    Вызывается при старте бота с --profile аргументом.
+    """
+    global _current_profile, _profile_config
+    global LOGS_DIR, COOKIES_FILE, STATS_FILE
+    global SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS
+
+    profile_dir = os.path.join(PROFILES_DIR, profile_name)
+    config_file = os.path.join(profile_dir, "config.json")
+
+    if not os.path.exists(profile_dir):
+        raise ValueError(f"Profile '{profile_name}' not found in {PROFILES_DIR}")
+
+    # Создаём папку logs внутри профиля если нет
+    profile_logs = os.path.join(profile_dir, "logs")
+    os.makedirs(profile_logs, exist_ok=True)
+
+    # Обновляем глобальные пути
+    _current_profile = profile_name
+    LOGS_DIR = profile_logs
+    COOKIES_FILE = os.path.join(profile_dir, "cookies.json")
+    STATS_FILE = os.path.join(profile_dir, "stats.json")
+
+    # Загружаем конфиг профиля
+    if os.path.exists(config_file):
+        with open(config_file, "r", encoding="utf-8") as f:
+            _profile_config = json.load(f)
+        print(f"[CONFIG] Loaded profile: {profile_name} ({_profile_config.get('name', 'unnamed')})")
+    else:
+        _profile_config = {}
+        print(f"[CONFIG] Profile '{profile_name}' has no config.json, using defaults")
+
+    # Обновляем настройки из профиля
+    if "skip_dungeons" in _profile_config:
+        SKIP_DUNGEONS = _profile_config["skip_dungeons"]
+
+    if "dungeon_action_limits" in _profile_config:
+        DUNGEON_ACTION_LIMITS.update(_profile_config["dungeon_action_limits"])
+
+    return _profile_config
+
+
+def get_profile_config():
+    """Возвращает конфиг текущего профиля"""
+    return _profile_config
+
+
+def get_profile_name():
+    """Возвращает имя текущего профиля"""
+    return _current_profile
+
+
+def is_event_dungeon_enabled():
+    """Проверяет, включен ли ивент для текущего профиля"""
+    return _profile_config.get("event_dungeon_enabled", True)
+
+
+def get_skill_cooldowns():
+    """Возвращает КД скиллов для текущего профиля"""
+    skill_cds = _profile_config.get("skill_cooldowns", {})
+    # Конвертируем ключи в int
+    return {int(k): v for k, v in skill_cds.items()} if skill_cds else None

@@ -1,0 +1,23 @@
+{
+    "name": "Main Character",
+    "description": "Основной персонаж - все данжи + ивент",
+
+    "event_dungeon_enabled": true,
+
+    "skill_cooldowns": {
+        "1": 15.5,
+        "2": 24.5,
+        "3": 39.5,
+        "4": 54.5,
+        "5": 42.5
+    },
+
+    "skip_dungeons": [],
+
+    "dungeon_action_limits": {
+        "dng:ShadowGuard": 500,
+        "dng:Barony": 500,
+        "dng:HighDungeon": 500,
+        "default": 500
+    }
+}

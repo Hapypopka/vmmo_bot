@@ -20,7 +20,10 @@ from requests_bot.backpack import BackpackClient
 from requests_bot.popups import PopupsClient
 from requests_bot.stats import init_stats, get_stats, print_stats
 from requests_bot.watchdog import reset_watchdog, check_watchdog, reset_no_progress_counter
-from requests_bot.config import DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings
+from requests_bot.config import (
+    DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings,
+    set_profile, get_profile_name, is_event_dungeon_enabled
+)
 from requests_bot.logger import (
     init_logger, get_log_file,
     log_info, log_warning, log_error, log_debug,
@@ -181,8 +184,13 @@ class VMMOBot:
             log_watchdog(f"Сработал: {watchdog_result}")
             self.stats["watchdog_triggers"] += 1
 
-        # 1. Проверяем ивент
-        entered_event, event_cd = self.try_event_dungeon()
+        # 1. Проверяем ивент (если включен для профиля)
+        entered_event = False
+        event_cd = 0
+        if is_event_dungeon_enabled():
+            entered_event, event_cd = self.try_event_dungeon()
+        else:
+            log_debug("Ивент отключен для этого профиля")
 
         if entered_event:
             # Бой в ивенте
@@ -388,9 +396,21 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="VMMO Bot (requests)")
-    parser.add_argument("--cycles", type=int, default=None, help="Количество циклов (по умолчанию бесконечно)")
-    parser.add_argument("--test", action="store_true", help="Тестовый режим (1 цикл)")
+    parser.add_argument("--profile", type=str, default=None,
+                        help="Профиль персонажа (папка в profiles/)")
+    parser.add_argument("--cycles", type=int, default=None,
+                        help="Количество циклов (по умолчанию бесконечно)")
+    parser.add_argument("--test", action="store_true",
+                        help="Тестовый режим (1 цикл)")
     args = parser.parse_args()
+
+    # Загружаем профиль если указан
+    if args.profile:
+        try:
+            set_profile(args.profile)
+        except ValueError as e:
+            print(f"[ERROR] {e}")
+            return
 
     bot = VMMOBot()
 
