@@ -188,6 +188,8 @@ class VMMOBot:
             # Бой в ивенте
             log_dungeon_start("Сталкер (ивент)", "event_stalker")
             self.dungeon_runner.current_dungeon_id = "event_stalker"
+            # Устанавливаем combat_url из текущего URL клиента
+            self.dungeon_runner.combat_url = self.client.current_url
             result, actions = self.dungeon_runner.fight_until_done()
             self.stats["total_actions"] += actions
 

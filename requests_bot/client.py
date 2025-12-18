@@ -58,6 +58,9 @@ class VMMOClient:
 
     def get(self, url, **kwargs):
         """GET запрос с сохранением страницы"""
+        if not url:
+            print("[ERR] GET called with empty URL")
+            return None
         if not url.startswith("http"):
             url = urljoin(BASE_URL, url)
 
@@ -68,6 +71,9 @@ class VMMOClient:
 
     def post(self, url, **kwargs):
         """POST запрос"""
+        if not url:
+            print("[ERR] POST called with empty URL")
+            return None
         if not url.startswith("http"):
             url = urljoin(BASE_URL, url)
 
