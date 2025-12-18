@@ -306,12 +306,25 @@ class DungeonRunner:
         print(f"[*] Lobby/Standby: {resp.url}")
 
         # 5. Ищем кнопку "Начать бой"
-        return self._start_combat()
+        result = self._start_combat()
+        # "completed" здесь маловероятно при входе, но если уже завершено - это тоже успех
+        return result == True or result == "completed"
 
     def _start_combat(self, retry=0):
         """Начинает бой из lobby/standby/step страницы"""
         html = self.client.current_page
         soup = self.client.soup()
+
+        # Проверяем сначала - может данжен уже завершён
+        url_lower = self.client.current_url.lower()
+        if "dungeoncompleted" in url_lower:
+            print("[*] Dungeon already completed (URL)")
+            return "completed"
+
+        html_lower = html.lower() if html else ""
+        if any(text in html_lower for text in ["подземелье пройдено", "подземелье зачищено"]):
+            print("[*] Dungeon already completed (text)")
+            return "completed"
 
         # Вариант 1: Кнопка "Продолжить бой" или "Начать бой" (после этапа / на standby)
         if soup:
@@ -325,6 +338,16 @@ class DungeonRunner:
                     if "/combat" in resp.url:
                         self.combat_url = resp.url
                         return True
+                    # Проверяем - может это был последний этап и данжен завершён
+                    resp_url_lower = resp.url.lower()
+                    if "dungeoncompleted" in resp_url_lower:
+                        print("[*] Dungeon completed after clicking button")
+                        return "completed"
+                    # Проверяем текст страницы на завершение
+                    new_html = self.client.current_page.lower() if self.client.current_page else ""
+                    if any(text in new_html for text in ["подземелье пройдено", "подземелье зачищено"]):
+                        print("[*] Dungeon completed (text on new page)")
+                        return "completed"
                     # Может быть редирект на standby - ждём и пробуем снова
                     time.sleep(0.5)
                     return self._start_combat(retry=retry)
@@ -402,6 +425,10 @@ class DungeonRunner:
 
     def _make_ajax_request(self, url):
         """AJAX запрос для боя"""
+        # Защита от None/javascript URLs
+        if not url or url.startswith("javascript"):
+            return None
+
         base_path = self.combat_url.split("?")[0].replace(self.base_url, "") if self.combat_url else ""
 
         headers = {
@@ -451,7 +478,7 @@ class DungeonRunner:
             device_url = device_match.group(1)
             print("[EVENT] Активируем Печать Сталкера!")
             resp = self._make_ajax_request(device_url)
-            if resp.status_code == 200:
+            if resp and resp.status_code == 200:
                 print("[EVENT] Печать активирована!")
                 time.sleep(2)
                 self.client.get(self.combat_url)
@@ -554,7 +581,7 @@ class DungeonRunner:
                         continue  # Этот скилл ещё на КД
 
                     resp = self._make_ajax_request(skill["url"])
-                    if resp.status_code == 200:
+                    if resp and resp.status_code == 200:
                         print(f"[SKILL] Used skill {pos}")
                         actions += 1
                         skill_cooldowns[pos] = time.time()
@@ -570,7 +597,7 @@ class DungeonRunner:
             attack_url = parser.get_attack_url()
             if attack_url:
                 resp = self._make_ajax_request(attack_url)
-                if resp.status_code == 200:
+                if resp and resp.status_code == 200:
                     actions += 1
                     reset_watchdog()  # Успешное действие
                     consecutive_no_units = 0
@@ -641,7 +668,10 @@ class DungeonRunner:
                             self.combat_url = resp.url
                             return "next_stage"
                         # Может потребоваться запустить бой
-                        if self._start_combat():
+                        result = self._start_combat()
+                        if result == "completed":
+                            return "completed"
+                        if result:
                             return "next_stage"
 
         # Проверяем URL - всё ещё в бою
@@ -662,8 +692,20 @@ class DungeonRunner:
                     if "/combat" in resp.url:
                         self.combat_url = resp.url
                         return "next_stage"
+                    # Проверяем - может данжен завершён после клика
+                    resp_url_lower = resp.url.lower()
+                    if "dungeoncompleted" in resp_url_lower:
+                        print("[*] Dungeon completed after clicking 'Продолжить бой'")
+                        return "completed"
+                    new_html = self.client.current_page.lower() if self.client.current_page else ""
+                    if any(text in new_html for text in ["подземелье пройдено", "подземелье зачищено"]):
+                        print("[*] Dungeon completed (text)")
+                        return "completed"
                     # Рекурсивно проверяем новую страницу
-                    if self._start_combat():
+                    result = self._start_combat()
+                    if result == "completed":
+                        return "completed"
+                    if result:
                         return "next_stage"
 
         # Ищем кнопку "Продолжить" или "Следующий этап" по href
@@ -684,14 +726,20 @@ class DungeonRunner:
                     return "next_stage"
 
                 # Иначе нужно снова запустить бой (standby/step page)
-                if self._start_combat():
+                result = self._start_combat()
+                if result == "completed":
+                    return "completed"
+                if result:
                     return "next_stage"
 
         # Ищем Wicket AJAX для следующего этапа
         wicket_next = re.search(r'"u":"([^"]*(?:linkStartCombat|nextStep)[^"]*)"', html)
         if wicket_next:
             print(f"[*] Found Wicket next stage")
-            if self._start_combat():
+            result = self._start_combat()
+            if result == "completed":
+                return "completed"
+            if result:
                 return "next_stage"
 
         # Ищем текст о завершении
