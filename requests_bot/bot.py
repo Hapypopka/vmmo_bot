@@ -217,6 +217,13 @@ class VMMOBot:
         self.cleanup_backpack()
         self.check_and_collect_mail()
 
+        # 2.5. Проверяем готовый крафт (железо)
+        try:
+            if self.backpack_client.repeat_craft_if_ready():
+                log_info("Крафт перезапущен")
+        except Exception as e:
+            log_debug(f"Ошибка проверки крафта: {e}")
+
         # 3. Получаем список данженов
         try:
             dungeons, api_link_url = self.dungeon_runner.get_all_available_dungeons()
