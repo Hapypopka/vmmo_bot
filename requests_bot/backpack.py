@@ -138,7 +138,17 @@ class BackpackClient:
 
         items = []
 
-        for item_div in soup.select("div.p10"):
+        # Пробуем разные селекторы для предметов
+        item_divs = soup.select("div.p10")
+        if not item_divs:
+            # Альтернативный селектор
+            item_divs = soup.select("div.item-block")
+        if not item_divs:
+            item_divs = soup.select("div.rack-item")
+
+        log_debug(f"[BACKPACK] Найдено item_divs: {len(item_divs)}")
+
+        for item_div in item_divs:
             # Название предмета
             name_link = item_div.select_one("span.e-name a")
             if not name_link:
