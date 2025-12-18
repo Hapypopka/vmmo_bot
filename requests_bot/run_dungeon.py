@@ -444,6 +444,7 @@ class DungeonRunner:
         """
         Проверяет и использует Печать Сталкера в ивентовом бою.
         Печать появляется как device-pos-1 когда нет врагов.
+        АГРЕССИВНАЯ проверка: если печать заморожена - ждём и проверяем многократно.
         Возвращает True если печать была активирована.
         """
         html = self.client.current_page
@@ -457,33 +458,86 @@ class DungeonRunner:
 
         print("[EVENT] Обнаружена подсказка про Печать Сталкера!")
 
-        # Ищем кнопку Печати Сталкера (device-pos-1)
-        seal_wrapper = soup.select_one(".wrap-device-link._device-pos-1")
-        if not seal_wrapper:
-            print("[EVENT] Кнопка Печати не найдена")
-            return False
-
-        # Проверяем, не заморожена ли (класс _freeze)
-        wrapper_class = " ".join(seal_wrapper.get("class", []))
-        if "_freeze" in wrapper_class:
-            print("[EVENT] Печать заморожена — ждём...")
-            return False
-
-        # Ищем AJAX URL для активации печати
-        # Паттерн: devices-0-deviceBlock-deviceLink
-        device_pattern = r'"u":"([^"]*devices-0-deviceBlock[^"]*deviceLink[^"]*)"'
-        device_match = re.search(device_pattern, html)
-
-        if device_match:
-            device_url = device_match.group(1)
-            print("[EVENT] Активируем Печать Сталкера!")
-            resp = self._make_ajax_request(device_url)
-            if resp and resp.status_code == 200:
-                print("[EVENT] Печать активирована!")
-                time.sleep(2)
+        # АГРЕССИВНАЯ проверка - пробуем до 10 раз с интервалом 0.5 сек
+        for attempt in range(10):
+            # Обновляем страницу для актуального состояния
+            if attempt > 0:
+                time.sleep(0.5)
                 self.client.get(self.combat_url)
-                return True
+                html = self.client.current_page
+                soup = self.client.soup()
+                if not soup:
+                    continue
 
+            # Ищем кнопку Печати Сталкера (device-pos-1)
+            seal_wrapper = soup.select_one(".wrap-device-link._device-pos-1")
+            if not seal_wrapper:
+                print(f"[EVENT] Попытка {attempt+1}/10: Кнопка Печати не найдена")
+                continue
+
+            # Проверяем, не заморожена ли (класс _freeze)
+            wrapper_class = " ".join(seal_wrapper.get("class", []))
+            if "_freeze" in wrapper_class:
+                print(f"[EVENT] Попытка {attempt+1}/10: Печать заморожена...")
+                continue
+
+            # Печать разморожена! Ищем AJAX URL для активации
+            # Паттерн: devices-0-deviceBlock-deviceLink
+            device_pattern = r'"u":"([^"]*devices-0-deviceBlock[^"]*deviceLink[^"]*)"'
+            device_match = re.search(device_pattern, html)
+
+            if device_match:
+                device_url = device_match.group(1)
+                print("[EVENT] Печать разморожена! Активируем!")
+                resp = self._make_ajax_request(device_url)
+                if resp and resp.status_code == 200:
+                    print("[EVENT] Печать Сталкера АКТИВИРОВАНА!")
+                    time.sleep(2)
+                    self.client.get(self.combat_url)
+                    return True
+            else:
+                print(f"[EVENT] Попытка {attempt+1}/10: URL активации не найден")
+
+        print("[EVENT] Не удалось активировать Печать за 10 попыток")
+        return False
+
+    def check_shadow_guard_tutorial(self):
+        """
+        Проверяет, находимся ли мы в туториале Shadow Guard (Пороги Шэдоу Гарда).
+        Если видим "Голос Джека" — нужно покинуть банду, т.к. там слишком много врагов.
+        Возвращает True если нажали "Покинуть банду".
+        """
+        html = self.client.current_page
+        soup = self.client.soup()
+        if not soup:
+            return False
+
+        # Проверяем наличие battlefield-lore с текстом Джека
+        lore = soup.select_one("div.battlefield-lore-inner, div.lore-inner")
+        if not lore:
+            return False
+
+        lore_text = lore.get_text(strip=True).lower()
+
+        # Если это туториал Shadow Guard (Голос Джека)
+        if "голос джека" not in lore_text and "джек" not in lore_text:
+            return False
+
+        print("[SHADOW] Обнаружен туториал Shadow Guard (Голос Джека) — выходим!")
+
+        # Ищем кнопку "Покинуть банду"
+        for btn in soup.select("a.go-btn"):
+            btn_text = btn.get_text(strip=True)
+            if "Покинуть банду" in btn_text:
+                href = btn.get("href")
+                if href and not href.startswith("javascript"):
+                    leave_url = urljoin(self.client.current_url, href)
+                    self.client.get(leave_url)
+                    print("[SHADOW] Покинули Shadow Guard туториал")
+                    time.sleep(2)
+                    return True
+
+        print("[SHADOW] Кнопка 'Покинуть банду' не найдена")
         return False
 
     def fight_until_done(self, max_actions=None):
@@ -557,6 +611,10 @@ class DungeonRunner:
 
             # Собираем лут с пола
             self.collect_loot()
+
+            # Проверяем Shadow Guard туториал (Голос Джека) — выходим если обнаружен
+            if self.check_shadow_guard_tutorial():
+                return "shadow_guard_exit", actions
 
             # Проверяем Печать Сталкера (в ивенте)
             if self.check_and_use_stalker_seal():
