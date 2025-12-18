@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from requests_bot.client import VMMOClient
 from requests_bot.combat import CombatParser
 from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_watchdog
-from requests_bot.config import BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS
+from requests_bot.config import BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR
 
 
 class DungeonRunner:
