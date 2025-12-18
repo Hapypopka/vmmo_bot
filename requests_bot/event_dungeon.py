@@ -67,6 +67,9 @@ class EventDungeonClient:
             print(f"[EVENT] Ивент 'Сталкер' доступен! Осталось: {timer_text}")
 
         href = event_widget.get("href")
+        # Защита от javascript: URLs
+        if href and href.startswith("javascript"):
+            href = None
         event_url = urljoin(BASE_URL, href) if href else None
 
         return True, event_url
@@ -255,7 +258,8 @@ class EquipmentClient:
             text = item_link.get_text(strip=True)
             if item_name.lower() in text.lower():
                 href = item_link.get("href")
-                return urljoin(BASE_URL, href)
+                if href and not href.startswith("javascript"):
+                    return urljoin(BASE_URL, href)
 
         return None
 
@@ -282,11 +286,12 @@ class EquipmentClient:
             text = btn.get_text(strip=True)
             if text == "Надеть":
                 href = btn.get("href")
-                equip_url = urljoin(self.client.current_url, href)
-                print(f"[EQUIP] Надеваю {item_name}...")
-                self.client.get(equip_url)
-                print(f"[EQUIP] {item_name} надет!")
-                return True
+                if href and not href.startswith("javascript"):
+                    equip_url = urljoin(self.client.current_url, href)
+                    print(f"[EQUIP] Надеваю {item_name}...")
+                    self.client.get(equip_url)
+                    print(f"[EQUIP] {item_name} надет!")
+                    return True
 
         print(f"[EQUIP] Кнопка 'Надеть' не найдена для {item_name}")
         return True  # Продолжаем - возможно уже надет
