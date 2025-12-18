@@ -103,7 +103,9 @@ class EventDungeonClient:
 
         if dungeon_btn:
             href = dungeon_btn.get("href")
-            return urljoin(self.client.current_url, href)
+            # Фильтруем javascript ссылки
+            if href and not href.startswith("javascript") and href != "#":
+                return urljoin(self.client.current_url, href)
 
         return None
 
@@ -135,7 +137,9 @@ class EventDungeonClient:
             text = btn.get_text(strip=True)
             if text == "Войти":
                 href = btn.get("href")
-                return urljoin(self.client.current_url, href)
+                # Фильтруем javascript ссылки
+                if href and not href.startswith("javascript") and href != "#":
+                    return urljoin(self.client.current_url, href)
 
         return None
 
@@ -149,7 +153,9 @@ class EventDungeonClient:
             text = btn.get_text(strip=True)
             if "Начать бой" in text:
                 href = btn.get("href")
-                return urljoin(self.client.current_url, href)
+                # Фильтруем javascript ссылки
+                if href and not href.startswith("javascript") and href != "#":
+                    return urljoin(self.client.current_url, href)
 
         # Пробуем Wicket AJAX
         wicket_match = re.search(r'"u":"([^"]*linkStartCombat[^"]*)"', self.client.current_page)

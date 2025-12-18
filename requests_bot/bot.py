@@ -193,7 +193,8 @@ class VMMOBot:
         if entered_event:
             # Бой в ивенте
             log_dungeon_start("Сталкер (ивент)", "event_stalker")
-            result, actions = self.dungeon_runner.fight_until_done(max_actions=300)
+            self.dungeon_runner.current_dungeon_id = "event_stalker"
+            result, actions = self.dungeon_runner.fight_until_done()
             self.stats["total_actions"] += actions
 
             if result == "completed":
@@ -256,8 +257,8 @@ class VMMOBot:
                     log_warning(f"Не удалось войти в {dungeon_name}")
                     continue
 
-                # Бой
-                result, actions = self.dungeon_runner.fight_until_done(max_actions=300)
+                # Бой (лимит определяется автоматически по типу данжена)
+                result, actions = self.dungeon_runner.fight_until_done()
                 self.stats["total_actions"] += actions
 
                 if result == "completed":

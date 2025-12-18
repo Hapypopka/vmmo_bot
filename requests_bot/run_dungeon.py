@@ -23,6 +23,13 @@ SKIP_DUNGEONS = [
     # "dng:RestMonastery",  # Монастырь покоя - тест на смерть
 ]
 
+# Лимиты действий для разных данженов
+DUNGEON_ACTION_LIMITS = {
+    "dng:ShadowGuard": 500,    # Большой данжен с несколькими этапами
+    "dng:Barony": 250,         # Владения Барона тоже большой
+    "default": 300,            # По умолчанию
+}
+
 
 class DungeonRunner:
     """Полное прохождение данжена"""
@@ -32,6 +39,7 @@ class DungeonRunner:
         self.base_url = "https://vmmo.vten.ru"
         self.combat_url = None
         self.page_id = None
+        self.current_dungeon_id = None  # Текущий данжен для лимитов
         self.loot_collected = 0
 
     def collect_loot(self):
@@ -202,6 +210,7 @@ class DungeonRunner:
     def enter_dungeon(self, dungeon_id, api_link_url):
         """Входит в данжен и начинает бой"""
         print(f"\n[*] Entering dungeon: {dungeon_id}")
+        self.current_dungeon_id = dungeon_id  # Сохраняем для лимитов
 
         headers = {
             "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -290,11 +299,28 @@ class DungeonRunner:
         return self._start_combat()
 
     def _start_combat(self):
-        """Начинает бой из lobby/standby"""
-        # Вариант 1: ppAction=combat
+        """Начинает бой из lobby/standby/step страницы"""
+        html = self.client.current_page
+        soup = self.client.soup()
+
+        # Вариант 1: Кнопка "Продолжить бой" (после этапа)
+        if soup:
+            for btn in soup.select("a.go-btn"):
+                btn_text = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if "Продолжить бой" in btn_text and href and href != "#" and not href.startswith("javascript"):
+                    print(f"[*] Found 'Продолжить бой' button")
+                    resp = self.client.get(href)
+                    if "/combat" in resp.url:
+                        self.combat_url = resp.url
+                        return True
+                    # Может быть редирект на standby
+                    return self._start_combat()
+
+        # Вариант 2: ppAction=combat
         start_btn = re.search(
             r'href=["\']([^"\']*ppAction=combat[^"\']*)["\']',
-            self.client.current_page
+            html
         )
         if start_btn:
             start_url = start_btn.group(1).replace("&amp;", "&")
@@ -303,10 +329,18 @@ class DungeonRunner:
             self.combat_url = resp.url
             return "/combat" in resp.url
 
-        # Вариант 2: Wicket AJAX linkStartCombat
+        # Вариант 3: Прямая ссылка на /combat/
+        combat_link = re.search(r'href="([^"]*dungeon/combat/[^"]+)"', html)
+        if combat_link:
+            print(f"[*] Found direct combat link")
+            resp = self.client.get(combat_link.group(1))
+            self.combat_url = resp.url
+            return "/combat" in resp.url
+
+        # Вариант 4: Wicket AJAX linkStartCombat
         wicket_start = re.search(
             r'"u":"([^"]*linkStartCombat[^"]*)"',
-            self.client.current_page
+            html
         )
         if wicket_start:
             start_url = wicket_start.group(1)
@@ -406,8 +440,16 @@ class DungeonRunner:
 
         return False
 
-    def fight_until_done(self, max_actions=200):
+    def fight_until_done(self, max_actions=None):
         """Бьёмся до конца данжена"""
+        # Определяем лимит действий для этого данжена
+        if max_actions is None:
+            max_actions = DUNGEON_ACTION_LIMITS.get(
+                self.current_dungeon_id,
+                DUNGEON_ACTION_LIMITS["default"]
+            )
+            print(f"[*] Action limit for this dungeon: {max_actions}")
+
         actions = 0
         stage = 1
         last_gcd_time = 0  # Глобальный КД
@@ -538,38 +580,76 @@ class DungeonRunner:
         """Проверяет состояние после боя"""
         html = self.client.current_page
         url = self.client.current_url
+        soup = self.client.soup()
 
         # Проверяем смерть
         if self.check_death():
             return "died"
 
-        # Проверяем URL
+        # Проверяем URL на завершение данжена
+        url_lower = url.lower()
+        if "dungeoncompleted" in url_lower:
+            print("[*] Dungeon completed (URL)")
+            return "completed"
+
+        if "dungeon/landing" in url_lower or "/dungeons" in url_lower:
+            return "completed"
+
+        # Проверяем текст заголовков на статус
+        if soup:
+            for h2 in soup.select("h2, h2 span"):
+                text = h2.get_text(strip=True).lower()
+                if "пройден" in text or "зачищен" in text:
+                    if "этап" in text:
+                        print(f"[*] Stage complete: {text}")
+                        # Этап пройден - ищем кнопку продолжения
+                        break
+                    elif "подземелье" in text:
+                        print(f"[*] Dungeon complete: {text}")
+                        return "completed"
+
+        # Проверяем URL - всё ещё в бою
         if "/combat" in url:
             # Всё ещё на странице боя - возможно загрузка
             time.sleep(1)
             self.client.get(self.combat_url)
             return "continue"
 
-        # Ищем кнопку "Продолжить" или "Следующий этап"
+        # Ищем кнопку "Продолжить бой" по тексту (главный способ)
+        if soup:
+            for btn in soup.select("a.go-btn"):
+                btn_text = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if "Продолжить бой" in btn_text and href and href != "#" and not href.startswith("javascript"):
+                    print(f"[*] Found 'Продолжить бой' -> clicking")
+                    resp = self.client.get(href)
+                    if "/combat" in resp.url:
+                        self.combat_url = resp.url
+                        return "next_stage"
+                    # Рекурсивно проверяем новую страницу
+                    if self._start_combat():
+                        return "next_stage"
+
+        # Ищем кнопку "Продолжить" или "Следующий этап" по href
         next_btn = re.search(
-            r'href=["\']([^"\']*(?:ppAction=combat|nextStep|continue)[^"\']*)["\']',
+            r'href=["\']([^"\']*(?:ppAction=combat|nextStep|/step/)[^"\']*)["\']',
             html,
             re.IGNORECASE
         )
         if next_btn:
             next_url = next_btn.group(1).replace("&amp;", "&")
-            print(f"[*] Found next stage button")
-            resp = self.client.get(next_url)
+            if not next_url.startswith("javascript"):
+                print(f"[*] Found next stage button (href)")
+                resp = self.client.get(next_url)
 
-            # Если это уже combat - отлично
-            if "/combat" in resp.url:
-                self.combat_url = resp.url
-                return "next_stage"
+                # Если это уже combat - отлично
+                if "/combat" in resp.url:
+                    self.combat_url = resp.url
+                    return "next_stage"
 
-            # Иначе нужно снова запустить бой (standby/step page)
-            if self._start_combat():
-                return "next_stage"
-            return "unknown"
+                # Иначе нужно снова запустить бой (standby/step page)
+                if self._start_combat():
+                    return "next_stage"
 
         # Ищем Wicket AJAX для следующего этапа
         wicket_next = re.search(r'"u":"([^"]*(?:linkStartCombat|nextStep)[^"]*)"', html)
@@ -578,18 +658,17 @@ class DungeonRunner:
             if self._start_combat():
                 return "next_stage"
 
-        # Проверяем завершение данжена
-        if "dungeon/landing" in url or "dungeons" in url:
-            return "completed"
-
         # Ищем текст о завершении
-        if any(text in html.lower() for text in ["подземелье пройдено", "dungeon complete", "победа", "вы победили"]):
+        html_lower = html.lower()
+        if any(text in html_lower for text in ["подземелье пройдено", "подземелье зачищено", "dungeon complete"]):
             return "completed"
 
         # Ищем кнопку выхода или "В город"
-        exit_btn = re.search(r'href=["\']([^"\']*(?:exit|leave|/city)[^"\']*)["\']', html, re.IGNORECASE)
-        if exit_btn:
-            return "completed"
+        if soup:
+            for btn in soup.select("a.go-btn"):
+                btn_text = btn.get_text(strip=True)
+                if btn_text in ["В город", "Выйти", "Покинуть"]:
+                    return "completed"
 
         # Проверяем landing page - значит данжен завершён
         if "/landing" in url:
