@@ -9,8 +9,7 @@ import time
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-BASE_URL = "https://vmmo.vten.ru"
-HELL_GAMES_URL = f"{BASE_URL}/basin/combat"
+from requests_bot.config import BASE_URL, HELL_GAMES_URL
 
 # Скиллы которые пропускаем в Hell Games (например Талисман Доблести)
 HELL_GAMES_SKIP_SKILLS = [5]  # Пропускаем 5-й скилл
@@ -173,6 +172,18 @@ class HellGamesClient:
 
     def get_keeper_url(self):
         """URL для клика на хранителя (выбор цели)"""
+        soup = self.client.soup()
+        if not soup:
+            return None
+
+        # Ищем ссылку на юнит в позиции 22 (хранитель)
+        keeper_unit = soup.select_one("div.unit._unit-pos-22")
+        if keeper_unit:
+            unit_link = keeper_unit.select_one("a.unit-link")
+            if unit_link and unit_link.get("href"):
+                return urljoin(BASE_URL, unit_link["href"])
+
+        # Fallback: ищем в AJAX URLs
         urls = self._parse_ajax_urls(self.client.current_page)
         for element_id, url in urls.items():
             if "unit-pos-22" in element_id or "entities-1" in url:
@@ -237,13 +248,24 @@ class HellGamesClient:
             return True
         return False
 
+    def select_keeper(self):
+        """Выбирает хранителя как цель атаки"""
+        keeper_url = self.get_keeper_url()
+        if keeper_url:
+            resp = self._make_ajax_request(keeper_url)
+            if resp.status_code == 200:
+                print("[HELL] Выбрали хранителя как цель")
+                self.client.get(self.client.current_url)
+                return True
+        return False
+
     def fight(self, duration_seconds):
         """
         Основной цикл боя в Адских Играх.
 
         Логика:
         1. Ищем вражеский источник (light) -> переходим
-        2. Бьём хранителя со скиллами
+        2. Выбираем хранителя (pos-22) как цель -> бьём со скиллами
         3. Когда хранитель убит -> ищем следующий light
         4. Все наши (dark) -> ждём, атакуем без скиллов
         """
@@ -254,7 +276,7 @@ class HellGamesClient:
 
         end_time = time.time() + duration_seconds
         last_log_minute = -1
-        keeper_mode = False
+        keeper_selected = False  # Флаг: выбран ли хранитель как цель
         attacks = 0
 
         while time.time() < end_time:
@@ -266,12 +288,14 @@ class HellGamesClient:
                     print(f"[HELL] Осталось {current_minute}м {remaining % 60}с")
                     last_log_minute = current_minute
 
-                # Лут собирается автоматически на сервере
-                # self.collect_loot()  # Не нужно в requests версии
-
                 # Проверяем хранителя
                 if self.has_keeper_enemy():
-                    keeper_mode = True
+                    # Хранитель есть - выбираем его и бьём
+                    if not keeper_selected:
+                        if self.select_keeper():
+                            keeper_selected = True
+                        time.sleep(0.5)
+
                     # Используем скиллы и атакуем
                     self.use_skill_if_ready()
                     if self.attack():
@@ -281,7 +305,8 @@ class HellGamesClient:
                     time.sleep(1.5)
 
                 else:
-                    keeper_mode = False
+                    # Хранителя нет - убит или мы в пустом источнике
+                    keeper_selected = False
 
                     # Ищем вражеский источник
                     idx, source_url = self.find_enemy_source()
@@ -291,13 +316,13 @@ class HellGamesClient:
                         time.sleep(2)
 
                     elif self.all_sources_ours():
-                        # Все наши - просто ждём
+                        # Все наши - просто ждём, атакуем без скиллов
                         if self.attack():
                             attacks += 1
                         time.sleep(3)
 
                     else:
-                        # Есть враги, но заблокированы
+                        # Есть враги, но заблокированы - ждём
                         time.sleep(2)
 
             except Exception as e:
