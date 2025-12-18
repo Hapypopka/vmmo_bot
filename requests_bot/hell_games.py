@@ -34,28 +34,6 @@ class HellGamesClient:
         self.GCD = 2.0
         self.loot_collected = 0
 
-    def collect_loot(self):
-        """Собирает лут во время боя"""
-        soup = self.client.soup()
-        if not soup:
-            return 0
-
-        collected = 0
-        loot_items = soup.select("a.combat-loot, div.combat-loot a, a[href*='lootLink']")
-
-        for loot in loot_items:
-            href = loot.get("href")
-            if href and not href.startswith("javascript"):
-                url = urljoin(BASE_URL, href)
-                self.client.get(url)
-                collected += 1
-
-        if collected > 0:
-            print(f"[HELL] Лут: {collected} шт.")
-            self.loot_collected += collected
-
-        return collected
-
     def enter_hell_games(self):
         """Переходит в Адские Игры"""
         print("[HELL] Перехожу в Адские Игры...")

@@ -2,6 +2,7 @@
 # VMMO Requests Client
 # ============================================
 # HTTP клиент для VMMO на requests
+# + WebSocket для сбора лута
 # ============================================
 
 import requests
@@ -9,12 +10,11 @@ import re
 import json
 import os
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 
 from requests_bot.config import (
     BASE_URL, SCRIPT_DIR, COOKIES_FILE, SETTINGS_FILE, DEFAULT_HEADERS
 )
-
 
 class VMMOClient:
     """HTTP клиент для VMMO на requests"""
@@ -24,6 +24,7 @@ class VMMOClient:
         self.session.headers.update(DEFAULT_HEADERS)
         self.current_page = None  # Последний загруженный HTML
         self.current_url = None
+
 
     def load_cookies(self, cookies_path=None):
         """Загружает куки из файла (формат Playwright)"""

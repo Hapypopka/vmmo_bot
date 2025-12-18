@@ -26,46 +26,6 @@ class DungeonRunner:
         self.combat_url = None
         self.page_id = None
         self.current_dungeon_id = None  # Текущий данжен для лимитов
-        self.loot_collected = 0
-
-    def collect_loot(self):
-        """
-        Собирает лут во время боя.
-        Лут собирается через lootTakeUrl + pdti=item_id
-        """
-        html = self.client.current_page
-        if not html:
-            return 0
-
-        # Находим lootTakeUrl
-        loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", html)
-        if not loot_url_match:
-            return 0
-
-        loot_base_url = loot_url_match.group(1)
-
-        # Находим все лут-боксы с id
-        soup = self.client.soup()
-        if not soup:
-            return 0
-
-        collected = 0
-        loot_boxes = soup.select("div.combat-loot[id^='loot_box_']")
-
-        for loot_box in loot_boxes:
-            loot_id = loot_box.get("id", "")
-            # Извлекаем числовой ID из "loot_box_182124"
-            if loot_id.startswith("loot_box_"):
-                item_id = loot_id.replace("loot_box_", "")
-                take_url = loot_base_url + item_id
-                self.client.get(take_url)
-                collected += 1
-
-        if collected > 0:
-            print(f"[LOOT] Подобрали: {collected} шт.")
-            self.loot_collected += collected
-
-        return collected
 
     def _set_brutal_difficulty(self):
         """
@@ -580,6 +540,14 @@ class DungeonRunner:
         # Сбрасываем watchdog при входе в бой
         reset_watchdog()
 
+        return self._combat_loop(
+            max_actions, actions, stage, last_gcd_time, skill_cooldowns,
+            GCD, ATTACK_CD, consecutive_no_units, SKILL_CDS
+        )
+
+    def _combat_loop(self, max_actions, actions, stage, last_gcd_time,
+                     skill_cooldowns, GCD, ATTACK_CD, consecutive_no_units, SKILL_CDS):
+        """Внутренний цикл боя"""
         while actions < max_actions:
             # Проверяем watchdog
             if is_watchdog_triggered():
@@ -614,9 +582,6 @@ class DungeonRunner:
                 else:
                     print(f"\n[?] Unknown state after {actions} actions")
                     return "unknown", actions
-
-            # Собираем лут с пола
-            self.collect_loot()
 
             # Проверяем Shadow Guard туториал (Голос Джека) — выходим если обнаружен
             if self.check_shadow_guard_tutorial():
@@ -765,12 +730,14 @@ class DungeonRunner:
                     if any(text in new_html for text in ["подземелье пройдено", "подземелье зачищено"]):
                         print("[*] Dungeon completed (text)")
                         return "completed"
-                    # Рекурсивно проверяем новую страницу
-                    result = self._start_combat()
+                    # Пробуем запустить бой (один раз, без рекурсии)
+                    result = self._start_combat(retry=2)  # retry=2 чтобы не было глубокой рекурсии
                     if result == "completed":
                         return "completed"
                     if result:
                         return "next_stage"
+                    # Не смогли - выходим из цикла
+                    break
 
         # Ищем кнопку "Продолжить" или "Следующий этап" по href
         next_btn = re.search(

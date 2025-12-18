@@ -262,9 +262,6 @@ class VMMOBot:
             log_dungeon_start(dungeon_name, dungeon_id)
 
             try:
-                # Надеваем Кристалл Тикуана для обычных данженов
-                self.equip_client.equip_tikuan_crystal()
-
                 # Входим в данжен
                 if not self.dungeon_runner.enter_dungeon(dungeon_id, api_link_url):
                     log_warning(f"Не удалось войти в {dungeon_name}")
