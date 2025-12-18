@@ -45,7 +45,7 @@ class HellGamesClient:
 
         for loot in loot_items:
             href = loot.get("href")
-            if href:
+            if href and not href.startswith("javascript"):
                 url = urljoin(BASE_URL, href)
                 self.client.get(url)
                 collected += 1
@@ -85,6 +85,7 @@ class HellGamesClient:
         """AJAX запрос"""
         # Защита от javascript: URLs
         if not url or url.startswith("javascript"):
+            print(f"[HELL] DEBUG: Skipping invalid URL: {url}")
             return None
 
         # Делаем URL абсолютным если нужно
