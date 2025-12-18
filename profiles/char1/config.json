@@ -2,6 +2,9 @@
     "name": "Main Character",
     "description": "Основной персонаж - все данжи + ивент",
 
+    "username": "nza",
+    "password": "Agesevemu1313!",
+
     "event_dungeon_enabled": true,
 
     "skill_cooldowns": {

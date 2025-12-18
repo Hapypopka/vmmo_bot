@@ -22,7 +22,7 @@ from requests_bot.stats import init_stats, get_stats, print_stats
 from requests_bot.watchdog import reset_watchdog, check_watchdog, reset_no_progress_counter
 from requests_bot.config import (
     DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings,
-    set_profile, get_profile_name, is_event_dungeon_enabled
+    set_profile, get_profile_name, is_event_dungeon_enabled, get_credentials
 )
 from requests_bot.logger import (
     init_logger, get_log_file,
@@ -83,7 +83,9 @@ class VMMOBot:
 
         if not self.client.is_logged_in():
             log_warning("Куки устарели, логинимся...")
-            if not self.client.login():
+            # Берём креды из профиля
+            username, password = get_credentials()
+            if not self.client.login(username, password):
                 log_error("Ошибка авторизации!")
                 return False
 

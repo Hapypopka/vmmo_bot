@@ -162,3 +162,12 @@ def get_skill_cooldowns():
     skill_cds = _profile_config.get("skill_cooldowns", {})
     # Конвертируем ключи в int
     return {int(k): v for k, v in skill_cds.items()} if skill_cds else None
+
+
+def get_credentials():
+    """Возвращает логин/пароль для текущего профиля"""
+    username = _profile_config.get("username")
+    password = _profile_config.get("password")
+    if username and password:
+        return username, password
+    return None, None

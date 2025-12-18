@@ -2,6 +2,9 @@
     "name": "Second Character",
     "description": "Второй персонаж - без ивента, другие КД",
 
+    "username": "Arilyn",
+    "password": "Agesevemu1313!",
+
     "event_dungeon_enabled": false,
 
     "skill_cooldowns": {
