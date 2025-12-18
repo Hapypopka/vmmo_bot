@@ -156,6 +156,13 @@ class BackpackClient:
             log_debug(f"[BACKPACK] Всего a.go-btn на странице: {len(all_buttons)}")
             for btn in all_buttons[:5]:
                 log_debug(f"[BACKPACK] Кнопка: {btn.get_text(strip=True)[:30]}")
+        else:
+            # Показываем структуру первого item_div для диагностики
+            first_div = item_divs[0]
+            first_btns = first_div.select("a.go-btn")
+            log_debug(f"[BACKPACK] Первый item_div имеет {len(first_btns)} кнопок a.go-btn")
+            for btn in first_btns:
+                log_debug(f"[BACKPACK] - btn: '{btn.get_text(strip=True)}' href={btn.get('href', 'NO_HREF')[:50] if btn.get('href') else 'NO_HREF'}")
 
         for item_div in item_divs:
             # Название предмета
@@ -181,8 +188,10 @@ class BackpackClient:
 
             # Кнопки действий
             buttons = {}
+            all_btn_texts = []  # DEBUG
             for btn in item_div.select("a.go-btn"):
                 btn_text = btn.get_text(strip=True)
+                all_btn_texts.append(btn_text)  # DEBUG
                 href = btn.get("href")
                 if href:
                     full_url = urljoin(self.client.current_url, href)
@@ -194,6 +203,10 @@ class BackpackClient:
                         buttons["drop"] = full_url
                     elif "открыть" in btn_text.lower():
                         buttons["open"] = full_url
+
+            # DEBUG: если нет кнопок, показываем что было
+            if not buttons and all_btn_texts:
+                log_debug(f"[BACKPACK] '{name[:20]}' btns raw: {all_btn_texts}")
 
             items.append({
                 "name": name,
@@ -340,6 +353,16 @@ class BackpackClient:
             items = self.get_items()
             log_debug(f"[BACKPACK] Предметов на странице: {len(items)}")
 
+            # DEBUG: показываем первые 5 предметов
+            for i, item in enumerate(items[:5]):
+                btns = list(item["buttons"].keys())
+                flags = []
+                if item["is_protected"]:
+                    flags.append("PROTECTED")
+                if item["is_green"]:
+                    flags.append("GREEN")
+                log_debug(f"[BACKPACK] [{i}] {item['name'][:25]} | btns={btns} | {','.join(flags)}")
+
             # Ищем предмет для разборки
             target = None
             for item in items:
@@ -349,14 +372,11 @@ class BackpackClient:
                     continue
                 if "disassemble" not in item["buttons"]:
                     continue
-                # Зелёные и из blacklist - разбираем
-                if item["is_green"] or item["name"] in blacklist:
-                    target = item
-                    break
                 target = item
                 break
 
             if not target:
+                log_debug("[BACKPACK] Не найден предмет для разборки!")
                 break
 
             log_backpack(f"Разбираю: {target['name']}")
