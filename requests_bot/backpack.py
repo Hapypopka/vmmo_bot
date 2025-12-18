@@ -10,6 +10,15 @@ import os
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+try:
+    from requests_bot.logger import log_debug, log_info, log_warning, log_backpack
+except ImportError:
+    # Fallback если запускается напрямую
+    def log_debug(msg): print(f"[DEBUG] {msg}")
+    def log_info(msg): print(f"[INFO] {msg}")
+    def log_warning(msg): print(f"[WARN] {msg}")
+    def log_backpack(msg): print(f"[BACKPACK] {msg}")
+
 BASE_URL = "https://vmmo.vten.ru"
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -233,11 +242,11 @@ class BackpackClient:
 
         if confirm_url:
             self.client.get(confirm_url)
-            print(f"[BACKPACK] Разобрано: {item['name']}")
+            log_backpack(f"Разобрано: {item['name']}")
             self.items_disassembled += 1
             return True
 
-        print(f"[BACKPACK] Кнопка подтверждения не найдена для: {item['name']}")
+        log_warning(f"[BACKPACK] Кнопка подтверждения не найдена для: {item['name']}")
         return False
 
     def drop_item(self, item):
@@ -270,11 +279,11 @@ class BackpackClient:
 
         if confirm_url:
             self.client.get(confirm_url)
-            print(f"[BACKPACK] Выброшено: {item['name']}")
+            log_backpack(f"Выброшено: {item['name']}")
             self.items_dropped += 1
             return True
 
-        print(f"[BACKPACK] Кнопка подтверждения не найдена для выброса: {item['name']}")
+        log_warning(f"[BACKPACK] Кнопка подтверждения не найдена для выброса: {item['name']}")
         return False
 
     def open_bonus(self, item):
@@ -309,7 +318,7 @@ class BackpackClient:
                 break
 
             item = bonus_items[0]
-            print(f"[BACKPACK] Открываю: {item['name']}")
+            log_backpack(f"Открываю: {item['name']}")
             if self.open_bonus(item):
                 opened += 1
             else:
@@ -355,7 +364,7 @@ class BackpackClient:
             if not target:
                 break
 
-            print(f"[BACKPACK] Разбираю: {target['name']}")
+            log_backpack(f"Разбираю: {target['name']}")
             if self.disassemble_item(target):
                 disassembled += 1
             else:
@@ -395,7 +404,7 @@ class BackpackClient:
             if not target:
                 break
 
-            print(f"[BACKPACK] Выбрасываю: {target['name']}")
+            log_backpack(f"Выбрасываю: {target['name']}")
             if self.drop_item(target):
                 dropped += 1
             else:
@@ -448,13 +457,13 @@ class BackpackClient:
             "dropped": 0,
         }
 
-        print("[BACKPACK] Начинаю очистку рюкзака...")
+        log_backpack("Начинаю очистку рюкзака...")
 
         for page in range(1, max_pages + 1):
             if page > 1:
                 if not self.go_to_next_page(page - 1):
                     break
-                print(f"[BACKPACK] Страница {page}")
+                log_debug(f"[BACKPACK] Страница {page}")
 
             # Открываем бонусы
             opened = self.open_all_bonuses()
@@ -468,7 +477,7 @@ class BackpackClient:
             dropped = self.drop_green_unusable()
             stats["dropped"] += dropped
 
-        print(f"[BACKPACK] Очистка завершена: {stats}")
+        log_backpack(f"Очистка завершена: бонусов {stats['bonuses']}, разобрано {stats['disassembled']}, выброшено {stats['dropped']}")
         return stats
 
     def cleanup_if_needed(self, max_pages=3):
@@ -483,11 +492,11 @@ class BackpackClient:
 
         if not self.need_cleanup():
             current, total = self.get_backpack_count()
-            print(f"[BACKPACK] Очистка не нужна ({current}/{total})")
+            log_debug(f"[BACKPACK] Очистка не нужна ({current}/{total})")
             return None
 
         current, total = self.get_backpack_count()
-        print(f"[BACKPACK] Нужна очистка ({current}/{total}, порог {BACKPACK_THRESHOLD})")
+        log_backpack(f"Нужна очистка ({current}/{total}, порог {BACKPACK_THRESHOLD})")
 
         return self.cleanup(max_pages)
 

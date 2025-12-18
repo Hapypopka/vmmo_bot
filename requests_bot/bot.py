@@ -129,13 +129,21 @@ class VMMOBot:
     def cleanup_backpack(self):
         """Очищает рюкзак если нужно"""
         try:
-            if self.backpack_client.need_cleanup():
-                log_info("Очищаю рюкзак...")
+            # Загружаем страницу с меню для получения актуального счётчика
+            self.client.get("/city")
+            current, total = self.backpack_client.get_backpack_count()
+            log_debug(f"Рюкзак: {current}/{total}")
+
+            if current >= self.backpack_threshold:
+                log_info(f"Очищаю рюкзак ({current}/{total})...")
                 stats = self.backpack_client.cleanup()
-                sold = stats.get("sold", 0)
-                self.stats["items_sold"] += sold
-                if sold > 0:
-                    log_info(f"Продано: {sold} предметов")
+                # cleanup() возвращает: bonuses, disassembled, dropped
+                disassembled = stats.get("disassembled", 0)
+                dropped = stats.get("dropped", 0)
+                total_cleaned = disassembled + dropped
+                self.stats["items_sold"] += total_cleaned
+                if total_cleaned > 0:
+                    log_info(f"Очищено: {disassembled} разобрано, {dropped} выброшено")
                 return True
         except Exception as e:
             log_error(f"Ошибка очистки рюкзака: {e}")
