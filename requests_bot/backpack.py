@@ -344,6 +344,7 @@ class BackpackClient:
 
         for _ in range(100):  # Защита
             items = self.get_items()
+            log_debug(f"[BACKPACK] Предметов на странице: {len(items)}")
 
             # Ищем предмет для разборки
             target = None
@@ -469,8 +470,8 @@ class BackpackClient:
             opened = self.open_all_bonuses()
             stats["bonuses"] += opened
 
-            # Разбираем
-            disassembled = self.disassemble_all()
+            # Разбираем (включая зелёные)
+            disassembled = self.disassemble_all(skip_green=False)
             stats["disassembled"] += disassembled
 
             # Выбрасываем бесполезные зелёные
