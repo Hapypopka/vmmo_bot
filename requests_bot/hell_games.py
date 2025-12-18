@@ -281,12 +281,20 @@ class HellGamesClient:
 
         while time.time() < end_time:
             try:
+                # Обновляем страницу для актуального состояния
+                self.client.get(self.client.current_url)
+
                 # Лог времени
                 remaining = int(end_time - time.time())
                 current_minute = remaining // 60
                 if current_minute != last_log_minute and remaining > 0:
                     print(f"[HELL] Осталось {current_minute}м {remaining % 60}с")
                     last_log_minute = current_minute
+                    # Debug: показываем состояние раз в минуту
+                    sources = self.get_sources_info()
+                    light_count = sum(1 for s in sources if s["is_light"])
+                    dark_count = sum(1 for s in sources if s["is_dark"])
+                    print(f"[HELL] DEBUG: keeper={self.has_keeper_enemy()}, sources={len(sources)} (light={light_count}, dark={dark_count}), attack_url={self.get_attack_url() is not None}")
 
                 # Проверяем хранителя
                 if self.has_keeper_enemy():
@@ -323,6 +331,7 @@ class HellGamesClient:
 
                     else:
                         # Есть враги, но заблокированы - ждём
+                        print(f"[HELL] Ждём (враги заблокированы или нет источников)")
                         time.sleep(2)
 
             except Exception as e:
