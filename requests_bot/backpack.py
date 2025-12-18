@@ -427,6 +427,46 @@ class BackpackClient:
 
         return dropped
 
+    def drop_unusable(self):
+        """
+        Выбрасывает ВСЕ предметы (не только зелёные) без кнопок аукциона/разборки.
+        Например: Изумительная пылинка, Золотой Оберег и т.п.
+
+        Returns:
+            int: Количество выброшенных
+        """
+        if not self.open_backpack():
+            return 0
+
+        dropped = 0
+
+        for _ in range(50):
+            items = self.get_items()
+
+            # Ищем любой предмет без полезных кнопок
+            target = None
+            for item in items:
+                if item["is_protected"]:
+                    continue
+                # Пропускаем если есть полезные кнопки
+                if "auction" in item["buttons"] or "disassemble" in item["buttons"]:
+                    continue
+                if "drop" not in item["buttons"]:
+                    continue
+                target = item
+                break
+
+            if not target:
+                break
+
+            log_backpack(f"Выбрасываю (мусор): {target['name']}")
+            if self.drop_item(target):
+                dropped += 1
+            else:
+                break
+
+        return dropped
+
     def go_to_next_page(self, current_page=1):
         """
         Переходит на следующую страницу рюкзака.
@@ -457,42 +497,63 @@ class BackpackClient:
         Полная очистка рюкзака.
 
         1. Открывает бонусы
-        2. Разбирает предметы
-        3. Выбрасывает зелёные без пользы
+        2. Выставляет на аукцион (через AuctionClient)
+        3. Разбирает предметы
+        4. Выбрасывает зелёные без пользы
 
         Args:
             max_pages: Максимум страниц для обработки
 
         Returns:
-            dict: Статистика {bonuses, disassembled, dropped}
+            dict: Статистика {bonuses, disassembled, dropped, auctioned}
         """
         stats = {
             "bonuses": 0,
             "disassembled": 0,
             "dropped": 0,
+            "auctioned": 0,
         }
 
         log_backpack("Начинаю очистку рюкзака...")
 
+        # 1. Сначала открываем бонусы на всех страницах
         for page in range(1, max_pages + 1):
             if page > 1:
                 if not self.go_to_next_page(page - 1):
                     break
-                log_debug(f"[BACKPACK] Страница {page}")
+                log_debug(f"[BACKPACK] Страница {page} (бонусы)")
 
-            # Открываем бонусы
             opened = self.open_all_bonuses()
             stats["bonuses"] += opened
+
+        # 2. Выставляем на аукцион (аукцион сам обрабатывает все страницы)
+        try:
+            from requests_bot.auction import AuctionClient
+            auction = AuctionClient(self.client)
+            auction_stats = auction.sell_all()
+            stats["auctioned"] = auction_stats.get("listed", 0)
+            stats["disassembled"] += auction_stats.get("disassembled", 0)
+        except Exception as e:
+            log_warning(f"[BACKPACK] Ошибка аукциона: {e}")
+
+        # 3. Разбираем оставшееся и выбрасываем мусор
+        for page in range(1, max_pages + 1):
+            if not self.open_backpack():
+                break
+            if page > 1:
+                if not self.go_to_next_page(page - 1):
+                    break
+                log_debug(f"[BACKPACK] Страница {page} (разборка)")
 
             # Разбираем (включая зелёные)
             disassembled = self.disassemble_all(skip_green=False)
             stats["disassembled"] += disassembled
 
-            # Выбрасываем бесполезные зелёные
-            dropped = self.drop_green_unusable()
+            # Выбрасываем ВСЕ бесполезные предметы (не только зелёные)
+            dropped = self.drop_unusable()
             stats["dropped"] += dropped
 
-        log_backpack(f"Очистка завершена: бонусов {stats['bonuses']}, разобрано {stats['disassembled']}, выброшено {stats['dropped']}")
+        log_backpack(f"Очистка завершена: бонусов {stats['bonuses']}, аукцион {stats['auctioned']}, разобрано {stats['disassembled']}, выброшено {stats['dropped']}")
         return stats
 
     def check_craft_ready(self):
