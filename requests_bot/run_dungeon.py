@@ -7,29 +7,14 @@ import sys
 import re
 import json
 import time
+from urllib.parse import urljoin
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from requests_bot.client import VMMOClient
 from requests_bot.combat import CombatParser
 from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_watchdog
-from urllib.parse import urljoin
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_URL = "https://vmmo.vten.ru"
-
-# Данжены которые пропускаем (слишком сложные)
-SKIP_DUNGEONS = [
-    # "dng:RestMonastery",  # Монастырь покоя - тест на смерть
-]
-
-# Лимиты действий для разных данженов (Брутал сложность = дольше бои)
-DUNGEON_ACTION_LIMITS = {
-    "dng:ShadowGuard": 500,    # Большой данжен с несколькими этапами
-    "dng:Barony": 500,         # Владения Барона - 3 этапа на Брутал
-    "dng:HighDungeon": 500,    # Высокая Темница - 3+ этапов
-    "default": 500,            # По умолчанию - 500 для всех
-}
+from requests_bot.config import BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS
 
 
 class DungeonRunner:
@@ -37,7 +22,7 @@ class DungeonRunner:
 
     def __init__(self, client: VMMOClient):
         self.client = client
-        self.base_url = "https://vmmo.vten.ru"
+        self.base_url = BASE_URL
         self.combat_url = None
         self.page_id = None
         self.current_dungeon_id = None  # Текущий данжен для лимитов

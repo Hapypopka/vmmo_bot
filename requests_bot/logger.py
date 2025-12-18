@@ -9,8 +9,7 @@ import sys
 import logging
 from datetime import datetime
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
+from requests_bot.config import LOGS_DIR
 
 # Создаём папку для логов
 os.makedirs(LOGS_DIR, exist_ok=True)

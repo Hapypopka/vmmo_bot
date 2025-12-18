@@ -7,9 +7,9 @@
 
 import time
 
-# Настройки watchdog
-WATCHDOG_TIMEOUT = 90  # 90 секунд без активности = застревание
-WATCHDOG_CYCLE_THRESHOLD = 5  # 5 срабатываний подряд = hard reset
+from requests_bot.config import (
+    WATCHDOG_TIMEOUT, WATCHDOG_CYCLE_THRESHOLD, NO_PROGRESS_LIMIT, DUNGEONS_URL
+)
 
 # Глобальное состояние
 _last_action_time = time.time()
@@ -72,72 +72,16 @@ def reset_no_progress_counter():
 def increment_no_progress():
     """
     Увеличивает счётчик атак без прогресса.
-    Возвращает True если достигнут лимит (240 атак).
+    Возвращает True если достигнут лимит.
     """
     global _consecutive_no_progress
     _consecutive_no_progress += 1
-    return _consecutive_no_progress >= 240
+    return _consecutive_no_progress >= NO_PROGRESS_LIMIT
 
 
 def get_no_progress_count():
     """Возвращает количество атак без прогресса"""
     return _consecutive_no_progress
-
-
-class WatchdogMixin:
-    """
-    Миксин для добавления watchdog функциональности в клиент.
-
-    Использование:
-        class MyClient(WatchdogMixin):
-            def do_action(self):
-                self.reset_watchdog()
-                # ... действие ...
-                if self.is_watchdog_triggered():
-                    self.handle_stuck()
-    """
-
-    def __init__(self):
-        self._last_action = time.time()
-        self._trigger_count = 0
-        self._no_progress = 0
-
-    def reset_watchdog(self):
-        """Сбрасывает watchdog"""
-        self._last_action = time.time()
-        self._trigger_count = 0
-
-    def is_watchdog_triggered(self):
-        """Проверяет застревание"""
-        return (time.time() - self._last_action) >= WATCHDOG_TIMEOUT
-
-    def get_idle_time(self):
-        """Время простоя в секундах"""
-        return time.time() - self._last_action
-
-    def handle_watchdog_trigger(self, client):
-        """
-        Обрабатывает срабатывание watchdog.
-        Возвращает: "recovered" или "hard_reset"
-        """
-        self._trigger_count += 1
-        idle = int(self.get_idle_time())
-
-        if self._trigger_count >= WATCHDOG_CYCLE_THRESHOLD:
-            # Много срабатываний - hard reset
-            print(f"[WATCHDOG] {self._trigger_count} срабатываний подряд — HARD RESET!")
-            self._trigger_count = 0
-            client.get("/dungeons?52")
-            return "hard_reset"
-
-        print(f"[WATCHDOG] Простой {idle} сек (попытка {self._trigger_count}/{WATCHDOG_CYCLE_THRESHOLD})")
-
-        # Пробуем выйти из застревания
-        from requests_bot.popups import PopupsClient
-        popups = PopupsClient(client)
-        popups.emergency_unstuck()
-
-        return "recovered"
 
 
 def check_watchdog(client, popups_client=None):
@@ -164,7 +108,7 @@ def check_watchdog(client, popups_client=None):
         print(f"[WATCHDOG] {cycle_count + 1} срабатываний подряд — HARD RESET!")
 
         # Hard reset - просто идём на страницу данженов
-        client.get("/dungeons?52")
+        client.get(DUNGEONS_URL)
 
         reset_watchdog_cycle()
         reset_watchdog()
@@ -177,7 +121,7 @@ def check_watchdog(client, popups_client=None):
         popups_client.emergency_unstuck()
     else:
         # Без popups_client просто идём в данжены
-        client.get("/dungeons?52")
+        client.get(DUNGEONS_URL)
 
     reset_watchdog()
     return "recovered"

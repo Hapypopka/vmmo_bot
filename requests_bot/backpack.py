@@ -6,9 +6,12 @@
 
 import re
 import json
-import os
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+
+from requests_bot.config import (
+    BASE_URL, AUCTION_BLACKLIST_FILE, PROTECTED_ITEMS, BACKPACK_THRESHOLD
+)
 
 try:
     from requests_bot.logger import log_debug, log_info, log_warning, log_backpack
@@ -18,32 +21,6 @@ except ImportError:
     def log_info(msg): print(f"[INFO] {msg}")
     def log_warning(msg): print(f"[WARN] {msg}")
     def log_backpack(msg): print(f"[BACKPACK] {msg}")
-
-BASE_URL = "https://vmmo.vten.ru"
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Защищённые предметы - не продавать и не разбирать
-PROTECTED_ITEMS = [
-    "Железо",
-    "Железная Руда",
-    "Железный Слиток",
-    "Осколок Грёз",
-    "Осколок Порядка",
-    "Осколок Рассвета",
-    "Осколок Ночи",
-    "Осколок Тени",
-    "Осколок Хаоса",
-    "Треснутый Кристалл Тикуана",
-    "Печать Сталкера",
-    "Печать Сталкера I",
-    "Печать Сталкера II",
-    "Печать Сталкера III",
-    "Ледяной Кристалл",
-    "Уголь Эфирного Древа",
-]
-
-# Порог для очистки рюкзака
-BACKPACK_THRESHOLD = 15
 
 
 def is_protected_item(item_name):
@@ -56,9 +33,8 @@ def is_protected_item(item_name):
 
 def load_auction_blacklist():
     """Загружает чёрный список аукциона"""
-    path = os.path.join(SCRIPT_DIR, "auction_blacklist.json")
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(AUCTION_BLACKLIST_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
@@ -66,8 +42,7 @@ def load_auction_blacklist():
 
 def save_auction_blacklist(blacklist):
     """Сохраняет чёрный список аукциона"""
-    path = os.path.join(SCRIPT_DIR, "auction_blacklist.json")
-    with open(path, "w", encoding="utf-8") as f:
+    with open(AUCTION_BLACKLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(blacklist, f, ensure_ascii=False, indent=2)
 
 

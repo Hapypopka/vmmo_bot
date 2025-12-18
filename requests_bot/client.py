@@ -1,8 +1,7 @@
 # ============================================
 # VMMO Requests Client
 # ============================================
-# Экспериментальный клиент на requests для тестирования
-# возможности боя без браузера
+# HTTP клиент для VMMO на requests
 # ============================================
 
 import requests
@@ -12,8 +11,9 @@ import os
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-BASE_URL = "https://vmmo.vten.ru"
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from requests_bot.config import (
+    BASE_URL, SCRIPT_DIR, COOKIES_FILE, SETTINGS_FILE, DEFAULT_HEADERS
+)
 
 
 class VMMOClient:
@@ -21,18 +21,14 @@ class VMMOClient:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
-        })
+        self.session.headers.update(DEFAULT_HEADERS)
         self.current_page = None  # Последний загруженный HTML
         self.current_url = None
 
     def load_cookies(self, cookies_path=None):
         """Загружает куки из файла (формат Playwright)"""
         if cookies_path is None:
-            cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
+            cookies_path = COOKIES_FILE
 
         try:
             with open(cookies_path, "r", encoding="utf-8") as f:
@@ -103,9 +99,8 @@ class VMMOClient:
         """
         # Загружаем креды если не указаны
         if not username or not password:
-            settings_path = os.path.join(SCRIPT_DIR, "settings.json")
             try:
-                with open(settings_path, "r", encoding="utf-8") as f:
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
                     settings = json.load(f)
                     username = settings.get("login")
                     password = settings.get("password")
@@ -186,7 +181,7 @@ class VMMOClient:
 
     def _save_cookies(self):
         """Сохраняет куки в файл (формат Playwright)"""
-        cookies_path = os.path.join(SCRIPT_DIR, "cookies.json")
+        cookies_path = COOKIES_FILE
         cookies = []
 
         for cookie in self.session.cookies:

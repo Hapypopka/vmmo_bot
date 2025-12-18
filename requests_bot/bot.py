@@ -7,7 +7,6 @@
 import os
 import sys
 import time
-import json
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,26 +20,13 @@ from requests_bot.backpack import BackpackClient
 from requests_bot.popups import PopupsClient
 from requests_bot.stats import init_stats, get_stats, print_stats
 from requests_bot.watchdog import reset_watchdog, check_watchdog, reset_no_progress_counter
+from requests_bot.config import DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings
 from requests_bot.logger import (
     init_logger, get_log_file,
     log_info, log_warning, log_error, log_debug,
     log_session_start, log_session_end, log_cycle_start,
     log_dungeon_start, log_dungeon_result, log_watchdog
 )
-
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE_URL = "https://vmmo.vten.ru"
-DUNGEONS_URL = f"{BASE_URL}/dungeons?52"
-
-
-def load_settings():
-    """Загружает настройки из settings.json"""
-    settings_path = os.path.join(SCRIPT_DIR, "settings.json")
-    try:
-        with open(settings_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
 
 
 class VMMOBot:
@@ -76,7 +62,7 @@ class VMMOBot:
 
         # Настройки
         self.settings = load_settings()
-        self.backpack_threshold = self.settings.get("backpack_threshold", 18)
+        self.backpack_threshold = self.settings.get("backpack_threshold", BACKPACK_THRESHOLD)
 
     def init_clients(self):
         """Инициализирует все клиенты"""
