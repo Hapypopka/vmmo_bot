@@ -148,6 +148,15 @@ class BackpackClient:
 
         log_debug(f"[BACKPACK] Найдено item_divs: {len(item_divs)}")
 
+        # Если ничего не нашли - диагностика
+        if not item_divs:
+            log_debug(f"[BACKPACK] Предметы не найдены! URL: {self.client.current_url}")
+            # Ищем любые кнопки a.go-btn для диагностики
+            all_buttons = soup.select("a.go-btn")
+            log_debug(f"[BACKPACK] Всего a.go-btn на странице: {len(all_buttons)}")
+            for btn in all_buttons[:5]:
+                log_debug(f"[BACKPACK] Кнопка: {btn.get_text(strip=True)[:30]}")
+
         for item_div in item_divs:
             # Название предмета
             name_link = item_div.select_one("span.e-name a")
