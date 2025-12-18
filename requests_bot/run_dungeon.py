@@ -308,24 +308,26 @@ class DungeonRunner:
         # 5. Ищем кнопку "Начать бой"
         return self._start_combat()
 
-    def _start_combat(self):
+    def _start_combat(self, retry=0):
         """Начинает бой из lobby/standby/step страницы"""
         html = self.client.current_page
         soup = self.client.soup()
 
-        # Вариант 1: Кнопка "Продолжить бой" (после этапа)
+        # Вариант 1: Кнопка "Продолжить бой" или "Начать бой" (после этапа / на standby)
         if soup:
             for btn in soup.select("a.go-btn"):
                 btn_text = btn.get_text(strip=True)
                 href = btn.get("href", "")
-                if "Продолжить бой" in btn_text and href and href != "#" and not href.startswith("javascript"):
-                    print(f"[*] Found 'Продолжить бой' button")
+                # Ищем обе кнопки
+                if ("Продолжить бой" in btn_text or "Начать бой" in btn_text) and href and href != "#" and not href.startswith("javascript"):
+                    print(f"[*] Found '{btn_text}' button")
                     resp = self.client.get(href)
                     if "/combat" in resp.url:
                         self.combat_url = resp.url
                         return True
-                    # Может быть редирект на standby
-                    return self._start_combat()
+                    # Может быть редирект на standby - ждём и пробуем снова
+                    time.sleep(0.5)
+                    return self._start_combat(retry=retry)
 
         # Вариант 2: ppAction=combat
         start_btn = re.search(
@@ -387,6 +389,13 @@ class DungeonRunner:
                     resp = self.client.get(combat_url)
                     self.combat_url = resp.url
                     return "/combat" in resp.url
+
+        # Retry: страница могла не загрузиться полностью
+        if retry < 3:
+            print(f"[*] Retrying start combat ({retry + 1}/3)...")
+            time.sleep(1)
+            self.client.get(self.client.current_url)  # Обновляем страницу
+            return self._start_combat(retry=retry + 1)
 
         print("[ERR] Could not start combat")
         return False
