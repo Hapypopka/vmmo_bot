@@ -83,6 +83,14 @@ class HellGamesClient:
 
     def _make_ajax_request(self, url):
         """AJAX запрос"""
+        # Защита от javascript: URLs
+        if not url or url.startswith("javascript"):
+            return None
+
+        # Делаем URL абсолютным если нужно
+        if not url.startswith("http"):
+            url = urljoin(self.client.current_url, url)
+
         base_path = self.client.current_url.split("?")[0].replace(BASE_URL, "")
         headers = {
             "Wicket-Ajax": "true",
@@ -180,10 +188,19 @@ class HellGamesClient:
         keeper_unit = soup.select_one("div.unit._unit-pos-22")
         if keeper_unit:
             unit_link = keeper_unit.select_one("a.unit-link")
-            if unit_link and unit_link.get("href"):
-                return urljoin(BASE_URL, unit_link["href"])
+            if unit_link:
+                # Проверяем href (если не javascript:;)
+                href = unit_link.get("href", "")
+                if href and not href.startswith("javascript"):
+                    return urljoin(BASE_URL, href)
 
-        # Fallback: ищем в AJAX URLs
+                # Проверяем onclick для Wicket AJAX
+                onclick = unit_link.get("onclick", "")
+                match = re.search(r"u:'([^']+)'", onclick)
+                if match:
+                    return urljoin(self.client.current_url, match.group(1))
+
+        # Fallback: ищем в AJAX URLs по ID элемента
         urls = self._parse_ajax_urls(self.client.current_page)
         for element_id, url in urls.items():
             if "unit-pos-22" in element_id or "entities-1" in url:
@@ -216,7 +233,7 @@ class HellGamesClient:
 
             # Скилл готов - используем
             resp = self._make_ajax_request(skill_urls[pos])
-            if resp.status_code == 200:
+            if resp and resp.status_code == 200:
                 print(f"[HELL] Использован скилл {pos}")
                 self.skill_cooldowns[pos] = now
                 self.last_gcd_time = now
@@ -233,7 +250,7 @@ class HellGamesClient:
             return False
 
         resp = self._make_ajax_request(attack_url)
-        if resp.status_code == 200:
+        if resp and resp.status_code == 200:
             # Обновляем страницу
             self.client.get(self.client.current_url)
             return True
@@ -242,7 +259,7 @@ class HellGamesClient:
     def switch_to_source(self, source_url):
         """Переключается на источник"""
         resp = self._make_ajax_request(source_url)
-        if resp.status_code == 200:
+        if resp and resp.status_code == 200:
             time.sleep(2)
             self.client.get(self.client.current_url)
             return True
@@ -253,7 +270,7 @@ class HellGamesClient:
         keeper_url = self.get_keeper_url()
         if keeper_url:
             resp = self._make_ajax_request(keeper_url)
-            if resp.status_code == 200:
+            if resp and resp.status_code == 200:
                 print("[HELL] Выбрали хранителя как цель")
                 self.client.get(self.client.current_url)
                 return True
