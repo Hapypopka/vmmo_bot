@@ -228,9 +228,75 @@ def get_main_keyboard():
     keyboard = [
         [KeyboardButton("📡 Статус"), KeyboardButton("📊 Статистика"), KeyboardButton("📋 Логи")],
         [KeyboardButton("▶️ Запустить"), KeyboardButton("⏹️ Остановить"), KeyboardButton("🔄 Рестарт")],
-        [KeyboardButton("📥 Pull")]
+        [KeyboardButton("📥 Pull"), KeyboardButton("🤖 AI Debug")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+# Немецкий сервер с Claude Code
+CLAUDE_SERVER = "45.148.117.107"
+
+def ask_claude(prompt: str) -> str:
+    """Отправляет запрос к Claude через немецкий сервер"""
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=10", f"root@{CLAUDE_SERVER}",
+             f"/root/ask_claude.sh \"{prompt}\""],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        else:
+            return f"Ошибка: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Ошибка: таймаут запроса к Claude"
+    except Exception as e:
+        return f"Ошибка: {e}"
+
+
+async def cmd_ai_debug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """AI Debug - анализ логов через Claude"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    await update.message.reply_text("🤖 Собираю информацию для анализа...")
+
+    # Собираем логи всех ботов
+    logs_info = []
+    for profile, name in PROFILE_NAMES.items():
+        activity = get_last_activity(profile)
+        logs_info.append(activity)
+
+    # Собираем статус
+    status_info = []
+    for profile, name in PROFILE_NAMES.items():
+        status = get_bot_status(profile)
+        status_info.append(f"{name}: {status}")
+
+    # Формируем промпт для Claude
+    prompt = f"""Ты помощник для дебага VMMO ботов. Проанализируй состояние ботов и дай рекомендации.
+
+Статус ботов:
+{chr(10).join(status_info)}
+
+Последние логи:
+{chr(10).join(logs_info)}
+
+Что не так с ботами? Если есть проблемы - предложи решение. Отвечай кратко на русском."""
+
+    await update.message.reply_text("🔄 Отправляю запрос к Claude...")
+
+    # Запрос к Claude в отдельном потоке чтобы не блокировать бота
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, ask_claude, prompt)
+
+    # Обрезаем если слишком длинный
+    if len(response) > 4000:
+        response = response[:4000] + "..."
+
+    await update.message.reply_text(f"🤖 Claude:\n\n{response}", reply_markup=get_main_keyboard())
 
 
 async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -454,6 +520,9 @@ async def handle_button_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif text == "🔄 Рестарт":
         await cmd_restart_bot(update, context)
+
+    elif text == "🤖 AI Debug":
+        await cmd_ai_debug(update, context)
 
 
 # ============================================
