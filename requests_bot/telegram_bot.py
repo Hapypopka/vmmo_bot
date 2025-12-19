@@ -240,11 +240,11 @@ def ask_claude(prompt: str) -> str:
     """Отправляет запрос к Claude через немецкий сервер"""
     try:
         result = subprocess.run(
-            ["ssh", "-o", "ConnectTimeout=10", f"root@{CLAUDE_SERVER}",
+            ["ssh", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30", f"root@{CLAUDE_SERVER}",
              f"/root/ask_claude.sh \"{prompt}\""],
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=180  # 3 минуты
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -523,6 +523,17 @@ async def handle_button_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif text == "🤖 AI Debug":
         await cmd_ai_debug(update, context)
+
+    elif text.startswith("/ask "):
+        # Прямой запрос к Claude: /ask твой вопрос
+        question = text[5:].strip()
+        if question:
+            await update.message.reply_text("🤖 Думаю...")
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, ask_claude, question)
+            if len(response) > 4000:
+                response = response[:4000] + "..."
+            await update.message.reply_text(f"🤖 Claude:\n\n{response}", reply_markup=get_main_keyboard())
 
 
 # ============================================
