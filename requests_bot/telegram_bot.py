@@ -16,8 +16,8 @@ from typing import Dict, Optional
 
 # Telegram
 try:
-    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-    from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+    from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 except ImportError:
     print("Установи python-telegram-bot: pip install python-telegram-bot")
     sys.exit(1)
@@ -157,6 +157,15 @@ def get_stats(profile: str) -> str:
 # Telegram Handlers
 # ============================================
 
+def get_main_keyboard():
+    """Возвращает главную клавиатуру"""
+    keyboard = [
+        [KeyboardButton("📡 Статус"), KeyboardButton("📊 Статистика"), KeyboardButton("📥 Pull")],
+        [KeyboardButton("▶️ Запустить"), KeyboardButton("⏹️ Остановить"), KeyboardButton("🔄 Рестарт")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
     user_id = update.effective_user.id
@@ -169,16 +178,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "🤖 VMMO Bot Manager\n\n"
-        "Команды:\n"
-        "/status - Статус всех ботов\n"
-        "/stats - Статистика\n"
-        "/start_bot - Запустить бота\n"
-        "/stop_bot - Остановить бота\n"
-        "/restart_bot - Перезапустить бота\n"
-        "/stop_all - Остановить всех\n"
-        "/restart_all - Перезапустить всех\n"
-        "/pull - Git pull на сервере"
+        "🤖 VMMO Bot Manager\n\nВыбери действие:",
+        reply_markup=get_main_keyboard()
     )
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -346,6 +347,32 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(msg)
 
 
+async def handle_button_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик текстовых кнопок"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    text = update.message.text
+
+    if text == "📡 Статус":
+        await cmd_status(update, context)
+
+    elif text == "📊 Статистика":
+        await cmd_stats(update, context)
+
+    elif text == "📥 Pull":
+        await cmd_pull(update, context)
+
+    elif text == "▶️ Запустить":
+        await cmd_start_bot(update, context)
+
+    elif text == "⏹️ Остановить":
+        await cmd_stop_bot(update, context)
+
+    elif text == "🔄 Рестарт":
+        await cmd_restart_bot(update, context)
+
+
 # ============================================
 # Уведомления (для вызова из других модулей)
 # ============================================
@@ -424,6 +451,8 @@ def main():
     app.add_handler(CommandHandler("restart_all", cmd_restart_all))
     app.add_handler(CommandHandler("pull", cmd_pull))
     app.add_handler(CallbackQueryHandler(callback_handler))
+    # Обработчик текстовых кнопок
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_button_text))
 
     # Запуск
     print("[TELEGRAM] Бот запущен! Жду команды...")
