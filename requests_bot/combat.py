@@ -124,6 +124,34 @@ class CombatParser:
                 })
         return units
 
+    def get_enemy_hp(self):
+        """Возвращает текущий HP врага (из шапки справа)
+
+        Returns:
+            int: HP врага в абсолютных значениях, или 0 если не найден
+        """
+        # HP врага находится в .battlefield-head-right .battlefield-head-hp-text
+        enemy_head = self.soup.select_one(".battlefield-head-right")
+        if not enemy_head:
+            return 0
+
+        hp_text_el = enemy_head.select_one(".battlefield-head-hp-text")
+        if not hp_text_el:
+            return 0
+
+        hp_text = hp_text_el.get_text(strip=True)
+        # Формат: "197.8K / 264.3K" или "640 / 640"
+        # Берём первое число (текущий HP)
+        match = re.match(r'([\d.,]+)(K)?', hp_text)
+        if not match:
+            return 0
+
+        hp_value = float(match.group(1).replace(',', '.'))
+        if match.group(2) == 'K':
+            hp_value *= 1000
+
+        return int(hp_value)
+
     def is_battle_active(self):
         """Проверяет активен ли бой"""
         return self.get_attack_url() is not None

@@ -16,7 +16,7 @@ from requests_bot.combat import CombatParser
 from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_watchdog
 from requests_bot.config import (
     BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR,
-    get_skill_cooldowns, get_dungeon_difficulty
+    get_skill_cooldowns, get_dungeon_difficulty, get_skill_hp_threshold
 )
 
 
@@ -644,6 +644,10 @@ class DungeonRunner:
             now = time.time()
             if (now - last_gcd_time) >= GCD:
                 ready_skills = parser.get_ready_skills()
+                # Получаем HP врага и пороги скиллов
+                enemy_hp = parser.get_enemy_hp()
+                hp_thresholds = get_skill_hp_threshold()
+
                 for skill in ready_skills:
                     pos = skill["pos"]
                     # Проверяем индивидуальный КД скилла
@@ -652,9 +656,15 @@ class DungeonRunner:
                     if (now - last_use) < skill_cd:
                         continue  # Этот скилл ещё на КД
 
+                    # Проверяем порог HP для этого скилла
+                    if pos in hp_thresholds:
+                        min_hp = hp_thresholds[pos]
+                        if enemy_hp < min_hp:
+                            continue  # HP врага ниже порога, пропускаем скилл
+
                     resp = self._make_ajax_request(skill["url"])
                     if resp and resp.status_code == 200:
-                        print(f"[SKILL] Used skill {pos}")
+                        print(f"[SKILL] Used skill {pos} (enemy HP: {enemy_hp})")
                         actions += 1
                         skill_cooldowns[pos] = time.time()
                         last_gcd_time = time.time()

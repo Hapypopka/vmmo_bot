@@ -15,6 +15,11 @@
         "5": 42.5
     },
 
+    "skill_hp_threshold": {
+        "2": 20000,
+        "3": 20000
+    },
+
     "skip_dungeons": [],
 
     "dungeon_action_limits": {

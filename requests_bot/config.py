@@ -178,6 +178,23 @@ def get_skill_cooldowns():
     return {int(k): v for k, v in skill_cds.items()} if skill_cds else None
 
 
+def get_skill_hp_threshold():
+    """Возвращает пороги HP для использования скиллов.
+
+    Формат в config.json:
+    "skill_hp_threshold": {
+        "2": 20000,  // Скилл 2 только если HP врага > 20k
+        "3": 20000   // Скилл 3 только если HP врага > 20k
+    }
+
+    Returns:
+        dict: {skill_pos: min_hp} или {} если не задано
+    """
+    thresholds = _profile_config.get("skill_hp_threshold", {})
+    # Конвертируем ключи в int
+    return {int(k): v for k, v in thresholds.items()} if thresholds else {}
+
+
 def get_credentials():
     """Возвращает логин/пароль для текущего профиля"""
     username = _profile_config.get("username")
