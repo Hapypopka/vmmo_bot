@@ -70,12 +70,29 @@ def is_allowed(user_id: int) -> bool:
 
 def get_bot_status(profile: str) -> str:
     """Возвращает статус бота"""
+    # Сначала проверяем через менеджер
     if profile in bot_processes:
         proc = bot_processes[profile]
         if proc.poll() is None:
             return "🟢 Работает"
         else:
+            del bot_processes[profile]
             return "🔴 Остановлен (код: {})".format(proc.returncode)
+
+    # Проверяем через pgrep - вдруг запущен не через менеджер
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", f"requests_bot.bot.*--profile.*{profile}"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            pid = result.stdout.strip().split()[0]
+            return f"🟡 Работает (PID: {pid}, не через ТГ)"
+    except:
+        pass
+
     return "⚪ Не запущен"
 
 def start_bot(profile: str) -> tuple[bool, str]:
@@ -111,25 +128,47 @@ def start_bot(profile: str) -> tuple[bool, str]:
 
 def stop_bot(profile: str) -> tuple[bool, str]:
     """Останавливает бота"""
-    if profile not in bot_processes:
-        return False, "Бот не запущен через менеджер"
+    name = PROFILE_NAMES.get(profile, profile)
+    stopped = False
 
-    proc = bot_processes[profile]
-    if proc.poll() is not None:
+    # Сначала пробуем через менеджер
+    if profile in bot_processes:
+        proc = bot_processes[profile]
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+                stopped = True
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stopped = True
+            except:
+                pass
         del bot_processes[profile]
-        return False, "Бот уже остановлен"
 
+    # Принудительно убиваем все процессы этого профиля через pkill
     try:
-        proc.terminate()
-        proc.wait(timeout=5)
-        del bot_processes[profile]
-        return True, f"Бот {PROFILE_NAMES.get(profile, profile)} остановлен"
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        del bot_processes[profile]
-        return True, f"Бот {PROFILE_NAMES.get(profile, profile)} убит (kill)"
-    except Exception as e:
-        return False, f"Ошибка остановки: {e}"
+        result = subprocess.run(
+            ["pkill", "-f", f"requests_bot.bot.*--profile.*{profile}"],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            stopped = True
+    except:
+        pass
+
+    # Удаляем lock-файл если остался
+    lock_file = os.path.join(PROFILES_DIR, profile, ".lock")
+    try:
+        os.remove(lock_file)
+    except:
+        pass
+
+    if stopped:
+        return True, f"Бот {name} остановлен"
+    else:
+        return False, f"Бот {name} не был запущен"
 
 def restart_bot(profile: str) -> tuple[bool, str]:
     """Перезапускает бота"""
