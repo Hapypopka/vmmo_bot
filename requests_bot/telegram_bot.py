@@ -245,7 +245,7 @@ def ask_claude(prompt: str) -> str:
             ["su", "-", "claude", "-c", f"cd /home/claude/vmmo_bot && /home/claude/ask_claude.sh '{prompt}'"],
             capture_output=True,
             text=True,
-            timeout=180  # 3 минуты на сложные задачи
+            timeout=900  # 15 минут на сложные задачи
         )
         output = result.stdout.strip()
         if result.returncode == 0 and output:
@@ -255,7 +255,7 @@ def ask_claude(prompt: str) -> str:
         else:
             return "Нет ответа от Claude"
     except subprocess.TimeoutExpired:
-        return "Ошибка: таймаут запроса к Claude (3 мин)"
+        return "Ошибка: таймаут запроса к Claude (15 мин)"
     except Exception as e:
         return f"Ошибка: {e}"
 
