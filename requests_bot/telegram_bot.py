@@ -86,16 +86,26 @@ def start_bot(profile: str) -> tuple[bool, str]:
             return False, "Бот уже запущен"
 
     try:
-        # Запускаем в фоне
+        # Создаём папку логов профиля если нет
+        log_dir = os.path.join(PROFILES_DIR, profile, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+
+        # Файл лога с датой
+        log_file = os.path.join(log_dir, f"bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+
+        # Открываем файл для логов
+        log_handle = open(log_file, "w", encoding="utf-8")
+
+        # Запускаем в фоне с выводом в файл
         proc = subprocess.Popen(
             [sys.executable, "-m", "requests_bot.bot", "--profile", profile],
             cwd=SCRIPT_DIR,
-            stdout=subprocess.PIPE,
+            stdout=log_handle,
             stderr=subprocess.STDOUT,
-            text=True
+            start_new_session=True  # Отвязываем от родительского процесса
         )
         bot_processes[profile] = proc
-        return True, f"Бот {PROFILE_NAMES.get(profile, profile)} запущен (PID: {proc.pid})"
+        return True, f"Бот {PROFILE_NAMES.get(profile, profile)} запущен (PID: {proc.pid})\nЛог: {log_file}"
     except Exception as e:
         return False, f"Ошибка запуска: {e}"
 
