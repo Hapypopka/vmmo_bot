@@ -237,25 +237,22 @@ def get_main_keyboard():
 waiting_for_ai_question: Dict[int, bool] = {}
 
 
-# Немецкий сервер с Claude Code
-CLAUDE_SERVER = "45.148.117.107"
-
 def ask_claude(prompt: str) -> str:
-    """Отправляет запрос к Claude через немецкий сервер"""
+    """Отправляет запрос к Claude локально"""
     try:
         result = subprocess.run(
-            ["ssh", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30", f"root@{CLAUDE_SERVER}",
-             f"/root/ask_claude.sh \"{prompt}\""],
+            ["claude", "-p", prompt],
             capture_output=True,
             text=True,
-            timeout=180  # 3 минуты
+            timeout=120,
+            cwd="/root"
         )
         if result.returncode == 0:
             return result.stdout.strip()
         else:
             return f"Ошибка: {result.stderr}"
     except subprocess.TimeoutExpired:
-        return "Ошибка: таймаут запроса к Claude"
+        return "Ошибка: таймаут запроса к Claude (2 мин)"
     except Exception as e:
         return f"Ошибка: {e}"
 
