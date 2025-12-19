@@ -33,6 +33,12 @@ from requests_bot.logger import (
     log_dungeon_start, log_dungeon_result, log_watchdog
 )
 
+# Telegram уведомления (опционально)
+try:
+    from requests_bot.telegram_bot import notify_sync as telegram_notify
+except ImportError:
+    telegram_notify = lambda msg: None  # Заглушка если модуль недоступен
+
 
 class VMMOBot:
     """Главный бот для VMMO"""
@@ -324,12 +330,19 @@ class VMMOBot:
                     current_diff = self.dungeon_runner.current_difficulty
                     record_death(dungeon_id, dungeon_name, current_diff)
 
+                    # Уведомление в Telegram о смерти
+                    profile = get_profile_name() or "unknown"
+                    telegram_notify(f"💀 [{profile}] Умер в {dungeon_name} ({current_diff})")
+
                     self.dungeon_runner.resurrect()
                     self.check_and_resurrect_pet()
 
                 elif result in ("watchdog", "stuck"):
                     self.stats["watchdog_triggers"] += 1
                     log_dungeon_result(dungeon_name, result, actions)
+                    # Уведомление в Telegram о застревании
+                    profile = get_profile_name() or "unknown"
+                    telegram_notify(f"⚠️ [{profile}] Watchdog: застрял в {dungeon_name}")
                     # Пробуем вернуться в данжены
                     self.client.get("/dungeons?52")
                     reset_watchdog()
@@ -402,6 +415,9 @@ class VMMOBot:
                     log_error(f"Критическая ошибка в цикле {cycle}: {e}")
                     log_debug(traceback.format_exc())
                     self.stats["errors"] += 1
+                    # Уведомление в Telegram
+                    profile = get_profile_name() or "unknown"
+                    telegram_notify(f"🔴 [{profile}] Критическая ошибка!\n{e}")
                     # Пробуем восстановиться
                     time.sleep(5)
                     try:

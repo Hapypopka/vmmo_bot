@@ -1,0 +1,434 @@
+# ============================================
+# VMMO Bot - Telegram Management Bot
+# ============================================
+# Управление ботами через Telegram
+# Запуск: python -m requests_bot.telegram_bot
+# ============================================
+
+import os
+import sys
+import json
+import subprocess
+import signal
+import asyncio
+from datetime import datetime
+from typing import Dict, Optional
+
+# Telegram
+try:
+    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+except ImportError:
+    print("Установи python-telegram-bot: pip install python-telegram-bot")
+    sys.exit(1)
+
+# Пути
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROFILES_DIR = os.path.join(SCRIPT_DIR, "profiles")
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "telegram_config.json")
+
+# Маппинг profile -> username (для отображения)
+PROFILE_NAMES = {
+    "char1": "nza",
+    "char2": "Happypoq",
+    "char3": "Arilyn"
+}
+
+# Обратный маппинг
+USERNAME_TO_PROFILE = {v: k for k, v in PROFILE_NAMES.items()}
+
+# Активные процессы ботов {profile: subprocess.Popen}
+bot_processes: Dict[str, subprocess.Popen] = {}
+
+# Конфиг
+def load_config():
+    """Загружает конфиг телеграм бота"""
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_config(config):
+    """Сохраняет конфиг"""
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+config = load_config()
+BOT_TOKEN = config.get("bot_token", "")
+ALLOWED_USERS = config.get("allowed_users", [])  # Список chat_id
+
+def is_allowed(user_id: int) -> bool:
+    """Проверяет доступ пользователя"""
+    if not ALLOWED_USERS:
+        return True  # Если список пустой - разрешаем всем (для первоначальной настройки)
+    return user_id in ALLOWED_USERS
+
+
+# ============================================
+# Управление процессами ботов
+# ============================================
+
+def get_bot_status(profile: str) -> str:
+    """Возвращает статус бота"""
+    if profile in bot_processes:
+        proc = bot_processes[profile]
+        if proc.poll() is None:
+            return "🟢 Работает"
+        else:
+            return "🔴 Остановлен (код: {})".format(proc.returncode)
+    return "⚪ Не запущен"
+
+def start_bot(profile: str) -> tuple[bool, str]:
+    """Запускает бота"""
+    if profile in bot_processes:
+        proc = bot_processes[profile]
+        if proc.poll() is None:
+            return False, "Бот уже запущен"
+
+    try:
+        # Запускаем в фоне
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "requests_bot.bot", "--profile", profile],
+            cwd=SCRIPT_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        bot_processes[profile] = proc
+        return True, f"Бот {PROFILE_NAMES.get(profile, profile)} запущен (PID: {proc.pid})"
+    except Exception as e:
+        return False, f"Ошибка запуска: {e}"
+
+def stop_bot(profile: str) -> tuple[bool, str]:
+    """Останавливает бота"""
+    if profile not in bot_processes:
+        return False, "Бот не запущен через менеджер"
+
+    proc = bot_processes[profile]
+    if proc.poll() is not None:
+        del bot_processes[profile]
+        return False, "Бот уже остановлен"
+
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+        del bot_processes[profile]
+        return True, f"Бот {PROFILE_NAMES.get(profile, profile)} остановлен"
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        del bot_processes[profile]
+        return True, f"Бот {PROFILE_NAMES.get(profile, profile)} убит (kill)"
+    except Exception as e:
+        return False, f"Ошибка остановки: {e}"
+
+def restart_bot(profile: str) -> tuple[bool, str]:
+    """Перезапускает бота"""
+    stop_bot(profile)
+    return start_bot(profile)
+
+def get_stats(profile: str) -> str:
+    """Возвращает статистику бота"""
+    stats_file = os.path.join(PROFILES_DIR, profile, "stats.json")
+    if not os.path.exists(stats_file):
+        # Пробуем глобальный файл
+        stats_file = os.path.join(SCRIPT_DIR, "stats.json")
+
+    if not os.path.exists(stats_file):
+        return "Статистика недоступна"
+
+    try:
+        with open(stats_file, "r", encoding="utf-8") as f:
+            stats = json.load(f)
+
+        name = PROFILE_NAMES.get(profile, profile)
+        lines = [f"📊 Статистика {name}:"]
+        lines.append(f"├ Данжей пройдено: {stats.get('dungeons_completed', 0)}")
+        lines.append(f"├ Смертей: {stats.get('deaths', 0)}")
+        lines.append(f"├ Действий: {stats.get('total_actions', 0)}")
+        lines.append(f"├ Hell Games: {stats.get('hell_games_completed', 0)}")
+        lines.append(f"├ Питомцев воскрешено: {stats.get('pets_resurrected', 0)}")
+        lines.append(f"└ Время работы: {stats.get('uptime', 'N/A')}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Ошибка чтения статистики: {e}"
+
+
+# ============================================
+# Telegram Handlers
+# ============================================
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /start"""
+    user_id = update.effective_user.id
+
+    if not is_allowed(user_id):
+        await update.message.reply_text(
+            f"⛔ Доступ запрещён\nТвой ID: {user_id}\n"
+            "Добавь его в telegram_config.json -> allowed_users"
+        )
+        return
+
+    await update.message.reply_text(
+        "🤖 VMMO Bot Manager\n\n"
+        "Команды:\n"
+        "/status - Статус всех ботов\n"
+        "/stats - Статистика\n"
+        "/start_bot - Запустить бота\n"
+        "/stop_bot - Остановить бота\n"
+        "/restart_bot - Перезапустить бота\n"
+        "/stop_all - Остановить всех\n"
+        "/restart_all - Перезапустить всех\n"
+        "/pull - Git pull на сервере"
+    )
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статус всех ботов"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    lines = ["📡 Статус ботов:\n"]
+    for profile, name in PROFILE_NAMES.items():
+        status = get_bot_status(profile)
+        lines.append(f"{name}: {status}")
+
+    await update.message.reply_text("\n".join(lines))
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика - показывает кнопки выбора"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    keyboard = []
+    for profile, name in PROFILE_NAMES.items():
+        keyboard.append([InlineKeyboardButton(name, callback_data=f"stats_{profile}")])
+    keyboard.append([InlineKeyboardButton("📊 Все", callback_data="stats_all")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Выбери бота:", reply_markup=reply_markup)
+
+async def cmd_start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запуск бота - показывает кнопки"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    keyboard = []
+    for profile, name in PROFILE_NAMES.items():
+        keyboard.append([InlineKeyboardButton(f"▶️ {name}", callback_data=f"start_{profile}")])
+    keyboard.append([InlineKeyboardButton("▶️ Всех", callback_data="start_all")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Запустить бота:", reply_markup=reply_markup)
+
+async def cmd_stop_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Остановка бота - показывает кнопки"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    keyboard = []
+    for profile, name in PROFILE_NAMES.items():
+        keyboard.append([InlineKeyboardButton(f"⏹️ {name}", callback_data=f"stop_{profile}")])
+    keyboard.append([InlineKeyboardButton("⏹️ Всех", callback_data="stop_all")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Остановить бота:", reply_markup=reply_markup)
+
+async def cmd_restart_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перезапуск бота - показывает кнопки"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    keyboard = []
+    for profile, name in PROFILE_NAMES.items():
+        keyboard.append([InlineKeyboardButton(f"🔄 {name}", callback_data=f"restart_{profile}")])
+    keyboard.append([InlineKeyboardButton("🔄 Всех", callback_data="restart_all")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Перезапустить бота:", reply_markup=reply_markup)
+
+async def cmd_stop_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Остановить всех ботов"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    results = []
+    for profile, name in PROFILE_NAMES.items():
+        success, msg = stop_bot(profile)
+        results.append(f"{name}: {msg}")
+
+    await update.message.reply_text("⏹️ Остановка всех:\n" + "\n".join(results))
+
+async def cmd_restart_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перезапустить всех ботов"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    results = []
+    for profile, name in PROFILE_NAMES.items():
+        success, msg = restart_bot(profile)
+        results.append(f"{name}: {msg}")
+
+    await update.message.reply_text("🔄 Перезапуск всех:\n" + "\n".join(results))
+
+async def cmd_pull(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Git pull"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    try:
+        result = subprocess.run(
+            ["git", "pull"],
+            cwd=SCRIPT_DIR,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        output = result.stdout + result.stderr
+        await update.message.reply_text(f"📥 Git pull:\n```\n{output}\n```", parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
+async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик callback кнопок"""
+    query = update.callback_query
+    await query.answer()
+
+    if not is_allowed(query.from_user.id):
+        return
+
+    data = query.data
+
+    # Stats
+    if data.startswith("stats_"):
+        profile = data[6:]
+        if profile == "all":
+            texts = [get_stats(p) for p in PROFILE_NAMES.keys()]
+            await query.edit_message_text("\n\n".join(texts))
+        else:
+            await query.edit_message_text(get_stats(profile))
+
+    # Start
+    elif data.startswith("start_"):
+        profile = data[6:]
+        if profile == "all":
+            results = []
+            for p, name in PROFILE_NAMES.items():
+                success, msg = start_bot(p)
+                results.append(f"{name}: {msg}")
+            await query.edit_message_text("▶️ Запуск:\n" + "\n".join(results))
+        else:
+            success, msg = start_bot(profile)
+            await query.edit_message_text(msg)
+
+    # Stop
+    elif data.startswith("stop_"):
+        profile = data[5:]
+        if profile == "all":
+            results = []
+            for p, name in PROFILE_NAMES.items():
+                success, msg = stop_bot(p)
+                results.append(f"{name}: {msg}")
+            await query.edit_message_text("⏹️ Остановка:\n" + "\n".join(results))
+        else:
+            success, msg = stop_bot(profile)
+            await query.edit_message_text(msg)
+
+    # Restart
+    elif data.startswith("restart_"):
+        profile = data[8:]
+        if profile == "all":
+            results = []
+            for p, name in PROFILE_NAMES.items():
+                success, msg = restart_bot(p)
+                results.append(f"{name}: {msg}")
+            await query.edit_message_text("🔄 Перезапуск:\n" + "\n".join(results))
+        else:
+            success, msg = restart_bot(profile)
+            await query.edit_message_text(msg)
+
+
+# ============================================
+# Уведомления (для вызова из других модулей)
+# ============================================
+
+_telegram_app: Optional[Application] = None
+_chat_id: Optional[int] = None
+
+async def send_notification(message: str):
+    """Отправляет уведомление в Telegram"""
+    global _telegram_app, _chat_id
+    if _telegram_app and _chat_id:
+        try:
+            await _telegram_app.bot.send_message(chat_id=_chat_id, text=message)
+        except Exception as e:
+            print(f"[TELEGRAM] Ошибка отправки: {e}")
+
+def notify_sync(message: str):
+    """Синхронная отправка уведомления (для вызова из других модулей)"""
+    if not BOT_TOKEN or not ALLOWED_USERS:
+        return
+
+    import requests
+    try:
+        for chat_id in ALLOWED_USERS:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=10)
+    except Exception as e:
+        print(f"[TELEGRAM] Ошибка отправки: {e}")
+
+
+# ============================================
+# Main
+# ============================================
+
+def main():
+    global _telegram_app, _chat_id
+
+    if not BOT_TOKEN:
+        print("=" * 50)
+        print("Telegram бот не настроен!")
+        print("1. Создай бота через @BotFather")
+        print("2. Получи токен")
+        print("3. Создай telegram_config.json:")
+        print(json.dumps({
+            "bot_token": "YOUR_BOT_TOKEN",
+            "allowed_users": [123456789]
+        }, indent=2))
+        print("=" * 50)
+
+        # Создаём пример конфига
+        if not os.path.exists(CONFIG_FILE):
+            save_config({
+                "bot_token": "YOUR_BOT_TOKEN_HERE",
+                "allowed_users": []
+            })
+            print(f"Создан {CONFIG_FILE} - заполни его!")
+        return
+
+    print(f"[TELEGRAM] Запуск бота...")
+    print(f"[TELEGRAM] Allowed users: {ALLOWED_USERS}")
+
+    # Создаём приложение
+    app = Application.builder().token(BOT_TOKEN).build()
+    _telegram_app = app
+    if ALLOWED_USERS:
+        _chat_id = ALLOWED_USERS[0]
+
+    # Регистрируем handlers
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("start_bot", cmd_start_bot))
+    app.add_handler(CommandHandler("stop_bot", cmd_stop_bot))
+    app.add_handler(CommandHandler("restart_bot", cmd_restart_bot))
+    app.add_handler(CommandHandler("stop_all", cmd_stop_all))
+    app.add_handler(CommandHandler("restart_all", cmd_restart_all))
+    app.add_handler(CommandHandler("pull", cmd_pull))
+    app.add_handler(CallbackQueryHandler(callback_handler))
+
+    # Запуск
+    print("[TELEGRAM] Бот запущен! Жду команды...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
+    main()
