@@ -159,6 +159,16 @@ def is_event_dungeon_enabled():
     return _profile_config.get("event_dungeon_enabled", True)
 
 
+def is_hell_games_enabled():
+    """Проверяет, включены ли Адские Игры для текущего профиля"""
+    return _profile_config.get("hell_games_enabled", True)
+
+
+def is_pet_resurrection_enabled():
+    """Проверяет, включено ли автовоскрешение питомца для текущего профиля"""
+    return _profile_config.get("pet_resurrection_enabled", False)
+
+
 def get_skill_cooldowns():
     """Возвращает КД скиллов для текущего профиля"""
     skill_cds = _profile_config.get("skill_cooldowns", {})
@@ -173,3 +183,129 @@ def get_credentials():
     if username and password:
         return username, password
     return None, None
+
+
+# ============================================
+# Death Tracking & Difficulty Management
+# ============================================
+
+# Файл для хранения смертей (создаётся в папке профиля)
+_deaths_file = None
+
+# Уровни сложности (от высокой к низкой)
+DIFFICULTY_LEVELS = ["brutal", "hero", "normal"]
+
+
+def _get_deaths_file():
+    """Получает путь к файлу смертей"""
+    global _deaths_file
+    if _deaths_file:
+        return _deaths_file
+
+    if _current_profile:
+        profile_dir = os.path.join(PROFILES_DIR, _current_profile)
+        _deaths_file = os.path.join(profile_dir, "deaths.json")
+    else:
+        _deaths_file = os.path.join(SCRIPT_DIR, "deaths.json")
+
+    return _deaths_file
+
+
+def load_deaths():
+    """Загружает историю смертей из файла"""
+    deaths_file = _get_deaths_file()
+    try:
+        if os.path.exists(deaths_file):
+            with open(deaths_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[CONFIG] Ошибка загрузки deaths.json: {e}")
+    return {}
+
+
+def save_deaths(deaths):
+    """Сохраняет историю смертей в файл"""
+    deaths_file = _get_deaths_file()
+    try:
+        with open(deaths_file, "w", encoding="utf-8") as f:
+            json.dump(deaths, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[CONFIG] Ошибка сохранения deaths.json: {e}")
+
+
+def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
+    """
+    Записывает смерть в данжене.
+
+    Args:
+        dungeon_id: ID данжена (например 'dng:RestMonastery')
+        dungeon_name: Название данжена
+        difficulty: Текущая сложность
+    """
+    deaths = load_deaths()
+
+    if dungeon_id not in deaths:
+        deaths[dungeon_id] = {
+            "name": dungeon_name,
+            "deaths": [],
+            "current_difficulty": difficulty,
+        }
+
+    # Добавляем запись о смерти
+    from datetime import datetime
+    deaths[dungeon_id]["deaths"].append({
+        "time": datetime.now().isoformat(),
+        "difficulty": difficulty,
+    })
+
+    # Снижаем сложность
+    current_diff = deaths[dungeon_id].get("current_difficulty", "brutal")
+    try:
+        current_idx = DIFFICULTY_LEVELS.index(current_diff)
+        if current_idx < len(DIFFICULTY_LEVELS) - 1:
+            new_diff = DIFFICULTY_LEVELS[current_idx + 1]
+            deaths[dungeon_id]["current_difficulty"] = new_diff
+            print(f"[CONFIG] {dungeon_name}: сложность снижена {current_diff} -> {new_diff}")
+        else:
+            print(f"[CONFIG] {dungeon_name}: уже минимальная сложность (normal)")
+    except ValueError:
+        deaths[dungeon_id]["current_difficulty"] = "normal"
+
+    save_deaths(deaths)
+    return deaths[dungeon_id]["current_difficulty"]
+
+
+def get_dungeon_difficulty(dungeon_id):
+    """
+    Получает рекомендуемую сложность для данжена.
+
+    Returns:
+        str: 'brutal', 'hero', или 'normal'
+    """
+    deaths = load_deaths()
+    if dungeon_id in deaths:
+        return deaths[dungeon_id].get("current_difficulty", "brutal")
+    return "brutal"  # По умолчанию Брутал
+
+
+def get_death_stats():
+    """Возвращает статистику смертей для отображения"""
+    deaths = load_deaths()
+    stats = []
+    for dungeon_id, data in deaths.items():
+        stats.append({
+            "id": dungeon_id,
+            "name": data.get("name", dungeon_id),
+            "deaths": len(data.get("deaths", [])),
+            "difficulty": data.get("current_difficulty", "brutal"),
+        })
+    return stats
+
+
+def reset_dungeon_difficulty(dungeon_id):
+    """Сбрасывает сложность данжена на Брутал"""
+    deaths = load_deaths()
+    if dungeon_id in deaths:
+        deaths[dungeon_id]["current_difficulty"] = "brutal"
+        save_deaths(deaths)
+        print(f"[CONFIG] {dungeon_id}: сложность сброшена на brutal")

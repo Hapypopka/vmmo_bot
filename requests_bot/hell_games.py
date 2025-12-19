@@ -50,6 +50,28 @@ class HellGamesClient:
         print("[HELL] Вошли в Адские Игры!")
         return True
 
+    def _check_death(self):
+        """Проверяет умер ли персонаж"""
+        html = self.client.current_page
+        if not html:
+            return False
+
+        # Модальное окно смерти
+        if "battlefield-modal" in html and "_fail" in html:
+            return True
+
+        # Класс _death-hero
+        if "_death-hero" in html:
+            return True
+
+        # Текст смерти
+        html_lower = html.lower()
+        death_texts = ["вы погибли", "ты пала в сражении", "ты пал в сражении"]
+        if any(text in html_lower for text in death_texts):
+            return True
+
+        return False
+
     def _parse_ajax_urls(self, html):
         """Извлекает Wicket AJAX URLs"""
         urls = {}
@@ -279,6 +301,11 @@ class HellGamesClient:
             try:
                 # Обновляем страницу для актуального состояния
                 self.client.get(self.client.current_url)
+
+                # Проверяем смерть
+                if self._check_death():
+                    print("[HELL] Персонаж погиб! Выходим...")
+                    return False
 
                 # Лог времени
                 remaining = int(end_time - time.time())

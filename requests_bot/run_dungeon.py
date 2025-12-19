@@ -14,7 +14,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from requests_bot.client import VMMOClient
 from requests_bot.combat import CombatParser
 from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_watchdog
-from requests_bot.config import BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR, get_skill_cooldowns
+from requests_bot.config import (
+    BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR,
+    get_skill_cooldowns, get_dungeon_difficulty
+)
 
 
 class DungeonRunner:
@@ -26,13 +29,27 @@ class DungeonRunner:
         self.combat_url = None
         self.page_id = None
         self.current_dungeon_id = None  # Текущий данжен для лимитов
+        self.current_difficulty = "brutal"  # Текущая сложность
 
-    def _set_brutal_difficulty(self):
+    def _set_difficulty(self, target="brutal"):
         """
-        Устанавливает сложность Брутал.
-        Кликает на левую стрелку пока не достигнет Брутал.
+        Устанавливает нужную сложность.
+
+        Args:
+            target: 'brutal', 'hero', или 'normal'
+
         Сложности идут по кругу: Норма -> Брутал -> Герой -> Норма...
+        Левая стрелка: Норма -> Брутал -> Герой
+        Правая стрелка: Норма <- Брутал <- Герой
         """
+        # Маппинг русских названий
+        target_map = {
+            "brutal": "брутал",
+            "hero": "герой",
+            "normal": "норма",
+        }
+        target_ru = target_map.get(target, "брутал")
+
         max_attempts = 10  # Защита от бесконечного цикла
 
         for attempt in range(max_attempts):
@@ -44,16 +61,18 @@ class DungeonRunner:
             level_text = soup.select_one(".switch-level-text")
             current_level = level_text.get_text(strip=True).lower() if level_text else ""
 
-            # Если уже Брутал - останавливаемся
-            if "брутал" in current_level:
-                print(f"[*] Сложность: Брутал")
+            # Если уже нужная сложность - останавливаемся
+            if target_ru in current_level:
+                print(f"[*] Сложность: {current_level.title()}")
+                self.current_difficulty = target
                 return
 
-            # Ищем кнопку переключения (левая стрелка)
+            # Ищем кнопку переключения (левая стрелка для повышения)
             switch_left = soup.select_one("a.switch-level-left")
             if not switch_left:
                 # Нет кнопки - данжен не поддерживает переключение (только Норма)
                 print(f"[*] Сложность: {current_level.title()} (без переключения)")
+                self.current_difficulty = "normal"
                 return
 
             href = switch_left.get("href")
@@ -63,13 +82,20 @@ class DungeonRunner:
             print(f"[*] Переключаю: {current_level.title()} -> ...")
             self.client.get(href)
 
-        # Показываем итоговую сложность если не нашли Брутал
+        # Показываем итоговую сложность
         soup = self.client.soup()
         if soup:
             level_text = soup.select_one(".switch-level-text")
             if level_text:
                 final_level = level_text.get_text(strip=True)
                 print(f"[*] Сложность: {final_level}")
+                # Определяем текущую сложность
+                if "брутал" in final_level.lower():
+                    self.current_difficulty = "brutal"
+                elif "герой" in final_level.lower():
+                    self.current_difficulty = "hero"
+                else:
+                    self.current_difficulty = "normal"
 
     def get_all_available_dungeons(self, section_id="tab2"):
         """Получает список всех доступных данженов"""
@@ -130,13 +156,29 @@ class DungeonRunner:
         html = self.client.current_page
         url = self.client.current_url
 
+        if not html:
+            return False
+
         # Проверяем URL на смерть
         if "/dead" in url or "/death" in url:
             return True
 
+        # Проверяем модальное окно смерти (как в Playwright)
+        if "battlefield-modal" in html and "_fail" in html:
+            return True
+
+        # Проверяем класс _death-hero (мобильная версия)
+        if "_death-hero" in html:
+            return True
+
         # Проверяем текст
-        death_texts = ["вы погибли", "вы мертвы", "персонаж мёртв", "you died", "you are dead"]
-        if any(text in html.lower() for text in death_texts):
+        html_lower = html.lower()
+        death_texts = [
+            "вы погибли", "вы мертвы", "персонаж мёртв",
+            "ты пала в сражении", "ты пал в сражении",
+            "you died", "you are dead"
+        ]
+        if any(text in html_lower for text in death_texts):
             return True
 
         return False
@@ -211,8 +253,9 @@ class DungeonRunner:
         resp = self.client.get(landing_url)
         print(f"[*] Landing page loaded: {resp.url}")
 
-        # 3. Устанавливаем сложность Брутал
-        self._set_brutal_difficulty()
+        # 3. Устанавливаем сложность (по умолчанию Брутал, но снижается после смертей)
+        target_difficulty = get_dungeon_difficulty(dungeon_id)
+        self._set_difficulty(target_difficulty)
 
         # 4. Ищем кнопку входа (несколько вариантов)
         html = self.client.current_page

@@ -1,18 +1,18 @@
 {
     "name": "Second Character",
-    "description": "Второй персонаж - без ивента, другие КД",
+    "description": "Второй персонаж - только данжи",
 
-    "username": "Arilyn",
+    "username": "Happypoq",
     "password": "Agesevemu1313!",
 
     "event_dungeon_enabled": false,
+    "hell_games_enabled": false,
+    "pet_resurrection_enabled": true,
 
     "skill_cooldowns": {
-        "1": 15.0,
-        "2": 20.0,
-        "3": 30.0,
-        "4": 45.0,
-        "5": 35.0
+        "1": 14.5,
+        "2": 14.5,
+        "3": 59.5
     },
 
     "skip_dungeons": [],

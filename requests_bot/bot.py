@@ -18,11 +18,13 @@ from requests_bot.hell_games import HellGamesClient, fight_in_hell_games
 from requests_bot.mail import MailClient
 from requests_bot.backpack import BackpackClient
 from requests_bot.popups import PopupsClient
+from requests_bot.pets import PetClient
 from requests_bot.stats import init_stats, get_stats, print_stats
 from requests_bot.watchdog import reset_watchdog, check_watchdog, reset_no_progress_counter
 from requests_bot.config import (
     DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings,
-    set_profile, get_profile_name, is_event_dungeon_enabled, get_credentials
+    set_profile, get_profile_name, is_event_dungeon_enabled, get_credentials,
+    is_pet_resurrection_enabled, record_death
 )
 from requests_bot.logger import (
     init_logger, get_log_file,
@@ -46,6 +48,7 @@ class VMMOBot:
         self.popups_client = None
         self.event_client = None
         self.equip_client = None
+        self.pet_client = None
 
         # Статистика (файловая)
         self.bot_stats = None
@@ -61,6 +64,7 @@ class VMMOBot:
             "hell_games_time": 0,
             "watchdog_triggers": 0,
             "errors": 0,
+            "pets_resurrected": 0,
         }
 
         # Настройки
@@ -75,6 +79,7 @@ class VMMOBot:
         self.popups_client = PopupsClient(self.client)
         self.event_client = EventDungeonClient(self.client)
         self.equip_client = EquipmentClient(self.client)
+        self.pet_client = PetClient(self.client)
 
     def login(self):
         """Авторизация"""
@@ -138,6 +143,21 @@ class VMMOBot:
                 return True
         except Exception as e:
             log_error(f"Ошибка очистки рюкзака: {e}")
+            self.stats["errors"] += 1
+        return False
+
+    def check_and_resurrect_pet(self):
+        """Проверяет и воскрешает питомца если нужно"""
+        if not is_pet_resurrection_enabled():
+            return False
+
+        try:
+            if self.pet_client.check_and_resurrect():
+                self.stats["pets_resurrected"] += 1
+                log_info("Питомец воскрешён")
+                return True
+        except Exception as e:
+            log_error(f"Ошибка воскрешения питомца: {e}")
             self.stats["errors"] += 1
         return False
 
@@ -210,6 +230,7 @@ class VMMOBot:
                 self.stats["deaths"] += 1
                 log_dungeon_result("Сталкер (ивент)", result, actions)
                 self.dungeon_runner.resurrect()
+                self.check_and_resurrect_pet()
 
         # 2. Проверяем рюкзак и почту
         self.cleanup_backpack()
@@ -232,9 +253,10 @@ class VMMOBot:
             api_link_url = None
 
         if not dungeons:
-            # Все на КД - идём в Hell Games
+            # Все на КД - идём в Hell Games (если включены)
+            from requests_bot.config import is_hell_games_enabled
             min_cd, _ = self.get_min_dungeon_cooldown()
-            if min_cd > 0:
+            if min_cd > 0 and is_hell_games_enabled():
                 log_info(f"Все данжены на КД. Hell Games на {min_cd // 60}м...")
                 self.stats["hell_games_time"] += min_cd
                 try:
@@ -242,8 +264,13 @@ class VMMOBot:
                 except Exception as e:
                     log_error(f"Ошибка Hell Games: {e}")
                     self.stats["errors"] += 1
+            elif min_cd > 0:
+                # Hell Games отключены - просто ждём
+                wait_time = min(min_cd, 60)  # Ждём максимум 60 сек за раз
+                log_info(f"Все данжены на КД. Ждём {wait_time}с...")
+                time.sleep(wait_time)
 
-            # После Hell Games снова проверяем данжены
+            # После Hell Games/ожидания снова проверяем данжены
             try:
                 dungeons, api_link_url = self.dungeon_runner.get_all_available_dungeons()
             except Exception as e:
@@ -283,16 +310,22 @@ class VMMOBot:
                     # Очистка после данжена
                     self.cleanup_backpack()
                     self.check_and_collect_mail()
+                    self.check_and_resurrect_pet()
 
                 elif result == "died":
                     self.stats["deaths"] += 1
                     log_dungeon_result(dungeon_name, result, actions)
 
-                    # Записываем смерть
+                    # Записываем смерть в файловую статистику
                     if self.bot_stats:
                         self.bot_stats.death_recorded(dungeon_id)
 
+                    # Записываем смерть и снижаем сложность
+                    current_diff = self.dungeon_runner.current_difficulty
+                    record_death(dungeon_id, dungeon_name, current_diff)
+
                     self.dungeon_runner.resurrect()
+                    self.check_and_resurrect_pet()
 
                 elif result in ("watchdog", "stuck"):
                     self.stats["watchdog_triggers"] += 1
@@ -332,6 +365,7 @@ class VMMOBot:
             "Продано предметов": self.stats['items_sold'],
             "Время в Hell Games": f"{self.stats['hell_games_time'] // 60}м",
             "Watchdog срабатываний": self.stats['watchdog_triggers'],
+            "Питомцев воскрешено": self.stats['pets_resurrected'],
             "Ошибок": self.stats['errors'],
         }
 
@@ -395,7 +429,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="VMMO Bot (requests)")
-    parser.add_argument("--profile", type=str, default=None,
+    parser.add_argument("-p", "--profile", type=str, default=None,
                         help="Профиль персонажа (папка в profiles/)")
     parser.add_argument("--cycles", type=int, default=None,
                         help="Количество циклов (по умолчанию бесконечно)")
