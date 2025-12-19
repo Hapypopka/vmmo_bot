@@ -1,0 +1,25 @@
+{
+    "name": "Third Character",
+    "description": "Третий персонаж - только данжи",
+
+    "username": "Arilyn",
+    "password": "Agesevemu1313!",
+
+    "event_dungeon_enabled": false,
+    "hell_games_enabled": false,
+    "pet_resurrection_enabled": false,
+
+    "skill_cooldowns": {
+        "1": 14.5,
+        "2": 59.5
+    },
+
+    "skip_dungeons": [],
+
+    "dungeon_action_limits": {
+        "dng:ShadowGuard": 500,
+        "dng:Barony": 500,
+        "dng:HighDungeon": 500,
+        "default": 500
+    }
+}
