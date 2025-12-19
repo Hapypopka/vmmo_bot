@@ -228,9 +228,13 @@ def get_main_keyboard():
     keyboard = [
         [KeyboardButton("📡 Статус"), KeyboardButton("📊 Статистика"), KeyboardButton("📋 Логи")],
         [KeyboardButton("▶️ Запустить"), KeyboardButton("⏹️ Остановить"), KeyboardButton("🔄 Рестарт")],
-        [KeyboardButton("📥 Pull"), KeyboardButton("🤖 AI Debug")]
+        [KeyboardButton("📥 Pull"), KeyboardButton("🤖 AI Debug"), KeyboardButton("💬 Спросить AI")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+# Режим ожидания вопроса для AI
+waiting_for_ai_question: Dict[int, bool] = {}
 
 
 # Немецкий сервер с Claude Code
@@ -524,16 +528,27 @@ async def handle_button_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif text == "🤖 AI Debug":
         await cmd_ai_debug(update, context)
 
-    elif text.startswith("/ask "):
-        # Прямой запрос к Claude: /ask твой вопрос
-        question = text[5:].strip()
-        if question:
-            await update.message.reply_text("🤖 Думаю...")
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, ask_claude, question)
-            if len(response) > 4000:
-                response = response[:4000] + "..."
-            await update.message.reply_text(f"🤖 Claude:\n\n{response}", reply_markup=get_main_keyboard())
+    elif text == "💬 Спросить AI":
+        user_id = update.effective_user.id
+        waiting_for_ai_question[user_id] = True
+        await update.message.reply_text(
+            "💬 Напиши свой вопрос для Claude:\n\n"
+            "(Или нажми любую другую кнопку для отмены)"
+        )
+
+    elif waiting_for_ai_question.get(update.effective_user.id, False):
+        # Пользователь написал вопрос для AI
+        user_id = update.effective_user.id
+        waiting_for_ai_question[user_id] = False
+
+        await update.message.reply_text("🤖 Отправляю вопрос к Claude, подожди...")
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, ask_claude, text)
+
+        if len(response) > 4000:
+            response = response[:4000] + "..."
+        await update.message.reply_text(f"🤖 Claude:\n\n{response}", reply_markup=get_main_keyboard())
 
 
 # ============================================
