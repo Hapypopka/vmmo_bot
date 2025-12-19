@@ -128,26 +128,31 @@ def restart_bot(profile: str) -> tuple[bool, str]:
 
 def get_stats(profile: str) -> str:
     """Возвращает статистику бота"""
-    stats_file = os.path.join(PROFILES_DIR, profile, "stats.json")
-    if not os.path.exists(stats_file):
-        # Пробуем глобальный файл
-        stats_file = os.path.join(SCRIPT_DIR, "stats.json")
+    # Статистика хранится в глобальном stats.json
+    stats_file = os.path.join(SCRIPT_DIR, "stats.json")
 
     if not os.path.exists(stats_file):
-        return "Статистика недоступна"
+        return f"📊 {PROFILE_NAMES.get(profile, profile)}: нет данных"
 
     try:
         with open(stats_file, "r", encoding="utf-8") as f:
             stats = json.load(f)
 
         name = PROFILE_NAMES.get(profile, profile)
+
+        # Форматируем время Hell Games
+        hell_time = stats.get('total_hell_games_time', 0)
+        hell_hours = hell_time // 3600
+        hell_mins = (hell_time % 3600) // 60
+        hell_str = f"{hell_hours}ч {hell_mins}м" if hell_time > 0 else "0"
+
         lines = [f"📊 Статистика {name}:"]
-        lines.append(f"├ Данжей пройдено: {stats.get('dungeons_completed', 0)}")
-        lines.append(f"├ Смертей: {stats.get('deaths', 0)}")
-        lines.append(f"├ Действий: {stats.get('total_actions', 0)}")
-        lines.append(f"├ Hell Games: {stats.get('hell_games_completed', 0)}")
-        lines.append(f"├ Питомцев воскрешено: {stats.get('pets_resurrected', 0)}")
-        lines.append(f"└ Время работы: {stats.get('uptime', 'N/A')}")
+        lines.append(f"├ Данжей: {stats.get('total_dungeons_completed', 0)}")
+        lines.append(f"├ Смертей: {stats.get('total_deaths', 0)}")
+        lines.append(f"├ Этапов: {stats.get('total_stages_completed', 0)}")
+        lines.append(f"├ Hell Games: {hell_str}")
+        lines.append(f"├ Аукцион: {stats.get('total_items_auctioned', 0)}")
+        lines.append(f"└ Разобрано: {stats.get('total_items_disassembled', 0)}")
         return "\n".join(lines)
     except Exception as e:
         return f"Ошибка чтения статистики: {e}"
