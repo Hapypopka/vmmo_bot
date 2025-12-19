@@ -238,21 +238,24 @@ waiting_for_ai_question: Dict[int, bool] = {}
 
 
 def ask_claude(prompt: str) -> str:
-    """Отправляет запрос к Claude локально"""
+    """Отправляет запрос к Claude через юзера claude (с полными правами)"""
     try:
+        # Запускаем через su - claude чтобы работал --dangerously-skip-permissions
         result = subprocess.run(
-            ["claude", "-p", prompt],
+            ["su", "-", "claude", "-c", f"cd /home/claude/vmmo_bot && /home/claude/ask_claude.sh '{prompt}'"],
             capture_output=True,
             text=True,
-            timeout=120,
-            cwd="/root"
+            timeout=180  # 3 минуты на сложные задачи
         )
-        if result.returncode == 0:
-            return result.stdout.strip()
-        else:
+        output = result.stdout.strip()
+        if result.returncode == 0 and output:
+            return output
+        elif result.stderr:
             return f"Ошибка: {result.stderr}"
+        else:
+            return "Нет ответа от Claude"
     except subprocess.TimeoutExpired:
-        return "Ошибка: таймаут запроса к Claude (2 мин)"
+        return "Ошибка: таймаут запроса к Claude (3 мин)"
     except Exception as e:
         return f"Ошибка: {e}"
 
