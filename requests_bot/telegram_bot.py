@@ -168,6 +168,57 @@ def get_stats(profile: str) -> str:
         return f"Ошибка чтения статистики: {e}"
 
 
+def get_last_activity(profile: str) -> str:
+    """Возвращает последнюю активность бота из лога"""
+    log_dir = os.path.join(PROFILES_DIR, profile, "logs")
+    name = PROFILE_NAMES.get(profile, profile)
+
+    if not os.path.exists(log_dir):
+        return f"📋 {name}: нет логов"
+
+    # Находим последний лог файл
+    log_files = [f for f in os.listdir(log_dir) if f.endswith('.log')]
+    if not log_files:
+        return f"📋 {name}: нет логов"
+
+    log_files.sort(reverse=True)
+    last_log = os.path.join(log_dir, log_files[0])
+
+    try:
+        # Читаем последние строки лога
+        with open(last_log, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        if not lines:
+            return f"📋 {name}: лог пуст"
+
+        # Берём последние 5 непустых строк
+        recent_lines = [l.strip() for l in lines[-10:] if l.strip()][-5:]
+
+        # Время модификации файла
+        mtime = os.path.getmtime(last_log)
+        last_modified = datetime.fromtimestamp(mtime)
+        time_ago = datetime.now() - last_modified
+
+        if time_ago.total_seconds() < 60:
+            time_str = f"{int(time_ago.total_seconds())}с назад"
+        elif time_ago.total_seconds() < 3600:
+            time_str = f"{int(time_ago.total_seconds() // 60)}м назад"
+        else:
+            time_str = f"{int(time_ago.total_seconds() // 3600)}ч {int((time_ago.total_seconds() % 3600) // 60)}м назад"
+
+        result = [f"📋 {name} (обновлён {time_str}):"]
+        for line in recent_lines:
+            # Обрезаем длинные строки
+            if len(line) > 60:
+                line = line[:57] + "..."
+            result.append(f"  {line}")
+
+        return "\n".join(result)
+    except Exception as e:
+        return f"📋 {name}: ошибка чтения ({e})"
+
+
 # ============================================
 # Telegram Handlers
 # ============================================
@@ -175,10 +226,24 @@ def get_stats(profile: str) -> str:
 def get_main_keyboard():
     """Возвращает главную клавиатуру"""
     keyboard = [
-        [KeyboardButton("📡 Статус"), KeyboardButton("📊 Статистика"), KeyboardButton("📥 Pull")],
-        [KeyboardButton("▶️ Запустить"), KeyboardButton("⏹️ Остановить"), KeyboardButton("🔄 Рестарт")]
+        [KeyboardButton("📡 Статус"), KeyboardButton("📊 Статистика"), KeyboardButton("📋 Логи")],
+        [KeyboardButton("▶️ Запустить"), KeyboardButton("⏹️ Остановить"), KeyboardButton("🔄 Рестарт")],
+        [KeyboardButton("📥 Pull")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает последнюю активность всех ботов"""
+    if not is_allowed(update.effective_user.id):
+        return
+
+    lines = ["📋 Последняя активность:\n"]
+    for profile in PROFILE_NAMES.keys():
+        lines.append(get_last_activity(profile))
+        lines.append("")  # Пустая строка между ботами
+
+    await update.message.reply_text("\n".join(lines), reply_markup=get_main_keyboard())
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -378,6 +443,9 @@ async def handle_button_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif text == "📥 Pull":
         await cmd_pull(update, context)
 
+    elif text == "📋 Логи":
+        await cmd_logs(update, context)
+
     elif text == "▶️ Запустить":
         await cmd_start_bot(update, context)
 
@@ -459,6 +527,7 @@ def main():
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("logs", cmd_logs))
     app.add_handler(CommandHandler("start_bot", cmd_start_bot))
     app.add_handler(CommandHandler("stop_bot", cmd_stop_bot))
     app.add_handler(CommandHandler("restart_bot", cmd_restart_bot))
