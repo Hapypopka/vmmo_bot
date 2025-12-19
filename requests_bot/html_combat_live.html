@@ -1,0 +1,3498 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<head><script type="text/javascript" >
+/*<![CDATA[*/
+
+(() => {
+    'use strict';
+
+    console.warn('Starting variables definition', 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6&1=normal');
+
+    if (!window.ptxTimestamp) {
+        window.ptxTimestamp = Number(new Date());
+    }
+
+    if (window.ptxWebGLAllowed === undefined) {
+        try {
+            const canvas = document.createElement('canvas')
+            window.ptxWebGLAllowed = !!window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+        } catch (e) {
+            window.ptxWebGLAllowed = false
+        }
+    }
+
+    window.ptxUserLoggedInJustNow = false;
+    window.ptxPageId = 6;
+    window.ptxShadowsLang = 'ru';
+    window.ptxShadowsCountry = 'RU';
+    window.ptxShadowsLocale = 'ru-RU';
+    window.ptxShadowsCssVS = '?v=1766042164517';
+    window.ptxShadowsCssVP = '&v=1766042164517';
+    window.ptxIsERLogged = false;
+    window.ptxComeFromCombatPage = window.ptxIsCombatPage === true;
+    window.ptxIsCombatPage = true;
+    window.ptxIsCityPage = false;
+    window.ptxPageUrl = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6&1=normal';
+    window.ptxPageUrlPPF5 = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6&1=normal';
+    window.ptxPagePath = 'https://vmmo.vten.ru/dungeon/combat';
+    window.ptxPageUrlCln = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6&1=normal';
+    window.ptxPagePathCln = 'https://vmmo.vten.ru/dungeon/combat';
+    window.ptxPageRenderedPingUrl = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-IEndpointBehaviorListener.5-&1=normal';
+    window.ptxPageHomeUrl = 'https://vmmo.vten.ru/';
+    window.ptxJSessionId = '81BDEE1A5D3A8C5BE051324F1902DD68';
+    window.ptxSoundSettingOnReportUrl = 'https://vmmo.vten.ru/user/settings/sound/true';
+    window.ptxSoundSettingOffReportUrl = 'https://vmmo.vten.ru/user/settings/sound/false';
+    window.ptxEventReportUrl = 'https://vmmo.vten.ru/tech/report/ev';
+    window.ptxLogsOn = false || false;
+    window.ptxIgnoreWebView = false;
+    window.ptxBackButtonOverrideAllowed = true;
+    window.ptxActualTimestampPostfix = 1766042164517;
+    window.ptxUserLogin = '239299464#Qing Dynasty';
+    window.ptxUserId = '239299464';
+    window.ptxUserLevel = 29;
+    window.ptxYmCounterId = '94691268';
+    window.ptxComeAsSPA = false;
+    window.ptxVmmoWidgetsRestricted = false;
+    window.ptxGoogleStatsRestricted = true;
+    window.ptxPlayerUserPresent = true;
+
+    window.ptxPageWasUpdated = (
+        window.ptxVmmoWidgetsRestrictedStored !== undefined
+            && window.ptxVmmoWidgetsRestrictedStored !== ptxVmmoWidgetsRestricted
+    ) || (
+        window.ptxGoogleStatsRestrictedStored !== undefined
+            && window.ptxGoogleStatsRestrictedStored !== ptxGoogleStatsRestricted
+    );
+
+    // console.info(window.ptxPageWasUpdated, window.ptxGoogleStatsRestricted, window.ptxGoogleStatsRestrictedStored, window.ptxVmmoWidgetsRestricted, window.ptxVmmoWidgetsRestrictedStored);
+
+    window.ptxVmmoWidgetsRestrictedStored = ptxVmmoWidgetsRestricted;
+    window.ptxGoogleStatsRestrictedStored = ptxGoogleStatsRestricted;
+
+    console.warn('Finished variables definition');
+
+    window.ptxValidatePageById = (pageId) => {
+        if (window.ptxPageId && window.ptxPageId !== pageId) {
+            var err = new Error('Page already changed from ' + pageId + ' to ' + window.ptxPageId);
+            err.bypassInWicketAjaxHandler = true;
+            err.ptxPageChangedAlready = true;
+            throw err;
+        }
+    };
+
+    window.ptxEventReport = (eId) => {
+        if (eId
+            && eId !== '') {
+            let url = new URL(ptxEventReportUrl);
+            url.searchParams.set('id', eId);
+            fetch(url.toString(), { method: "GET", headers: { Accept: 'application/json,*/*' }});
+        }
+    };
+})();
+
+    if (window.ptxIsCombatPage !== true) {
+        (() => {
+            var apply = () => {
+                console.debug('Configuring PWA handlers');
+                Ptx.eventListenerDrop(document, 'DOMContentLoaded', apply);
+                Ptx.eventListenerDrop(document, 'readystatechange', apply);
+                Ptx.eventListenerAddPB(document, 'pwa_beforeinstallprompt', () => {
+                    console.debug('Event "pwa_beforeinstallprompt" was fired', window.PwaConfig);
+
+                    ptxEventReport('pwa_install_prompt_working');
+
+                    if (window.PwaConfig) {
+                        PwaConfig.customPromptEnabled = true;
+                        window.showInstallPromotion = () => {};
+                        window.hideInstallPromotion = () => {
+                            Ptx.setTimeout(() => {
+                                console.debug('PWA was successfully installed');
+
+                                ptxEventReport('pwa_installed');
+
+                                if (Ptx.Pwa.onActionPage === true) {
+                                    ptxLocLoad(ptxPageHomeUrl);
+                                }
+                            }, 0);
+                        };
+                    }
+                });
+                console.debug('Configured PWA handlers');
+            };
+
+            if (document.addEventListener) {
+                document.addEventListener('DOMContentLoaded', apply);
+            } else {
+                document.attachEvent('onreadystatechange', apply);
+            }
+
+            console.debug('PWA handlers configurator set up');
+        })();
+    }
+
+    (() => {
+        if (window.ptxPageRenderedPingUrl === undefined) {
+            return;
+        }
+
+        var apply = () => {
+            Ptx.eventListenerDrop(document, 'DOMContentLoaded', apply);
+            Ptx.eventListenerDrop(document, 'readystatechange', apply);
+
+            const webSocketErr = Ptx.Utils.Console({type: 'error', source: 'WebSocket'});
+            const webSocketLog = Ptx.Utils.Console({source: 'WebSocket'});
+
+            if (Wicket.WebSocket
+                    && Ptx.Shadows.WebSocket.connection_state_open) {
+                try {
+                    Wicket.WebSocket.send('pageId: ' + window.ptxPageId);
+                    webSocketLog('Notified backend abount page rendered:', window.ptxPageId);
+                } catch (e) {
+                    webSocketErr('Unable to report back page display');
+                }
+            } else {
+                webSocketErr('Unable to report back page display - no valid open WebSocket connection');
+            }
+
+            window.onerror = function (msg, url, line, column, error) {
+                if (window.ptxPageRenderedPingUrl
+                        && error
+                        && error.bypassInWicketAjaxHandler === true
+                        && error.ptxPageChangedAlready === true) {
+                    try {
+                        Wicket.WebSocket.send('pageId: ' + window.ptxPageId);
+                        webSocketLog('Notified backend abount page rendered:', window.ptxPageId);
+                    } catch (e) {
+                        webSocketErr('Unable to report back page display');
+                    }
+
+                    if (window.ptxLogsOn) { console.info('Notify backend that page already changed'); }
+                }
+
+                return false;
+            }
+        };
+
+        if (document.addEventListener) {
+            document.addEventListener('DOMContentLoaded', apply);
+        } else {
+            document.attachEvent('onreadystatechange', apply);
+        }
+
+        console.debug('Backend pinger on page display set up');
+    })();
+
+    (() => {
+        var apply = () => {
+            console.debug('Fix VMMO widgets state');
+            Ptx.eventListenerDrop(document, 'DOMContentLoaded', apply);
+            Ptx.eventListenerDrop(document, 'readystatechange', apply);
+
+            if (window.ptxIsCombatPage !== true) {
+    window.isVmmoWidgetsDisabled = false;
+}
+
+            console.debug('VMMO widgets state fixed');
+        };
+
+        if (document.addEventListener) {
+            document.addEventListener('DOMContentLoaded', apply);
+        } else {
+            document.attachEvent('onreadystatechange', apply);
+        }
+
+        console.debug('VMMO widgets state fix routine set up');
+    })();
+
+/*]]>*/
+</script>
+<script type="text/javascript" spa_ignore="true" src="/scripts/shared_1_009.js?v=1766042164517"></script>
+<script type="text/javascript" spa_ignore="true" src="/scripts/gsap.js?v=1766042164517"></script>
+<script type="text/javascript" >
+/*<![CDATA[*/
+Ptx.eventListenerAddPB(window, 'beforeunload', function() {
+            'use strict';
+            Ptx.Shadows.Notice.close({instant: true});
+        });
+
+        Ptx.eventListenerAddPB(window, 'load', function() {
+            'use strict';
+            if (window.trySound === undefined) {
+                ptxLoadJsFiles(
+                    [{
+                        url: '/scripts/howler.js?v=1766042164517'
+                    }, {
+                        url: '/scripts/sounds.js?v=1766042164517'
+                    }],
+                    () => {
+                        if (window.ptxLogsOn) {
+                            console.warn('Sound JS attached')
+                        }
+                    }
+                )();
+            }
+        });
+
+/*]]>*/
+</script>
+<script type="text/javascript" id="">
+/*<![CDATA[*/
+
+    (() => {
+        'use strict';
+        Ptx.eventListenerAddPB(window, "unload", () => window.isVmmoWidgetsDisabled = false);
+        window.isVmmoWidgetsDisabled = true;
+    })();
+    (() => {
+        'use strict';
+        let el = document.getElementById('id74');
+        if (el.inited_ajax === true) {
+            console.info('Calling init reporter from init script');
+            
+    (() => {
+        'use strict';
+        var markPage = window.ptxPageId;
+        Ptx.performOnLoadPB(() => {
+            let attempt = 0;
+            var idxItvl = Ptx.setIntervalR(() => {
+                if (window.ptxPageId !== markPage) {
+                    Ptx.clearIntervalR(idxItvl);
+                    return;
+                }
+
+                if (window.ptxLogsOn) { console.debug('Activity back reporter execute start for page', markPage, window.ptxPageId); }
+                let el = document.getElementById('id74');
+
+                if (el) {
+                    el.dispatchEvent(new Event('click'));
+                    if (window.ptxLogsOn) { console.debug('Activity report back performed for page', markPage, window.ptxPageId); }
+
+                    if (++attempt >= 5) {
+                        Ptx.clearIntervalR(idxItvl);
+                    }
+                } else {
+                    Ptx.clearIntervalR(idxItvl);
+                    if (window.ptxLogsOn) { console.debug('Activity report back dropped for page', markPage, window.ptxPageId, 'because of report back link absense'); }
+                }
+            }, 50);
+            if (window.ptxLogsOn) { console.debug('Configured report activity back for page', markPage, window.ptxPageId); }
+        }, undefined, true);
+    })();
+    
+        } else {
+            Ptx.eventListenerAddPB(el, "inited_ajax", () => { console.info('Calling init reporter from event listener'); 
+    (() => {
+        'use strict';
+        var markPage = window.ptxPageId;
+        Ptx.performOnLoadPB(() => {
+            let attempt = 0;
+            var idxItvl = Ptx.setIntervalR(() => {
+                if (window.ptxPageId !== markPage) {
+                    Ptx.clearIntervalR(idxItvl);
+                    return;
+                }
+
+                if (window.ptxLogsOn) { console.debug('Activity back reporter execute start for page', markPage, window.ptxPageId); }
+                let el = document.getElementById('id74');
+
+                if (el) {
+                    el.dispatchEvent(new Event('click'));
+                    if (window.ptxLogsOn) { console.debug('Activity report back performed for page', markPage, window.ptxPageId); }
+
+                    if (++attempt >= 5) {
+                        Ptx.clearIntervalR(idxItvl);
+                    }
+                } else {
+                    Ptx.clearIntervalR(idxItvl);
+                    if (window.ptxLogsOn) { console.debug('Activity report back dropped for page', markPage, window.ptxPageId, 'because of report back link absense'); }
+                }
+            }, 50);
+            if (window.ptxLogsOn) { console.debug('Configured report activity back for page', markPage, window.ptxPageId); }
+        }, undefined, true);
+    })();
+     });
+        }
+    })();
+    
+/*]]>*/
+</script>
+<script type="text/javascript" src="https://vmmo.vten.ru/wicket/resource/org.apache.wicket.resource.JQueryResourceReference/jquery/jquery-3.7.0.min-ver-1C71D2942C207CDFC2FD416BCE974F5D.js"></script>
+<script type="text/javascript" src="https://vmmo.vten.ru/wicket/resource/org.apache.wicket.ajax.AbstractDefaultAjaxBehavior/res/js/wicket-event-jquery.min-ver-7C4C4A31B92F211E7D61B1BF2BA81B39.js"></script>
+<script type="text/javascript" src="https://vmmo.vten.ru/wicket/resource/org.apache.wicket.ajax.AbstractDefaultAjaxBehavior/res/js/wicket-ajax-jquery.min-ver-9C29485E1484C155A95634F3E6DF8A35.js"></script>
+<script type="text/javascript" id="wicket-ajax-base-url">
+/*<![CDATA[*/
+Wicket.Ajax.baseUrl="dungeon/combat/dSanctuary?1=normal";
+/*]]>*/
+</script>
+<script type="text/javascript" >
+/*<![CDATA[*/
+(() => {'use strict';var working=true;var tmrLoadid75 = (event) => { Wicket.Event.remove(window, 'load', tmrLoadid75 );var tmrInitid75 = () => {if (working) {try{Wicket.Ajax.ajax({"rt":3000,"c":"id75","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-refresher&1=normal","ch":"ct_209245848|d"});(() => {let lnk=document.getElementById('id75');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id75 found');}})();}catch(e){console.error('Ajax response error (component #[id75]): ', e);}}if(working){Wicket.Timer.set('id75', tmrInitid75, 500);}};Wicket.Timer.set('id75', tmrInitid75, 500);};var tmrUnloadid75 = () => {working = false;Wicket.Timer.clear('id75');Wicket.Event.remove(window, 'unload', tmrUnloadid75 );Wicket.Event.remove(window, 'load', tmrLoadid75 );};Wicket.Event.add(window, 'unload', tmrUnloadid75 );if (document.readyState !== 'loading') {tmrLoadid75();}Wicket.Event.add(window, 'load', tmrLoadid75 );})();
+/*]]>*/
+</script>
+
+<script src="/scripts/combat.js?v=1766042164517" type="text/javascript"></script>
+<script type="text/javascript" src="https://vmmo.vten.ru/wicket/resource/org.apache.wicket.protocol.ws.api.WicketWebSocketJQueryResourceReference/res/js/wicket-websocket-jquery-ver-E9BEF69B8C67AC090F7B1C2A50FCDA29.js"></script>
+<script type="text/javascript" >
+/*<![CDATA[*/
+
+        (() => {
+            'use strict';
+
+            if (!window.Ptx) {
+                window.Ptx = {};
+            }
+
+            if (!Ptx.Shadows) {
+                Ptx.Shadows = {};
+            }
+
+            if (!Ptx.Shadows.Anim) {
+                Ptx.Shadows.Anim = {};
+            }
+
+            var apply = () => {
+                Ptx.Shadows.Anim.vibrationEnabled = false;
+            }
+
+            if (document.readyState !== 'loading') {
+                apply();
+            } else {
+                Ptx.eventListenerAddPB(document, "DOMContentLoaded", apply, undefined, true);
+            }
+        })();
+    
+/*]]>*/
+</script>
+
+<script type="text/javascript" spa_ignore="true">
+/*<![CDATA[*/
+
+Ptx.eventListenerAdd(window, 'unload', () => {
+'use strict';
+if (window.ptxLogsOn) { console.log('Clearing GSAP3 info'); }
+gsap.killTweensOf("*");
+gsap.globalTimeline.clear().kill();
+});
+
+/*]]>*/
+</script>
+
+<script type="text/javascript" spa_ignore="true">
+/*<![CDATA[*/
+
+(() => {
+'use strict';
+window.ptxWindowTimestampPostfix = 1766042164517;
+})();
+
+/*]]>*/
+</script>
+<script type="text/javascript">
+        (() => {
+            'use strict';
+
+            if (window.ptxLogsOn) {console.log('Link interceptor setter script started');}
+
+            (() => {
+    'use strict';
+
+    if (!window.Ptx) {
+        window.Ptx = {};
+    }
+
+    if (!Ptx.Shadows) {
+        Ptx.Shadows = {};
+    }
+
+    if (!Ptx.Shadows.Ui) {
+        Ptx.Shadows.Ui = {};
+    }
+
+    if (!Ptx.Shadows.Ui.pageRefreshHard) {
+        Ptx.Shadows.Ui.pageRefreshHard = () => {
+            if (window.ptxPageUrl) {
+                document.location = ptxPageUrl;
+            } else {
+                document.location.reload();
+            }
+        };
+    }
+
+    if (!Ptx.Shadows.Auth) {
+        Ptx.Shadows.Auth = {};
+    }
+
+    if (!Ptx.Shadows.Auth.tryReAuth) {
+        Ptx.Shadows.Auth.tryReAuth = () => {
+            if (window.self !== window.top) {
+try {
+    if (window.self !== window.top) {
+        console.warn('Trying force enclosing frame to reload');
+
+        try {
+            let url = sessionStorage.getItem('urlRestore');
+
+            if (url
+                && url !== '') {
+                location.href = url;
+            }
+        } catch (e) {
+            console.error('Reauth try error:', e);
+        }
+    }
+} catch (e) {
+    console.error('Enclosing frame reload try failed:', e);
+}
+} else {
+                Ptx.Shadows.Ui.pageRefreshHard();
+            }
+        };
+    }
+
+    if (!Ptx.Vmmo) {
+        Ptx.Vmmo = {};
+    }
+
+    if (!Ptx.Vmmo.Widgets) {
+        Ptx.Vmmo.Widgets = {};
+
+        Ptx.eventListenerAdd(document, 'DOMContentLoaded', () => {
+            if (window.ptxComeAsSPA !== true) {
+                return;
+            }
+
+            let icon = Ptx.Vmmo.Widgets.wdgtIcon;
+
+            if (icon) {
+                console.debug('Got stored icon, need place it?', icon);
+                let present = document.getElementById('container_vmmo_icon');
+
+                if (present
+                    && present.querySelector('.fake')) {
+                    console.debug('Got default present container.', present);
+                    if (window.showWidgets) {
+                        showWidgets();
+                    } else {
+                        console.debug('No widgets engine loaded yet');
+                    }
+                } else {
+                    console.debug('Got present custom container:', present);
+                }
+            }
+        });
+
+        {
+            let receivedOnce = false;
+            let configured = false;
+
+            let proc = () => {
+                if (configured === false) {
+                    configured = true;
+                    var idxItvl = Ptx.setIntervalR(() => {
+                        let el = document.getElementById('container_vmmo_icon');
+
+                        if (!el
+                            || !el.querySelector('.fake')) {
+                            if (el) {
+                                Ptx.Vmmo.Widgets.wdgtIcon = el;
+                                console.debug('Stored vmmo icon:', el);
+                            } else {
+                                delete Ptx.Vmmo.Widgets.wdgtIcon;
+                            }
+                            configured = false;
+                            Ptx.clearIntervalR(idxItvl);
+                        }
+                    }, 1000, 'VMMO icon checker ' + ptxPageId + '_' + Math.round(Math.random() * 10000));
+
+                    Ptx.eventListenerAddPB(window, 'unload', () => {configured = false; Ptx.clearIntervalR(idxItvl);});
+                }
+            };
+
+            Ptx.eventListenerAdd(document, 'vmmo_widgets_received', (ev) => {
+                receivedOnce = true;
+                console.debug('Got vmmo widgets:', ev);
+                proc();
+            });
+            Ptx.performOnLoad(() => {
+                if (receivedOnce === true) {
+                    proc();
+                }
+            });
+        }
+    }
+})();
+
+            var scriptVersion = 20;
+
+            if (window.ptxIgnoreWebView === false) {
+                Ptx.eventListenerAddPB(document, "DOMContentLoaded", () => {
+                    document.body.removeAttribute('ignoreWebView');
+                }, undefined, true);
+            } else if (window.ptxIgnoreWebView === true) {
+                Ptx.eventListenerAddPB(document, "DOMContentLoaded", () => {
+                    document.body.setAttribute('ignoreWebView', true);
+                }, undefined, true);
+            }
+
+            if (!Ptx.Shadows || !Ptx.Shadows.version || Ptx.Shadows.version != scriptVersion) {
+                if (window.ptxLogsOn) {console.log('Dropping old links interceptor');}
+
+                if (Ptx.Shadows) {
+                    try {
+                        delete Ptx.Shadows.getWebViewContentLogged;
+                    } catch (e) {
+                        console.error('Old version remove error: ', e);
+                    }
+
+                    try {
+                        delete Ptx.Shadows.getWebViewContent;
+                    } catch (e) {
+                        console.error('Old version remove error: ', e);
+                    }
+
+                    try {
+                        delete Ptx.Shadows.Try;
+                    } catch (e) {
+                        console.error('Old version remove error: ', e);
+                    }
+
+                    try {
+                        delete Ptx.Shadows.scrollTo;
+                    } catch (e) {
+                        console.error('Old version remove error: ', e);
+                    }
+                } else {
+                    Ptx.Shadows = {};
+                }
+
+                Ptx.Shadows.version = scriptVersion;
+
+                if (window.ptxLogsOn) {console.log('Defined link interceptor setter version ' + Ptx.Shadows.version);}
+            } else {
+                if (window.ptxLogsOn) {console.log('Using present link interceptor setter version ' + Ptx.Shadows.version);}
+            }
+
+            if (!Ptx.Shadows.scrollTo) {
+                const itnlScrollTo = (markupId) => {
+                    var elem = document.getElementById(markupId);
+
+                    if (elem
+                            && elem !== null) {
+                        elem.scrollIntoView();
+                        if (window.ptxLogsOn) {console.log('Proceeding to label #' + markupId);}
+                        return true;
+                    } else {
+                        if (window.ptxLogsOn) {console.log('Not found label #' + markupId);}
+                    }
+
+                    return false;
+                };
+                Ptx.Shadows.scrollTo = (markupId) => {
+                    try {
+                        return itnlScrollTo(markupId);
+                    } catch (e) {
+                        console.error("SPA on label #' + markupId + ' scroll error: ", e);
+                    }
+
+                    return false;
+                }
+            }
+
+            if (!Ptx.Shadows.Try) {
+                Ptx.Shadows.Try = {};
+                if (window.ptxLogsOn) { console.log('Defining Ptx.Shadows.Try'); }
+
+                let loopingBack = false;
+                let stackPages = [];
+
+                Ptx.eventListenerAdd(document, "DOMContentLoaded", () => {
+                    if (window.ptxUserLoggedInJustNow === true) {
+                        stackPages = [];
+                    }
+                });
+
+                {
+                    let fixingHistory = null;
+                    let handler;
+
+                    console.debug('Configuring popstate interceptor');
+                    Ptx.eventListenerAdd(window, 'popstate', handler = ((ev) => {
+                        console.debug('Event intercepted:', handler, ev, ev.eventPhase, ev.state, fixingHistory, (new Error()).stack);
+
+                        if (window.ptxBackButtonOverrideAllowed !== true) {
+                            console.debug('Popstate event override current page allowed state:', window.ptxBackButtonOverrideAllowed);
+                            return;
+                        }
+
+                        if (ev.isTrusted) {
+                            if (fixingHistory !== null) {
+                                fixingHistory = null;
+                                console.debug('Preventing double handling for', ev);
+                                return;
+                            }
+
+                            fixingHistory = ev;
+                            ev.preventDefault();
+                            history.go(1);
+
+                            if (stackPages.length > 1) {
+                                stackPages.pop();
+                                let url = stackPages[stackPages.length - 1];
+
+                                if (url) {
+                                    console.debug(
+                                        'Moving back to',
+                                        url,
+                                        'new top',
+                                        stackPages.length > 0
+                                            ? stackPages[stackPages.length - 1]
+                                            : undefined
+                                    );
+                                    loopingBack = true;
+                                    ptxLocLoad(url);
+                                }
+                            } else {
+                                stackPages = [];
+
+                                if (ptxPagePathCln !== '/') {
+                                    loopingBack = true;
+
+                                    let path = '/';
+
+                                    if (window.ptxJSessionId
+                                        && ptxJSessionId !== '') {
+                                        path = path + ';jsessionid=' + ptxJSessionId;
+                                    }
+
+                                    ptxLocLoad(path + window.location.hash);
+                                }
+                            }
+                        }
+                    }));
+                }
+
+                var validator = () => {return window.Ptx && Ptx.Shadows && Ptx.Shadows.Try && Ptx.Shadows.version && Ptx.Shadows.version === scriptVersion};
+
+                Ptx.eventListenerAdd(document, "DOMContentLoaded", (ev) => {
+                    if (window.ptxLogsOn) {console.log('DOMContentLoaded caught: ', (ev || window.event));}
+                }, undefined, validator);
+                Ptx.eventListenerAdd(document, "domready", (ev) => {
+                    if (window.ptxLogsOn) {console.log('domready caught: ', (ev || window.event));}
+                }, undefined, validator);
+                Ptx.eventListenerAdd(window, "load", (ev) => {
+                    if (window.ptxLogsOn) {console.log('load caught: ', (ev || window.event));}
+                }, undefined, validator);
+                Ptx.eventListenerAdd(document, "readystatechange", (ev) => {
+                    if (window.ptxLogsOn) {console.log('Document readystatechange caught: ', (ev || window.event));}
+                }, undefined, validator);
+                Ptx.eventListenerAdd(window, "readystatechange", (ev) => {
+                    if (window.ptxLogsOn) {console.log('Window readystatechange caught: ', (ev || window.event));}
+                }, undefined, validator);
+
+               let isAttrValueTrue = (v) => (
+                   v === 'true' || (
+                       v !== 'false'
+                           && v && (
+                               (v = v.trim()) === 'true' || (
+                                   v !== ''
+                                       && v !== 'false'
+                                       && ptxEval(v) === true
+                               )
+                       )
+                   )
+               );
+               Ptx.Shadows.Try = {
+                    these: function() {
+                        var returnValue;
+
+                        for (var i = 0, length = arguments.length; i < length; i++) {
+                            var lambda = arguments[i];
+                            try {
+                                returnValue = lambda();
+                                break;
+                            } catch (e) {}
+                        }
+
+                        return returnValue;
+                    },
+
+                    execScript: function (node, funcExec) {
+                        var href = node.getAttribute('src');
+
+                        if (href) {
+                            if (window.ptxLogsOn) {console.debug('Processing "' + href + '"');}
+
+                            if (ptxAttrDefined(node, 'defer') || ptxAttrDefined(node, 'async')) {
+                                if (window.ptxLogsOn) {console.log('Scheduling async/defer load for "' + href + '"');}
+                                ptxLoadJsFile(href, null, false, node.getAttribute('drop_on_unload') === 'true');
+                            } else {
+                                var funcO = funcExec;
+                                funcExec = ptxLoadJsFile(href, funcO, false, node.getAttribute('drop_on_unload') === 'true');
+                            }
+
+                            return funcExec;
+                        }
+
+                        {
+                            var scrT = node.innerText;
+
+                            if (scrT && scrT.length) {
+                                try {
+                                    if (window.ptxLogsOn) {console.debug('Processing "' + Ptx.printout(scrT) + '"', node);}
+
+                                    if (funcExec === undefined) {
+                                        if (window.ptxLogsOn) {console.debug('Executing immediately script "' + Ptx.printout(scrT) + '"', node);}
+                                        ptxEval(scrT);
+                                    } else {
+                                        var funcE = funcExec;
+                                        return () => {
+                                            if (window.ptxLogsOn) {console.debug('Executing script "' + Ptx.printout(scrT) + '"', node);}
+                                            ptxEval(scrT);
+
+                                            if (funcE) {
+                                                funcE();
+                                            }
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error('Exec error for passed script:', window.ptxLogsOn ? scrT : Ptx.printout(scrT));
+                                    console.error('Passed script exec error: ', e);
+                                }
+                            }
+                        }
+
+                        return funcExec;
+                    },
+
+                    isAsyncLoad: function(node) {
+                        return node && (
+                            ptxAttrDefined(node, 'defer') || ptxAttrDefined(node, 'async')
+                        ) && node.getAttribute('src')
+                    },
+
+                    execRefs: function(refs, execFunc) {
+                        if (refs.length === 1) {
+                            return this.execScript(refs[0].node, execFunc);
+                        } else if (refs.length > 0) {
+                            if (window.ptxLogsOn) {
+                                console.log('Bunch of ' + refs.length + ' files load (reverse order):');
+                                refs.forEach(ref => console.log(ref.url));
+                            }
+
+                            return ptxLoadJsFiles(refs.reverse(), execFunc);
+                        }
+
+                        return execFunc;
+                    },
+
+                    exec: function (head, body) {
+                        var self = Ptx.Shadows.Try;
+                        var headP = document.getElementsByTagName("head")[0];
+                        if (window.ptxLogsOn) {console.log('Trying to execute passed scripts');}
+
+                        var execFunc = null;
+                        var funcCommit = function() {
+                            try {
+                                var elNew = head.querySelector('title');
+                                var elPresent = headP.querySelector('title');
+
+                                if (elPresent && elPresent !== null) {
+                                    if (elNew && elNew !== null) {
+                                        elPresent.outerHTML = elNew.outerHTML;
+                                    } else {
+                                        headP.removeChild(elPresent);
+                                    }
+                                } else if (elNew && elNew !== null) {
+                                    elPresent = document.createElement(elNew.tagName);
+                                    elPresent.outerText = elNew.outerText;
+                                    headP.appendChild(elPresent);
+                                }
+                            } catch (e) {
+                                console.error("Document title update error: ", e);
+                            }
+
+                            try {
+                                var elNew = head.querySelector('meta[name=viewport]');
+                                var elPresent = headP.querySelector('meta[name=viewport]');
+
+                                if (elPresent && elPresent !== null) {
+                                    if (elNew && elNew !== null) {
+                                        elPresent.outerHTML = elNew.outerHTML;
+                                    } else {
+                                        headP.removeChild(elPresent);
+                                    }
+                                } else if (elNew && elNew !== null) {
+                                    elPresent = document.createElement(elNew.tagName);
+
+                                    for (var idx = 0; idx < elNew.attributes.length; idx++) {
+                                        var attr = elNew.attributes[idx];
+                                        elPresent.setAttribute(attr.name, attr.value);
+                                    }
+
+                                    headP.appendChild(elPresent);
+                                }
+                            } catch (e) {
+                                console.error("Document viewport update error: ", e);
+                            }
+
+                            try {
+                                document.dispatchEvent(new Event("readystatechange"));
+                                if (window.ptxLogsOn) {console.log("Document readystatechange dispatched 1");}
+                            } catch (e) {
+                                console.error("Document readystatechange dispatch error: ", e);
+                            }
+
+                            try {
+                                document.dispatchEvent(new Event("DOMContentLoaded"));
+                                if (window.ptxLogsOn) {console.log("DOMContentLoaded dispatched 1");}
+                            } catch (e) {
+                                console.error("DOMContentLoaded dispatch error: ", e);
+                            }
+
+                            try {
+                                document.dispatchEvent(new Event("domready"));
+                                if (window.ptxLogsOn) {console.log("DOMReady dispatched 1");}
+                            } catch (e) {
+                                console.error("DOMReady dispatch error: ", e);
+                            }
+
+                            try {
+                                window.dispatchEvent(new Event("load"));
+                                if (window.ptxLogsOn) {console.log("Load dispatched");}
+                            } catch (e) {
+                                console.error("Load dispatch error: ", e);
+                            }
+                        };
+
+                        if (body) {
+                            if (window.ptxLogsOn) {console.debug("Processing body scripts");}
+                            var els = Array.from(body.querySelectorAll('script'));
+
+                            if (execFunc === null) {
+                                execFunc = funcCommit;
+                            }
+
+                            els.forEach((value) => {
+                                let type = value.getAttribute('type');
+
+                                if ((
+                                    !type
+                                        || type === ''
+                                        || type.indexOf('/javascript') >= 0
+                                ) && !ptxAttrCheckInHierarchy(value, 'spa_ignore', isAttrValueTrue)
+                                    && self.isAsyncLoad(value)) {
+                                    self.execScript(value);
+                                }
+                            });
+                            if (window.ptxLogsOn) {console.debug("Processing body scripts reversed");}
+                            {
+                                let refs = [];
+
+                                els.reverse().forEach((value) => {
+                                    let type = value.getAttribute('type');
+
+                                    if ((
+                                        !type
+                                            || type === ''
+                                            || type.indexOf('/javascript') >= 0
+                                    ) && !ptxAttrCheckInHierarchy(value, 'spa_ignore', isAttrValueTrue)
+                                        && !self.isAsyncLoad(value)) {
+                                        let src;
+
+                                        if ((src = value.getAttribute('src'))) {
+                                            refs.push({
+                                                node: value,
+                                                url: src,
+                                                dropOnUnload: value.getAttribute('drop_on_unload') === 'true'
+                                            });
+                                        } else {
+                                            execFunc = self.execRefs(refs, execFunc);
+                                            refs = [];
+                                            execFunc = self.execScript(value, execFunc);
+                                        }
+                                    }
+                                });
+
+                                execFunc = self.execRefs(refs, execFunc);
+                                refs = [];
+                            }
+                        }
+
+                        if (head) { // Head scripts will not modify head...
+                            if (window.ptxLogsOn) {console.debug("Processing head scripts");}
+                            var els = Array.from(head.querySelectorAll('script'));
+
+                            if (execFunc === null) {
+                                execFunc = funcCommit;
+                            }
+
+                            els.forEach((value) => {
+                                let type = value.getAttribute('type');
+
+                                if ((
+                                    !type
+                                        || type === ''
+                                        || type.indexOf('/javascript') >= 0
+                                ) && !ptxAttrCheckInHierarchy(value, 'spa_ignore', isAttrValueTrue)
+                                    && self.isAsyncLoad(value)) {
+                                    self.execScript(value);
+                                }
+                            });
+                            if (window.ptxLogsOn) {console.debug("Processing head scripts reversed");}
+
+                            {
+                                let refs = [];
+
+                                els.reverse().forEach((value) => {
+                                    let type = value.getAttribute('type');
+
+                                    if ((
+                                        !type
+                                            || type === ''
+                                            || type.indexOf('/javascript') >= 0
+                                    ) && !ptxAttrCheckInHierarchy(value, 'spa_ignore', isAttrValueTrue)
+                                        && !self.isAsyncLoad(value)) {
+                                        let src;
+
+                                        if ((src = value.getAttribute('src'))) {
+                                            refs.push({
+                                                node: value,
+                                                url: src,
+                                                dropOnUnload: value.getAttribute('drop_on_unload') === 'true'
+                                            });
+                                        } else {
+                                            execFunc = self.execRefs(refs, execFunc);
+                                            refs = [];
+                                            execFunc = self.execScript(value, execFunc);
+                                        }
+                                    }
+                                });
+
+                                execFunc = self.execRefs(refs, execFunc);
+                                refs = [];
+                            }
+                        }
+
+                        if (execFunc) {
+                            execFunc();
+                        } else {
+                            if (window.ptxLogsOn) {console.log('Hand-made dispatch 2');}
+                            funcCommit();
+                        }
+
+                        if (window.ptxLogsOn) {console.log('Passed scripts executed');}
+                    },
+                };
+
+                Ptx.Shadows.numLinksInterceptorInstance = 0;
+
+                Ptx.Shadows.getWebViewContent = async function (link) {
+                    var self = Ptx.Shadows;
+
+                    if (link) {
+                        document.documentElement.style.cursor = 'wait';
+
+                        try {
+                            var success = false;
+
+                            if (window.ptxLogsOn) {console.log('Sending request');}
+
+                            {
+                                let res = await fetch(link, {
+                                    method: "GET",
+                                    headers: { "Accept": "text/html", "ptxSPA": "true" }
+                                });
+
+                                if (window.ptxLogsOn) {console.log('OnReadyStateChange: ', res);}
+
+                                // redirect
+                                if (res.status === 301 || res.status === 302 || res.status === 303 || res.status === 307) {
+                                    if (window.ptxLogsOn) {console.log('Processing redirect to ' + res.getResponseHeader('Location'));}
+
+                                    let resR = await self.getWebViewContent(res.headers.get('location'));
+
+                                    if (resR !== true) {
+                                        success = true;
+                                    }
+
+                                    return;
+                                }
+
+                                let contentType;
+
+                                if (res.status === 205) {
+                                    if (window.ptxLogsOn) {console.log('Hard redirect requested by response status:', res.status);}
+                                    window.location = link;
+                                } else if (res.status === 204 || res.status === 304) {
+                                    if (window.ptxLogsOn) {console.log('Found "do nothing" response status', res.status);}
+                                } else if (res.status === 200 && (
+                                    (contentType = res.headers.get('content-type')) === ''
+                                        || (new RegExp('/html', "igm")).test(contentType)
+                                )) {
+                                    if (window.ptxLogsOn) {console.log('Found processable response type ' + contentType);}
+
+                                    var headPassed = null, bodyPassed = null;
+
+                                    {
+                                        let responseText = await res.text();
+                                        var resultB = null;
+
+                                        if ((resultB = (new RegExp('<(?:body)[^><]*>([^]*)</(?:body)>', 'ig')).exec(responseText))) {
+                                            bodyPassed = document.createElement('fakeBody');
+                                            bodyPassed.innerHTML = resultB[1];
+                                            resultB = null;
+                                        }
+
+                                        var resultH = null;
+
+                                        if ((resultH = (new RegExp('<(?:head)[^><]*>([^]*)</(?:head)>', 'ig')).exec(responseText))) {
+                                            headPassed = document.createElement('fakeHead');
+                                            headPassed.innerHTML = resultH[1];
+                                            resultH = null;
+                                        }
+                                    }
+
+                                    if (bodyPassed) {
+                                        try {
+                                            window.dispatchEvent(new Event("beforeunload"));
+                                            if (window.ptxLogsOn) {console.log("BeforeUnload dispatched");}
+                                        } catch (e) {
+                                            console.error("BeforeUnload dispatch error: ", e);
+                                        }
+
+                                        try {
+                                            var evnt = new Event("unload");
+                                            evnt.ptxGenericNotification = true;
+                                            window.dispatchEvent(evnt);
+                                            if (window.ptxLogsOn) {console.log("Unload dispatched");}
+                                        } catch (e) {
+                                            console.error("Unload dispatch error: ", e);
+                                        }
+
+                                        {
+                                            if (loopingBack === false) {
+                                                if (stackPages.length <= 0
+                                                    || stackPages[stackPages.length - 1] !== link) {
+                                                    stackPages.push(link);
+
+                                                    if (stackPages.length > 10) {
+                                                        stackPages = Array.prototype.slice.call(stackPages, stackPages.length - 10);
+                                                    }
+
+                                                    console.debug('Current pages stack:', stackPages);
+                                                }
+                                            } else {
+                                                loopingBack = false;
+                                            }
+                                        }
+
+                                        document.body.innerHTML = bodyPassed.innerHTML;
+
+                                        self.Try.exec(headPassed, document.body);
+                                        success = true;
+                                    }
+                                } else {
+                                    if (window.ptxLogsOn) { console.log('Found unprocessable response type/status ' + contentType + '/' + res.status); }
+                                }
+                            }
+
+                            return !success;
+                        } catch (e) {
+                            console.error("Content take error: ", e);
+                        } finally {
+                            document.documentElement.style.cursor = 'auto';
+                            document.documentElement.style.filter = '';
+                        }
+                    }
+
+                    return true;
+                };
+
+                Ptx.Shadows.getWebViewContentLogged = async function(url) {
+                    try {
+                        if (window.ptxLogsOn) { console.log("Loading content for '" + url + "'"); }
+                        await Ptx.Shadows.getWebViewContent(url);
+                    } catch (e) {
+                        console.error("Page content take error: ", e);
+                    }
+                }
+            }
+
+            (() => {
+                if (window.ptxLogsOn) {console.log('Link interceptor setter started');}
+
+                function ptxLinksInterceptorSet () {
+                    Ptx.eventListenerDrop(document, "DOMContentLoaded", ptxLinksInterceptorSet);
+
+                    (() => {
+                        try {
+                            let search;
+
+                            {
+                                let url = new URL(window.location.href);
+                                url.searchParams.set('ppf5', ptxPageUrlPPF5);
+                                search = url.search;
+                            }
+                            window.history.pushState(null, document.title, window.location.pathname + search + window.location.hash)
+                        } catch (e) {
+                            console.error('Hash update error: ', e);
+                        }
+                    })();
+
+                    if (!Ptx.Shadows.shadowsLinksInterceptor || document.onclick !== Ptx.Shadows.shadowsLinksInterceptor) {
+                        var numLinksInterceptorInst = Ptx.Shadows.numLinksInterceptorInstance++;
+                        var numIntCallCounter = 0;
+                        var funcOrig = document.onclick;
+                        Ptx.Shadows.interceptWorking = 0;
+
+                        Ptx.Shadows.interceptInProgress = () => {
+                            let working = Ptx.Shadows.interceptWorking;
+                            return working !== undefined
+                                    && working > 0;
+                        };
+
+                        if (window.ptxLogsOn) {console.log('Setting links interceptor ' + numLinksInterceptorInst);}
+
+                        Ptx.Shadows.shadowsLinksInterceptor = async function (ev) {
+                            var timeStart = window.ptxLogsOn ? performance.now() : null;
+                            var timeReceived;
+
+                            try {
+                                var numCall = numIntCallCounter++;
+
+                                if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.defaultPrevented) {
+                                    var state = !ev.defaultPrevented || (
+                                        ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey
+                                    );
+
+                                    if (window.ptxLogsOn) {
+                                        console.log(
+                                            'Drop execution (' + state + ') for links interceptor ' + numLinksInterceptorInst + ' call ' + numCall + ': '
+                                                + ev.altKey + ', '
+                                                + ev.ctrlKey + ', '
+                                                + ev.metaKey + ', '
+                                                + ev.shiftKey + ', '
+                                                + ev.defaultPrevented
+                                        );
+                                    }
+
+                                    return state;
+                                }
+
+                                if (window.ptxLogsOn) {
+                                    console.info('RT: ', timeStart - Ptx.nvlC(ev, (e) => e.timeStamp));
+                                }
+
+                                var updated = window.ptxPageWasUpdated === true
+                                        || !window.ptxWindowTimestampPostfix
+                                        || window.ptxWindowTimestampPostfix !== window.ptxActualTimestampPostfix;
+
+                                if (window.ptxLogsOn) {console.log('Executing links interceptor ' + numLinksInterceptorInst + ' call ' + numCall);}
+                                try {
+                                    if (Ptx.Ui
+                                        && Ptx.Ui.urlTraverseHandler) {
+                                        Ptx.Ui.urlTraverseHandler(ev.target);
+                                    }
+                                } catch (e) {
+                                    console.error('Url traverse handler error:', e);
+                                }
+
+                                try {
+                                    if (Ptx.Ui
+                                        && Ptx.Ui.urlQuicktipHandler) {
+                                        let resQT = Ptx.Ui.urlQuicktipHandler(ev);
+
+                                        if (resQT !== null) {
+                                            return resQT;
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error('Quicktip handler error:', e);
+                                }
+
+                                try {
+                                    var anchor = ev.target.closest('A');
+
+                                    if (!anchor) return true;
+
+                                    for (var n = anchor; n.parentNode; n = n.parentNode) {
+                                        var ignoreWebView = n.getAttribute('ignoreWebView');
+
+                                        if (ignoreWebView) {
+                                            if (window.ptxLogsOn) {console.log('Links interceptor ' + numLinksInterceptorInst + ' call ' + numCall + ' execution cancelled because of ignorewWebView attribute');}
+                                            return true;
+                                        }
+                                    }
+
+                                    if (Ptx.Shadows.interceptWorking > 0) {
+                                        ev.preventDefault();
+                                        if (window.ptxLogsOn) {console.log('Links interceptor breaks ' + numLinksInterceptorInst + ' call ' + numCall + ' execution because of unfinished earlier process');}
+                                        return false;
+                                    }
+
+                                    Ptx.Shadows.interceptWorking++;
+
+                                    try {
+                                        
+    (() => {
+        try {
+            window.history.pushState(null, document.title, window.location.pathname + window.location.search)
+        } catch (e) {
+            console.error('Hash clean error: ', e);
+        }
+    })();
+    
+                                        var href = anchor.getAttribute('href');
+
+                                        {
+                                            if (updated === false
+                                                    && window.ptxTimestamp
+                                                    && href
+                                                    && href.indexOf('/city') >= 0
+                                                    && (Number(new Date()) - window.ptxTimestamp) >= 600000) {
+                                                if (window.ptxLogsOn) { console.info('Performing javascript page context clean.'); }
+                                                updated = true;
+                                            }
+                                        }
+
+                                        if (updated === true) {
+                                            if (window.ptxLogsOn) {
+                                                console.warn(
+                                                    'Refreshing page due to timestamp postfixes mismatch - '
+                                                        + window.ptxWindowTimestampPostfix
+                                                        + ' != '
+                                                        + window.ptxActualTimestampPostfix + ' or due to external request: ' + window.ptxPageWasUpdated
+                                                );
+                                            }
+                                            return true;
+                                        }
+
+                                        let onclickC;
+
+                                        if (href === '' || href === '#') {
+                                            ev.preventDefault();
+                                            ptxLocReload();
+                                            timeReceived = window.ptxLogsOn ? performance.now() : null;
+                                            return false;
+                                        } else if (href
+                                            && (
+                                                (onclickC = anchor.getAttribute('onclick')) === undefined
+                                                    || onclickC === null
+                                                    || onclickC === ''
+                                            ) && href.substring(0, 11) !== 'javascript:') {
+
+                                            {
+                                                try {
+                                                    let search;
+
+                                                    {
+                                                        let url = new URL(window.location.href);
+                                                        url.searchParams.set('ppf5', href);
+                                                        search = url.search;
+                                                    }
+                                                    window.history.pushState(null, document.title, window.location.pathname + search + window.location.hash)
+                                                } catch (e) {
+                                                    console.error('Hash update error: ', e);
+                                                }
+                                            }
+
+                                            ev.preventDefault();
+                                            await Ptx.Shadows.getWebViewContent(href);
+                                            timeReceived = window.ptxLogsOn ? performance.now() : null;
+
+                                            {
+                                                if (window.ptxLogsOn) {console.log('Trying to find label in "' + href + '"');}
+                                                var resultH = null;
+
+                                                if ((resultH = (new RegExp('#([^\\s#?&/]+)', 'i')).exec(href))) {
+                                                    Ptx.Shadows.scrollTo(resultH[1]);
+                                                }
+                                            }
+
+                                            return false;
+                                        }
+                                    } finally {
+                                        Ptx.Shadows.interceptWorking--;
+                                    }
+                                } finally {
+                                    if (window.ptxLogsOn) {console.log('Finished links interceptor ' + numLinksInterceptorInst + ' call ' + numCall);}
+
+                                    if (funcOrig) {
+                                        if (window.ptxLogsOn) {console.log('Starting links interceptor ' + numLinksInterceptorInst + ' call ' + numCall + ' propagation');}
+
+                                        try {
+                                            funcOrig(ev);
+                                        } finally {
+                                            if (window.ptxLogsOn) {console.log('Finished links interceptor ' + numLinksInterceptorInst + ' call ' + numCall + ' propagation');}
+                                        }
+                                    }
+                                }
+                            } finally {
+                                if (window.ptxLogsOn) {
+                                    var mmntFinish = performance.now();
+
+                                    if (timeReceived) {
+                                        console.info('Link interceptor work took ' + (mmntFinish - timeStart) + ' msecs, postprocess took ' + (mmntFinish - timeReceived) + ' msecs');
+                                    } else {
+                                        console.info('Link interceptor work took ' + (mmntFinish - timeStart) + ' msecs');
+                                    }
+                                }
+                            }
+                        };
+
+                        document.onclick = Ptx.Shadows.shadowsLinksInterceptor;
+                    }
+                }
+
+                Ptx.eventListenerAdd(document, "DOMContentLoaded", ptxLinksInterceptorSet);
+            })();
+
+            window.ptxLocLoad = async (locUrl) => {
+                if (locUrl) {
+                    let useSpaLoad = true;
+
+                    try {
+                        useSpaLoad = ((new URL(locUrl)).hostname === window.location.hostname);
+                    } catch(e) {
+                    }
+
+                    if (useSpaLoad === true) {
+                        await Ptx.Shadows.getWebViewContent(locUrl);
+                    } else {
+                        window.location = locUrl;
+                    }
+                }
+            }
+
+            window.ptxLocReload = async () => {
+                await ptxLocLoad(window.ptxPageUrl);
+            }
+
+            Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+                if (window.Wicket
+                        && Wicket.Ajax) {
+                    Wicket.Ajax.explicitRedirectHandler = (url) => ptxLocLoad(url);
+                }
+            });
+
+            if (window.ptxLogsOn) {console.log('Link interceptor setter script finished');}
+        })();
+
+        queueMicrotask(() => {
+    console.log(
+        '%cЕсли вас попросили скопировать и вставить что-то сюда, шанс 101% что это мошенники. Ввод сюда информации может дать доступ к вашим данным и привести к краже аккаунта!',
+        'color: yellow; font-size: 40px; border: 1px solid gray; border-radius: 25px; padding: 5px 20px; background-color: black;'
+    );
+});
+    </script>
+
+
+    <!-- Yandex.Metrika counter -->
+    
+        <script type="text/javascript">
+            (() => {
+                'use strict';
+                if (window.ptxIsCombatPage !== true) {
+                        var proc = () => {
+                            if (window.ym === undefined) {
+                                (function(m,e,t,r,i,k,a){m[i]=m[i]||function()
+                                {(m[i].a=m[i].a||[]).push(Array.prototype.slice.call(arguments))};
+                                m[i].l=1*new Date();
+                                for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+                                k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+                                (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+                                window.ym.ptxCount = 0;
+                            }
+
+                            if ((window.ym.ptxCount++) % 30 === 0) {
+                                ym(94691268, "init", {
+                                    clickmap: false,
+                                    trackLinks: false,
+                                    accurateTrackBounce: false,
+                                    webvisor: false,
+                                    ecommerce: "dataLayer"
+                                });
+                                window.dataLayer = window.dataLayer || [];
+                            }
+
+                            if (window.ymr === undefined) {
+                                window.ymr = function() {
+                                    if (window.ptxIsCombatPage !== true) { ym.call(null, Array.prototype.slice.call(arguments)) }
+                                };
+                            }
+                        };
+
+                        if (window.dataLayer && dataLayer instanceof Array && dataLayer.length > 100) {
+                            console.info('Drop collected data YTM', dataLayer.length);
+                            setTimeout(() => {
+                                delete window.dataLayer;
+                                window.dataLayer = window.dataLayer || [];
+                                if (window.ptxLogsOn) { console.info('Dropped collected data YTM'); }
+                            }, 0);
+                        }
+
+                        if (window.ym && ym.a && ym.a instanceof Array && ym.a.length > 100) {
+                            console.info('Forcing send collected data YM', ym.a.length);
+                            ym(94691268, "hit", "/forced-data-submit", {
+                                transport: 'beacon'
+                            });
+
+                            setTimeout(() => {
+                                delete window.ym.a;
+                                delete window.dataLayer;
+                                window.dataLayer = window.dataLayer || [];
+                                if (window.ptxLogsOn) { console.info('Dropped collected data YM'); }
+                            }, 0);
+                            setTimeout(proc, 0);
+                            return;
+                        }
+
+                        proc();
+                } else if (window.ym) {
+                    ym(94691268, 'disable');
+                    Ptx.eventListenerAddPB(window, 'beforeunload', () => ym(94691268, 'enable'));
+
+                    if (ym.a && ym.a instanceof Array && ym.a.length > 10) {
+                        ym.a = Array.prototype.slice.call(ym.a, ym.a.length - 10);
+                        ym(94691268, 'disable');
+                    }
+
+                    if (window.dataLayer && dataLayer instanceof Array && dataLayer.length > 10) {
+                        dataLayer = Array.prototype.slice.call(dataLayer, dataLayer.length - 10);
+                    }
+                }
+            })();
+        </script>
+        <script type="text/javascript">
+            if (window.ptxIsCombatPage !== true
+                    && window.ym) {
+                ym(94691268, "hit", window.ptxPagePathCln, {
+                    callback: () => {
+                        if (window.ptxLogsOn) { console.log('Hit call stacktrace:', (new Error()).stack); }
+
+                        setTimeout(() => {
+                            if (ym.a && ym.a instanceof Array && ym.a.length > 10) {
+                                ym.a = Array.prototype.slice.call(ym.a, ym.a.length - 10);
+                            }
+                        }, 100);
+                    }
+                });
+            }
+        </script>
+        <script type="text/javascript">
+            (() => {
+                'use strict';
+                if (window.ptxIsCombatPage === true) {
+                    Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+                        let el = document.getElementById('body_id');
+
+                        if (el) {
+                            el.classList.add('ym-hide-content');
+                            el.classList.add('ym-disable-clickmap');
+                            el.classList.add('ym-disable-keys');
+                            el.classList.add('ym-disable-tracklink');
+                            if (window.ptxLogsOn) { console.debug('Suppressed YM content store'); }
+                        }
+                    });
+                } else {
+                    Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+                        let el = document.getElementById('body_id');
+
+                        if (el) {
+                            el.classList.remove('ym-hide-content');
+                            el.classList.remove('ym-disable-clickmap');
+                            el.classList.remove('ym-disable-keys');
+                            el.classList.remove('ym-disable-tracklink');
+                        }
+                    });
+                }
+            })();
+        </script>
+    
+    <!-- /Yandex.Metrika counter -->
+    
+
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<meta charset="utf-8" />
+<meta name="theme-color" content="#000000"/>
+<title>Игра &quot;Мир Теней&quot; - Святилище Накрила</title>
+<meta name="language" content="russian, ru, русский"/>
+<meta name="viewport" content="width=device-width,maximum-scale=1.0" />
+<meta name="description" content="Мир Теней - культовая мобильная MMORPG в стиле фэнтези для настоящих ценителей оружия, магии и кровопролитных войн! Покоряй подземелья, создавай оружие, участвуй в эпических сражениях с другими игроками!">
+<meta property="og:title" content="Игра &quot;Мир Теней&quot;">
+<meta property="og:type" content="игра">
+<meta property="og:url" content="https://m.vten.ru">
+<meta property="og:description" content="Мир Теней - культовая мобильная MMORPG в стиле фэнтези для настоящих ценителей оружия, магии и кровопролитных войн! Покоряй подземелья, создавай оружие, участвуй в эпических сражениях с другими игроками!">
+<meta name="keywords" content="игры, RPG, MMORPG, фэнтези, онлайн, wap, бесплатно, мир теней, магия, играть онлайн, ролевые игры, лучшие онлайн игры, браузерная игра">
+<link rel="manifest" href="/manifest_p.json"/>
+<meta name="theme-color" content="#000000" />
+<link rel="icon" sizes="192x192" href="/images/game-icon_vten2021_192x192.png"/>
+<meta name="robots" content="INDEX, FOLLOW"/>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+<link rel="apple-touch-icon" href="/images/touch/touch-icon-iphone.png" />
+<link rel="apple-touch-icon" sizes="57x57" href="/images/touch/touch-icon-iphone.png" />
+<link rel="apple-touch-icon" sizes="72x72" href="/images/touch/touch-icon-ipad.png" />
+<link rel="apple-touch-icon" sizes="114x114" href="/images/touch/touch-icon-iphone-retina.png" />
+<link rel="apple-touch-icon" sizes="144x144" href="/images/touch/touch-icon-ipad-retina.png" />
+
+
+
+
+
+
+
+<script type="text/javascript" id="websocket_subscribe">
+/*<![CDATA[*/
+
+    (() => {
+        'use strict';
+        if (!Ptx.Shadows.WebSocket) {
+            Ptx.Shadows.WebSocket = {};
+        }
+
+        const CDATALog = Ptx.Utils.Console({source: 'CDATA'});
+        const CDATADebug = Ptx.Utils.Console({type: 'debug', source: 'CDATA'});
+        const webSocketLog = Ptx.Utils.Console({source: 'WebSocket'});
+        const webSocketDebug = Ptx.Utils.Console({type: 'debug', source: 'WebSocket'});
+        const webSocketWarn = Ptx.Utils.Console({type: 'warn', source: 'WebSocket'});
+        const webSocketErr = Ptx.Utils.Console({type: 'error', source: 'WebSocket'});
+
+        let isConnectionValid = () => {
+            let state;
+            return window.Wicket
+                    && Wicket.WebSocket
+                    && Wicket.WebSocket.INSTANCE
+                    && Wicket.WebSocket.INSTANCE.ws
+                    && ((state = Wicket.WebSocket.INSTANCE.ws.readyState) == WebSocket.OPEN
+                    || state == WebSocket.CONNECTING);
+        };
+        let isConnectionOpen = () => {
+            return window.Wicket
+                    && Wicket.WebSocket
+                    && Wicket.WebSocket.INSTANCE
+                    && Wicket.WebSocket.INSTANCE.ws
+                    && Wicket.WebSocket.INSTANCE.ws.readyState == WebSocket.OPEN;
+        };
+
+        CDATALog('Set up backend pinger');
+Ptx.setInterval(() => {
+    'use strict';
+    if (!Ptx.Shadows.interceptInProgress() && document.hidden === false && ptxIsCombatPage !== true) { CDATALog('Ping backend for notices'); Ptx.Shadows.Notice.show(); } else { CDATADebug('Backend ping for notices suppressed'); }
+}, 30000);
+
+        let reconnect = Ptx.Shadows.WebSocket.reconnect;;
+        let _re_connect = Ptx.Shadows.WebSocket._re_connect;
+
+        if (reconnect === undefined || reconnect === null) {
+            let hdlrOpen;
+            let hdlrReconnectReschedule = function(ws, evnt) {
+                delete Ptx.Shadows.WebSocket.connection_state_open;
+
+                {
+                    let hdlrExternal = Ptx.Shadows.WebSocket.handlerDrop;
+
+                    if (hdlrExternal && hdlrExternal !== null) {
+                        webSocketLog('Drop on reschedule - external handler present, executing it:', hdlrExternal);
+                        if (hdlrExternal(ws, evnt) !== false) {
+                            return;
+                        }
+                    }
+                }
+
+                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.Closed, hdlrReconnectReschedule);
+                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.Error, hdlrReconnectReschedule);
+                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.Opened, hdlrOpen);
+
+                Ptx.setTimeoutR(Ptx.Shadows.WebSocket.reconnect, 5000, 'WS reconnect');
+                delete Ptx.Shadows.WebSocket.handler;
+
+                (() => {
+                    try {
+                        Wicket.WebSocket.close();
+                    } catch (e) {
+                        console.error("Connection on close error:", e);
+                    }
+                })();
+
+                webSocketErr('Failed to establish/got dropped WebSocket connection, scheduled reconnect in 5 seconds', ws, evnt, arguments);
+            };
+            hdlrOpen = () => {
+                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.Opened, hdlrOpen);
+
+                webSocketLog('Established WebSocket connection, starting subscribe.');
+                Ptx.Shadows.WebSocket.connection_state_open = true;
+                document.dispatchEvent(new CustomEvent('Ptx_Shadows_WebSocket_connection_state_open', {}));
+
+                _re_connect();
+            };
+
+            Ptx.Shadows.WebSocket.reconnect = reconnect = () => {
+                Wicket.Event.subscribe(Wicket.Event.Topic.WebSocket.Opened, hdlrOpen);
+                Wicket.Event.subscribe(Wicket.Event.Topic.WebSocket.Closed, hdlrReconnectReschedule);
+                Wicket.Event.subscribe(Wicket.Event.Topic.WebSocket.Error, hdlrReconnectReschedule);
+
+                try {
+                    Ptx.Shadows.WebSocket.connect();
+                } catch (e) {
+                    console.error('WebSocket connect error:', e);
+                    Ptx.setTimeoutR(reconnect, 5000, 'WS reconnect');
+                    return;
+                }
+            };
+        }
+
+        if (_re_connect === undefined || _re_connect === null) {
+            Ptx.Shadows.WebSocket._re_connect = _re_connect = () => {
+                if (!Ptx.Shadows.WebSocket.handler) {
+                    {
+                        Ptx.Shadows.WebSocket.handler = function() {
+                            webSocketDebug('Got push message:', arguments);
+
+                            if (arguments !== null
+                                && arguments.length > 1) {
+                                if (arguments[1] === 'ping') {
+                                    if (ptxIsCombatPage !== true) {
+                                        webSocketDebug('Pinging "https://vmmo.vten.ru/tech/report/yg"');
+                                        fetch('https://vmmo.vten.ru/tech/report/yg', {
+                                            method: "GET",
+                                            headers: { "Content-Type": "text/json", "Accept" : "application/json" }
+                                        }).then((response) => {
+                                            webSocketDebug('Got response', response);
+                                        });
+                                    }
+                                } else if (arguments[1] === 'notification') {
+                                    Ptx.setTimeout(function() { if (!Ptx.Shadows.interceptInProgress()) { Ptx.Shadows.Notice.show(); }}, 10);
+                                } else if (arguments[1] === 'reload') {
+                                    Ptx.setTimeout(() => { ptxLocReload(); }, 0);
+                                }
+                            }
+                        }
+                        Ptx.Shadows.WebSocket.handlerAjax = function() {
+                            // Только логгируем
+                            if (arguments && arguments.length >= 2) {
+                                let isPrepare = arguments[0].type === Wicket.Event.Topic.WebSocket.MessageAjaxContent;
+                                let msg = arguments[1];
+                                let msgId = arguments.length >= 4 ? arguments[3] : undefined;
+
+                                if (isPrepare || (msgId && window.ptxIsERLogged)) {
+                                    let tme = arguments.length >= 3 ? arguments[2] : undefined;
+
+                                    if (tme) {
+                                        if (typeof(tme) === 'number' && tme > (isPrepare ? 10 : 30)) {
+                                            Ptx.setTimeout(() => {
+                                                webSocketDebug(
+                                                        'WebSocket: ajax content message',
+                                                        msgId,
+                                                        isPrepare
+                                                            ? 'parsing and preparing'
+                                                            : 'parsing, preparing and processing',
+                                                        'took', tme, 'msecs'
+                                                );
+                                            }, 0);
+                                        }
+                                    } else {
+                                        tme = 'unknown';
+                                    }
+
+                                    if (msgId && window.ptxIsERLogged) {
+                                        queueMicrotask(() => { Wicket.WebSocket.send('#' + msgId + (isPrepare ? ' prepared' : ' processed') + ' in ' + tme + ' msec'); });
+                                    }
+
+                                    if (isPrepare) {
+                                        Ptx.setTimeout(() => { webSocketDebug('Got push AJAX message with id:', msgId, msg); }, 0);
+                                    }
+                                }
+                            } else {
+                                webSocketDebug('Got push AJAX message:', arguments);
+                            }
+                        }
+                    }
+                    let subscribe = () => {
+                        try {
+                            Wicket.WebSocket.send('pageId: ' + window.ptxPageId);
+                        } catch (e) {
+                            webSocketErr('Unable to report back page display');
+                        }
+
+                        webSocketWarn('Subscribing WS');
+                        {
+                            let handler = Ptx.Shadows.WebSocket.handler;
+
+                            if (handler === undefined || handler === null) {
+                                webSocketWarn('Subscribe WS failed: handler not present');
+                                return;
+                            }
+
+                            Wicket.Event.subscribe(Wicket.Event.Topic.WebSocket.Message, handler);
+                        }
+                        {
+                            let handler = Ptx.Shadows.WebSocket.handlerAjax;
+
+                            if (handler === undefined || handler === null) {
+                                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.Message, Ptx.Shadows.WebSocket.handler);
+                                webSocketWarn('Subscribe WS failed: handler not present');
+                                return;
+                            }
+
+                            Wicket.Event.subscribe(Wicket.Event.Topic.WebSocket.MessageAjaxContent, handler);
+                            Wicket.Event.subscribe(Wicket.Event.Topic.WebSocket.MessageAjaxContentProcessed, handler);
+                        }
+                        webSocketWarn('Subscribed WS');
+
+                        Ptx.setTimeoutR(() => {
+                            if (Ptx.Shadows.WebSocket.connection_state_open !== true) {
+                                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.Message, Ptx.Shadows.WebSocket.handler);
+                                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.MessageAjaxContent, Ptx.Shadows.WebSocket.handlerAjax);
+                                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.MessageAjaxContentProcessed, Ptx.Shadows.WebSocket.handlerAjax);
+                                delete Ptx.Shadows.WebSocket.handler;
+                                delete Ptx.Shadows.WebSocket.handlerAjax;
+
+                                webSocketLog('External handler setting up skipped');
+                                return;
+                            }
+
+                            Ptx.Shadows.WebSocket.handlerDrop = function(ws, evnt) {
+                                Ptx.Shadows.WebSocket.handlerDrop = null;
+                                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.Message, Ptx.Shadows.WebSocket.handler);
+                                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.MessageAjaxContent, Ptx.Shadows.WebSocket.handlerAjax);
+                                Wicket.Event.unsubscribe(Wicket.Event.Topic.WebSocket.MessageAjaxContentProcessed, Ptx.Shadows.WebSocket.handlerAjax);
+                                delete Ptx.Shadows.WebSocket.handler;
+                                delete Ptx.Shadows.WebSocket.handlerAjax;
+                                webSocketLog('Dropped WebSocket handlers on connection close/error:', ws, evnt, arguments);
+
+                                if (!evnt || evnt.type !== 'close' || evnt.wasClean !== true) {
+                                    try {
+                                        Wicket.WebSocket.close();
+                                    } catch (e) {
+                                        console.error("Connection on close error:", e);
+                                    }
+
+                                    if (!Ptx.Shadows.WebSocket.suppressReconnect) {
+                                        webSocketLog('Reconnect initiated');
+                                        queueMicrotask(Ptx.Shadows.WebSocket.reconnect);
+                                    } else {
+                                        webSocketLog('Reconnect suppressed');
+                                    }
+
+                                    return true;
+                                } else {
+                                    webSocketLog('Do not start urgent reconnect procedure on clean close');
+                                    return false;
+                                }
+                            };
+
+                            webSocketLog('External handler set up');
+                        }, 1000, 'WS external handler setter');
+                    };
+
+                    if (Ptx.Shadows.WebSocket.connection_state_open) {
+                        subscribe();
+                    } else {
+                        Ptx.eventListenerAddPB(document, 'Ptx_Shadows_WebSocket_connection_state_open', subscribe);
+                    }
+
+                    Ptx.eventListenerAdd(window, 'unload', (ev) => {
+                        if (!ev.ptxGenericNotification) {
+                            Ptx.Shadows.WebSocket.suppressReconnect = true;
+                            webSocketLog('Marked reconnect suppressed');
+                            Wicket.WebSocket.close();
+                            delete Ptx.Shadows.WebSocket.handler;
+                            webSocketWarn('Closed Wicket.WebSocket');
+                        } else {
+                            webSocketLog('Do not mark reconnect as suppressed on generic unload');
+                        }
+                    });
+                    webSocketLog('WS subscriber set up');
+                }
+            };
+        }
+
+        {
+            let checker = () => {
+                if (window.Wicket
+                        && Wicket.WebSocket
+                        && Wicket.WebSocket.INSTANCE
+                        && Wicket.WebSocket.INSTANCE.ws
+                        && !isConnectionValid()) {
+                    webSocketWarn('WebSocket connection in invalid ready state:', Wicket.WebSocket.INSTANCE.ws.readyState, 'reconnecting');
+                    delete Ptx.Shadows.WebSocket.handler;
+
+                    try {
+                        Wicket.WebSocket.close();
+                    } catch (e) {
+                        console.error("Connection on close error:", e);
+                    }
+
+                    reconnect();
+                }
+            };
+
+            checker();
+            Ptx.setIntervalR(checker, 1000, 'WS alive status checker');
+        }
+
+        {
+            let state;
+
+            if (isConnectionValid()) {
+                _re_connect();
+            } else {
+                if (Ptx.Shadows.WebSocket.init_Ptx_Shadows_webSocket_connect === true) {
+                    reconnect();
+                } else {
+                    Ptx.eventListenerAddPB(document, 'init_Ptx_Shadows_webSocket_connect', () => reconnect());
+                }
+            }
+        }
+    })();
+/*]]>*/
+</script>
+<script type="text/javascript" >
+/*<![CDATA[*/
+(() => {
+    'use strict';
+    if (window.ptxLogsOn) {console.warn('Init sounds script executed');}
+
+    if (!window.Ptx) {
+        window.Ptx = {};
+    }
+
+    if (!Ptx.Shadows) {
+        Ptx.Shadows = {};
+    }
+
+    Ptx.performOnLoadPB(() => {
+        try {
+            initSounds(false, false, "0,3", "0,2");
+
+            try {
+                if ("" === "none") {
+                    ceaseMusic();
+                } else if ("".length > 0) {
+                    Ptx.nvlC(Ptx.Shadows.Sounds, e => e.soundMarkerAmbient = "");
+                    trySound("");
+                }
+            } catch (e) {
+                console.error('Ambient sound play error: ', e);
+            }
+        } catch (e) {
+            console.error('Sound init error: ', e);
+        }
+    }, undefined, true);
+})();
+/*]]>*/
+</script>
+<link rel="stylesheet" type="text/css" href="/skin/lightui/css/common.css?v=1766042164517" />
+<script type="text/javascript" defer="defer" spa_ignore="true" src="/scripts/howler.js?v=1766042164517"></script>
+<script type="text/javascript" defer="defer" spa_ignore="true" src="/scripts/sounds.js?v=1766042164517"></script>
+<script type="text/javascript" id="notice_vars">
+/*<![CDATA[*/
+
+        (() => {
+    'use strict';
+    
+    Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+        'use strict';
+        var CDATALog = Ptx.Utils.Console({source: 'CDATA'});
+
+        if (!window.Ptx) {
+            window.Ptx = {};
+        }
+
+        if (!Ptx.Shadows) {
+            Ptx.Shadows = {};
+        }
+
+        CDATALog('Notice object:', Ptx.Shadows.Notice);
+
+        if (!Ptx.Shadows.Notice) {
+            Ptx.Shadows.Notice = {};
+        }
+
+        var block = Ptx.Shadows.Notice;
+
+        block.urlGetNotice = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-IEndpointBehaviorListener.1-&1=normal';
+        block.urlShowNotice = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-IEndpointBehaviorListener.2-&1=normal';
+        block.urlCloseNotice = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-IEndpointBehaviorListener.3-&1=normal';
+
+        CDATALog('Notice object after:', Ptx.Shadows.Notice);
+    });
+})();
+    
+/*]]>*/
+</script>
+<script type="text/javascript" id="quicktip_vars">
+/*<![CDATA[*/
+
+        (() => {
+    'use strict';
+    
+    Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+        'use strict';
+        var CDATALog = Ptx.Utils.Console({source: 'CDATA'});
+
+        if (!window.Ptx) {
+            window.Ptx = {};
+        }
+
+        if (!Ptx.Shadows) {
+            Ptx.Shadows = {};
+        }
+
+        CDATALog('Quicktip object:', Ptx.Shadows.Quicktip);
+
+        if (!Ptx.Shadows.Quicktip) {
+            Ptx.Shadows.Quicktip = {};
+        }
+
+        Ptx.Shadows.Quicktip.urlGetQuicktip = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-IEndpointBehaviorListener.4-&1=normal';
+
+
+        CDATALog('Quicktip object after:', Ptx.Shadows.Quicktip);
+    });
+})();
+    
+/*]]>*/
+</script>
+<script type="text/javascript" >
+/*<![CDATA[*/
+Wicket.Event.add(window, "domready", function(event) { 
+Wicket.Ajax.ajax({"c":"id74","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-lnkReportBack&1=normal","e":"click"});(() => {let lnk=document.getElementById('id74');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id74 found');}})();;
+Wicket.Ajax.ajax({"c":"id76","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-lnkRecreate&1=normal","e":"click"});(() => {let lnk=document.getElementById('id76');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id76 found');}})();;
+Wicket.Ajax.ajax({"c":"id77","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-actorPanel-container-nameBlock-shuffle&1=normal","e":"click"});(() => {let lnk=document.getElementById('id77');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id77 found');}})();;
+Wicket.Ajax.ajax({"c":"id78","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-targetPanel-container-nameBlock-shuffle&1=normal","e":"click"});(() => {let lnk=document.getElementById('id78');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id78 found');}})();;
+Wicket.Ajax.ajax({"c":"id79","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-blkControlArea-lnkReportBack&1=normal","e":"click","dep":[(attrs)=>{return { 'scrolled': document.getElementById('btfWrapper').pageXOffset || document.getElementById('btfWrapper').scrollLeft }}]});(() => {let lnk=document.getElementById('id79');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id79 found');}})();;
+Wicket.Ajax.ajax({"c":"id7a","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-btfBlock-areas-0-sideRight-entities-1-entityPanel-unit-actOnLink&1=normal","e":"click","ch":"caou_1864106755|a"});(() => {let lnk=document.getElementById('id7a');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id7a found');}})();;
+Wicket.Ajax.ajax({"c":"id7b","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-btfBlock-areas-0-sideRight-entities-2-entityPanel-unit-actOnLink&1=normal","e":"click","ch":"caou_295144419|a"});(() => {let lnk=document.getElementById('id7b');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id7b found');}})();;
+Wicket.Ajax.ajax({"c":"ptx_combat_rich2_attack_link","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-attackBlock-attackBlockInner-attackLink&1=normal","e":"click","ch":"ca_1502007810|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'btn_attack');} catch(e) {} try { Ptx.nvlC(document.getElementById('id7c'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('ptx_combat_rich2_attack_link');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #ptx_combat_rich2_attack_link found');}})();;
+Wicket.Ajax.ajax({"c":"id7d","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-skills-0-skillBlock-skillBlockInner-skillLink&1=normal","e":"click","ch":"cam_Valor_858544991|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'amulet_Valor');} catch(e) {} try { Ptx.nvlC(document.getElementById('id7e'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id7d');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id7d found');}})();;
+Wicket.Ajax.ajax({"c":"id7f","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-skills-1-skillBlock-skillBlockInner-skillLink&1=normal","e":"click","ch":"cam_LightingHit_1252946843|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'amulet_LightingHit');} catch(e) {} try { Ptx.nvlC(document.getElementById('id80'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id7f');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id7f found');}})();;
+Wicket.Ajax.ajax({"c":"id81","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-skills-2-skillBlock-skillBlockInner-skillLink&1=normal","e":"click","ch":"cam_FrostBolt_1980548828|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'amulet_FrostBolt');} catch(e) {} try { Ptx.nvlC(document.getElementById('id82'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id81');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id81 found');}})();;
+Wicket.Ajax.ajax({"c":"id83","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-skills-3-skillBlock-skillBlockInner-skillLink&1=normal","e":"click","ch":"cam_Enrage_1569636285|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'amulet_Enrage');} catch(e) {} try { Ptx.nvlC(document.getElementById('id84'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id83');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id83 found');}})();;
+Wicket.Ajax.ajax({"c":"id85","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-skills-4-skillBlock-skillBlockInner-skillLink&1=normal","e":"click","ch":"cam_Evade_457957025|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'amulet_Evade');} catch(e) {} try { Ptx.nvlC(document.getElementById('id86'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id85');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id85 found');}})();;
+Wicket.Ajax.ajax({"c":"id87","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-beltItems-0-itemBlock-itemBlockInner-itemLink&1=normal","e":"click","ch":"cp_1725152020|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'potion_109_01');} catch(e) {} try { Ptx.nvlC(document.getElementById('id88'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id87');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id87 found');}})();;
+Wicket.Ajax.ajax({"c":"id89","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-beltItems-1-itemBlock-itemBlockInner-itemLink&1=normal","e":"click","ch":"cp_846659300|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'potion_184_01');} catch(e) {} try { Ptx.nvlC(document.getElementById('id8a'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id89');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id89 found');}})();;
+Wicket.Ajax.ajax({"c":"id8b","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-beltItems-2-itemBlock-itemBlockInner-itemLink&1=normal","e":"click","ch":"cp_725544217|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'potion_102_01');} catch(e) {} try { Ptx.nvlC(document.getElementById('id8c'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id8b');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id8b found');}})();;
+Wicket.Ajax.ajax({"c":"id8d","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-gadgets-0-itemBlock-itemBlockInner-itemLink&1=normal","e":"click","ch":"cg_1599874035|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'gadget_NY2019Special_gift');} catch(e) {} try { Ptx.nvlC(document.getElementById('id8e'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id8d');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id8d found');}})();;
+Wicket.Ajax.ajax({"c":"id8f","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-gadgets-1-itemBlock-itemBlockInner-itemLink&1=normal","e":"click","ch":"cg_963921025|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'gadget_i3027-FlyingMasks2');} catch(e) {} try { Ptx.nvlC(document.getElementById('id90'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id8f');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id8f found');}})();;
+Wicket.Ajax.ajax({"c":"id91","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-gadgets-2-itemBlock-itemBlockInner-itemLink&1=normal","e":"click","ch":"cg_1707825849|a","bh":[(attrs)=>{try{ptxCmbtCallback(attrs.event.timeStamp, 'gadget_i6211-shadows_mirror_1');} catch(e) {} try { Ptx.nvlC(document.getElementById('id92'), (el) => { el.classList.add('_active'); Ptx.setTimeout(() => el.classList.remove('_active'), 200); }); } catch(e) {}}],"dep":[(attrs)=>{try{return { 'tmt': performance.now() - attrs.event.timeStamp }}catch(e){} return {}}]});(() => {let lnk=document.getElementById('id91');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id91 found');}})();;
+;(() => {
+	'use strict';
+    if (!window.Ptx) {
+        window.Ptx = {};
+    }
+
+    if (!Ptx.Shadows) {
+        Ptx.Shadows = {};
+    }
+
+    if (!Ptx.Shadows.WebSocket) {
+        Ptx.Shadows.WebSocket = {};
+    }
+
+    Ptx.Shadows.WebSocket.params = {
+        pageId: 6,  context: 'com.playtox.shadows.wicket.pages.dungeon.combat.DungeonCombatPage', resourceName: '', connectionToken: '',
+        baseUrl: 'dungeon/combat/dSanctuary?1=normal', contextPath: '', appName: 'WicketApplicationFilter',
+        port: 0, securePort: 0, filterPrefix: ''
+    };
+
+    if (!Ptx.Shadows.WebSocket.connect) {
+        Ptx.Shadows.WebSocket.connect = () => {
+            'use strict';
+            let params = Ptx.Shadows.WebSocket.params;
+            jQuery.extend(Wicket.WebSocket, params);
+            Wicket.WebSocket.createDefaultConnection();
+            if (window.ptxLogsOn) { console.log('Created connection template with parameters ' + JSON.stringify(params), params); }
+        };
+        Ptx.Shadows.WebSocket.init_Ptx_Shadows_webSocket_connect = true;
+        document.dispatchEvent(new CustomEvent("init_Ptx_Shadows_webSocket_connect", {}));
+    }
+})();
+;
+Wicket.Ajax.ajax({"c":"id93","u":"https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-partyPanel2-blkParty-linkUnfold&1=normal","e":"click"});(() => {let lnk=document.getElementById('id93');if (lnk) {lnk.inited_ajax=true;lnk.dispatchEvent(new CustomEvent('inited_ajax', {"bubbles":false}));}else{console.log('No element #id93 found');}})();;
+;});
+/*]]>*/
+</script>
+</head>
+<body id="body_id" class="body">
+<span id="pageTopA"></span>
+
+        
+    
+
+
+
+<div class="fake">
+<link rel="stylesheet" type="text/css" href="/skin/lightui/css/common.css?v=1766042164517" />
+<link rel="stylesheet" type="text/css" href="/skin/lightui/css/fight-styles.css?v=1766042164517" />
+
+</div>
+
+
+<div class="viewport">
+<div id="background" class="bg-layer">
+
+</div>
+</div>
+<div class="b-container" id="bodyContainer">
+
+<div>
+
+</div>
+<div class="header _combat">
+
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td>
+<span class="header-hp" id="id94"> <span class="i12 i12-heart_100"></span><span class="info">166870</span></span>
+<span class="header-shield" id="id95" style="display: none;">
+<img src="/images/icons/school.png" alt="хп">0
+</span>
+<span class="header-buffs">
+<span><img src="/images/icons/crit.png" alt="СК" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/scroll.png" alt="СБ" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/regen.png" alt="ПВ" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/companion.png" alt="ПС" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/dailygifts/postupsmerti_12x12.png" alt="ПС" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/scroll.png" alt="СБ" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/crit.png" alt="Уо" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/basic_dark.png" alt="Уа" class="i12img" width="12" height="12"/></span><span><img src="/images/icons/vip_icon.png" alt="НМ" class="i12img" width="12" height="12"/></span>
+</span>
+<span class="header-inventory" id="id96" style="display: none;">
+
+
+
+
+
+</span>
+<span class="header-timer" id="id97" style="display: none;"><img src="/images/icons/clock.png" alt="рестарт"/><span class="minor"></span></span>
+<span class="header-pets" id="id98" style="display: none;">
+
+</span>
+<span class="header-custom">
+<span id="id99" style="display: none;"> | </span>
+</span>
+</td>
+<td align="right" id="id9a" style="display: none;">
+<div class="header-gold">
+<div class="header-gold-info">
+
+</div>
+<a class="header-gold-link" data-on-click-sound="ui profile-open" href="https://vmmo.vten.ru/billing/info?ctx=status_link"></a>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+
+<div style="clear:both"></div>
+
+<a href="#" id="sound-control" class="desktop-setting-mute" ignorewebview="true" draggable="false"></a>
+<script type="text/javascript">
+/*<![CDATA[*/
+(() => {'use strict'; Ptx.eventListenerAddPB(window, 'load', () => Ptx.nvlC(document.getElementById("sound-control"), (e) => e.disabled = false));})();
+/*]]>*/
+</script>
+
+
+</div>
+
+
+<div id="id9b" style="display: none;">
+
+
+<script id="ptxScriptFB1" type="text/javascript">
+/*<![CDATA[*/
+
+Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+'use strict';
+var nodeFB = document.getElementById('ptxScriptFB1').parentNode;
+if (window.ptxLogsOn) {console.log("Feedback node: ", nodeFB, ", style: " + nodeFB.style + ", display: " + nodeFB.style.display);}
+if (!(nodeFB.hidden || nodeFB.style.display === 'none')
+&& nodeFB.querySelector('._notification-cta') !== null) {
+var el = document.getElementById('bodyContainer');
+if (el && el !== null) {
+el.classList.add('_notifications-present');
+}
+}
+});
+
+/*]]>*/
+</script>
+</div>
+
+
+
+
+<div><div id="id9c">
+<a style="display: none;" id="id74" ignoreWebView="true" href="javascript:;"></a>
+
+        <script spa_ignore="true">
+            if (!window.Ptx) {
+                Ptx = {};
+            }
+
+            if (!Ptx.Shadows) {
+                Ptx.Shadows = {};
+            }
+
+            if (!Ptx.Shadows.Anim) {
+                Ptx.Shadows.Anim = {};
+            }
+
+            (() => {
+                'use strict';
+                console.log('Init sounds script executed');
+
+                let justInit = () => {
+                    try {
+                        initSounds(false, false, "0,3", "0,2");
+                    } catch (e) {
+                        console.error('Sound init error: ', e);
+                    }
+                }
+
+                if ( document.readyState === "complete" ||
+                    ( document.readyState !== "loading" && !document.documentElement.doScroll ) ) {
+                    justInit();
+                } else {
+                    Ptx.eventListenerAddPB(document, "DOMContentLoaded", justInit, undefined, true);
+                }
+            })();
+        </script>
+
+        <script>
+            (() => {
+                'use strict';
+                let playAmbient = () => {
+                    try {
+                        if ("combat ambient-hellRuins-v2" === "none") {
+                            ceaseMusic();
+                        } else if ("combat ambient-hellRuins-v2".length > 0) {
+                            trySound("combat ambient-hellRuins-v2");
+                        } else {
+                            trySound("combat ambient-1");
+                        }
+                    } catch (e) {
+                        console.error('Ambient sound play error: ', e);
+                    }
+                }
+
+                if ( document.readyState === "complete" ||
+                    ( document.readyState !== "loading" && !document.documentElement.doScroll ) ) {
+                    playAmbient();
+                } else {
+                    Ptx.eventListenerAddPB(document, "DOMContentLoaded", playAmbient, undefined, true);
+                }
+            })();
+        </script>
+        
+    
+<script id="id9d">
+        (() => {
+            'use strict';
+
+            if (!window.Ptx) {
+                Ptx = {};
+            }
+
+            if (!Ptx.Shadows) {
+                Ptx.Shadows = {};
+            }
+
+            if (!Ptx.Shadows.Combat) {
+                Ptx.Shadows.Combat = {};
+            }
+
+            Ptx.Shadows.Combat.lootTakeUrl = 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-IEndpointBehaviorListener.2-combatPanel-container&1=normal&pdti=';
+        })();
+    </script>
+<div class="wrap-battlefield ym-hide-content _dungeon" id="id9e">
+<a style="display: none;" id="id76" ignoreWebView="true" href="javascript:;"></a>
+<div style="display: none;" id="id75"></div>
+<div style="display: none;" id="id9f"></div>
+<div></div>
+<div class="battlefield-modal" id="ida0" style="display: none;"><div class="battlefield-modal-inner">
+    <div>${msg}</div>
+    <a href="https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.IBehaviorListener.0-combatPanel-container-battlefield-infoPanel&1=normal" class="button _for-center _glowpulse">
+        <span class="button-inner">
+            <span class="button-text font14">${actionText}</span>
+        </span>
+    </a>
+</div></div>
+<div class="battlefield-head">
+<div class="battlefield-head-left _breath" id="ida1"><div id="ida2">
+<div>
+
+<a class="foot-info-link-profile" draggable="false" href="https://vmmo.vten.ru/user/239299464?u=https://vmmo.vten.ru/dungeon/combat/dSanctuary%3F6%261%3Dnormal">
+<div class="menu-ava-img" id="ida3" style="background-image:url(&#039;/manekenimage/x129/y16/w55/h55/decorBg:Under_back_Profile_640_380/mnkfhdd02:body-d_f_skin-0/mnkfd02:body-d_f_cloth-0/ifch00:20_Ice_chestF/ishldr00:Laty1/ihd00:ShlemDoblesti/ish00:EpicTitanShield/iwpn00:20_Ice_gun/iartfus2:artifact_mask_2_640/1691217144.jpg&#039;)"></div>
+<div class="foot-menu-lvl">29 ур.</div>
+<div class="battlefield-head-pet" id="ida4" style="background-image:url(&#039;/images/pets/iconpet/icon_executioner_pet_32.png&#039;)">
+<div class="wrap-battlefield-head-pet-hp">
+<svg version="1.1" baseProfile="full" class="battlefield-head-pet-hp" xmlns="http://www.w3.org/2000/svg" id="ida5">
+<circle cx="50%" cy="50%" r="43%" style="stroke-dasharray: 0%, 300%;"></circle>
+</svg>
+</div>
+</div>
+</a>
+
+<div class="battlefield-head-name" id="ida6">
+<a class="shuffle-group-link" draggable="false" id="id77" ignoreWebView="true" href="javascript:;" style="display: none;" title="Сменить противника"></a>
+Qing Dynasty
+</div>
+<div class="battlefield-head-hp">
+<div class="battlefield-head-hp-fill" style="width: 100%" id="ida7">
+<div class="shadowDeath-lvl" style="display: none;"></div>
+<div class="battlefield-head-hp-delta" style="width: 0%"></div>
+</div>
+<div class="battlefield-head-hp-text" id="ida8">166.8K / 166.8K</div>
+</div>
+
+<div class="battlefield-head-buffs" id="ida9">
+
+
+<div class="buff" id="idaa">
+<div>
+<img class="buff-img" width="12" height="12" src="/images/icons/enchant.png">
+<div class="buff-counter">
+<svg version="1.1" baseProfile="full" class="circle-progress-fill" xmlns="http://www.w3.org/2000/svg" id="idab">
+<circle cx="50%" cy="50%" r="43%" style="stroke-dasharray: 282%, 300%;"></circle>
+</svg>
+</div>
+</div>
+</div>
+
+<div class="buff" id="idac">
+<div>
+<img class="buff-img" width="12" height="12" src="/images/icons/crit.png">
+<div class="buff-counter">
+<svg version="1.1" baseProfile="full" class="circle-progress-fill" xmlns="http://www.w3.org/2000/svg" id="idae">
+<circle cx="50%" cy="50%" r="43%" style="stroke-dasharray: 282%, 300%;"></circle>
+</svg>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div>
+<div class="battlefield-head-right" id="idaf"><div id="idb0">
+<div>
+
+<span class="foot-info-link-profile">
+<img draggable="false" src="/images/npcs/wolf2.png">
+</span>
+
+<div class="battlefield-head-name" id="idb1">
+<a class="shuffle-group-link" draggable="false" id="id78" ignoreWebView="true" href="javascript:;" style="display: none;" title="Сменить противника"></a>
+Черный Волк
+</div>
+<div class="battlefield-head-hp">
+<div class="battlefield-head-hp-fill" style="width: 100%" id="idb2">
+<div class="shadowDeath-lvl" style="display: none;"></div>
+<div class="battlefield-head-hp-delta" style="width: 0%"></div>
+</div>
+<div class="battlefield-head-hp-text" id="idb3">640 / 640</div>
+</div>
+
+<div class="battlefield-head-buffs" id="idb4">
+
+
+</div>
+</div>
+</div></div>
+</div>
+
+
+<div class="battlefield-anim">
+<div class="battlefield-anim-part"></div>
+<div class="battlefield-anim-part"></div>
+<div class="battlefield-anim-part"></div>
+<div class="battlefield-anim-part"></div>
+</div>
+<div class="battlefield-effect">
+<div class="battlefield-effect-part">
+<div class="battlefield-effect-subpart"></div>
+</div>
+<div class="battlefield-effect-part-2">
+<div class="battlefield-effect-subpart"></div>
+</div>
+<div class="battlefield-effect-part-3">
+<div class="battlefield-effect-subpart"></div>
+</div>
+<div class="battlefield-effect-part-4">
+<div class="battlefield-effect-subpart"></div>
+</div>
+<div class="battlefield-effect-part-5">
+<div class="battlefield-effect-subpart"></div>
+</div>
+</div>
+<div class="battlefield-mutable-parts">
+<div class="battlefield-mutable-part"></div>
+<div class="battlefield-mutable-part"></div>
+<div class="battlefield-mutable-part"></div>
+<div class="battlefield-mutable-part"></div>
+</div>
+<div id="idb5" style="display:none"></div>
+<div class="battlefield-lore">
+<div class="battlefield-lore-inner" id="idb6">
+<span id="idb7">
+<div class="divider"></div>
+<div class="lore">
+<div class="lore-inner">
+Вы спускаетесь под землю по канализационной трубе...
+</div>
+</div>
+<div class="divider"></div>
+</span>
+</div>
+</div>
+<div id="ptx_connection_alert_el" class="connection-alert" style="display: none">
+<div class="connection-alert-image"></div>
+<span class="connection-alert-text">Слабый сигнал</span>
+</div>
+<div id="btfWrapper" class="battlefield">
+<div class="battlefield-inner" id="idb8">
+<div class="area">
+<div id="idb9" style="display: none;"></div>
+<div class="area-side left-side" id="idba">
+<div class="place" id="idbb">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="idbc"></div>
+</div><div class="place" id="idbd">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="idbe"></div>
+</div><div class="place" id="idbf">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="idc0"></div>
+</div><div class="place" id="idc1">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="idc2">
+<div class="unit _unit-pos-14" id="unit_0__unit-pos-14">
+<div style="display:none;" id="idc3"></div>
+<div class="unit-show _warrior _tdf _fleshlike _iam _health100 _buff-talisman" id="idc4">
+<div class="unit-strip-props"></div>
+<div class="unit-attack-props">
+<div class="unit-attack-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-attack-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-cast-props">
+<div class="unit-cast-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-cast-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-death-props">
+<div class="death-props-explosion"></div>
+<div class="death-props-smoke"></div>
+<div class="death-props-particles"></div>
+<div class="death-props-spots"></div>
+<div class="death-props-drops"></div>
+</div>
+
+<div class="unit-layer-1">
+<div class="get-img-1"></div>
+<div class="get-img-2"></div>
+<div class="get-img-3"></div>
+<div class="bite-img-1"></div>
+<div class="bite-img-2"></div>
+<div class="buff-img-1"></div>
+<div class="buff-img-2"></div>
+<div class="buff-img-3"></div>
+<div class="debuff-img-1"></div>
+<div class="debuff-img-2"></div>
+<div class="debuff-img-3"></div>
+<div class="cast-aura-1"></div>
+<div class="get-aura-1"></div>
+<div class="proc-img-1"></div>
+<div class="unit-marker"></div>
+<div class="unit-layer-2">
+<div class="unit-talk"></div>
+<div class="unit-layer-3">
+
+<div class="unit-img">
+<div class="preload-img"></div>
+</div>
+
+<div class="frames-img"></div>
+<div class="unit-idle-effects">
+<div class="unit-idle-effect-1"></div>
+<div class="unit-idle-effect-2"></div>
+</div>
+<div class="attack-plume"></div>
+<div class="cast-plume"></div>
+<div class="cast-img-wrap">
+<div class="cast-img-1"></div>
+<div class="cast-img-2"></div>
+<div class="cast-img-3"></div>
+<div class="cast-img-4"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="unit-hp" id="idc5">
+<div class="unit-hp-fill" style="width: 100%" id="idc6"></div>
+<div class="unit-amount" id="idc7" title="0">1</div>
+</div>
+
+<div class="unit-death-img"></div>
+</div>
+<span class="unit-link" draggable="false" id="idc8" ignoreWebView="true" title="Qing Dynasty"></span>
+<div class="unit-buffs" id="idc9">
+
+
+<div class="buff" id="idca">
+<div>
+<img class="buff-img" width="12" height="12" src="/images/icons/enchant.png">
+<div class="buff-counter">
+<svg version="1.1" baseProfile="full" class="circle-progress-fill" xmlns="http://www.w3.org/2000/svg" id="idcb">
+<circle cx="50%" cy="50%" r="43%" style="stroke-dasharray: 282%, 300%;"></circle>
+</svg>
+</div>
+</div>
+</div>
+
+<div class="buff" id="idcc">
+<div>
+<img class="buff-img" width="12" height="12" src="/images/icons/crit.png">
+<div class="buff-counter">
+<svg version="1.1" baseProfile="full" class="circle-progress-fill" xmlns="http://www.w3.org/2000/svg" id="idcd">
+<circle cx="50%" cy="50%" r="43%" style="stroke-dasharray: 282%, 300%;"></circle>
+</svg>
+</div>
+</div>
+</div>
+
+</div>
+<div class="unit-pets" id="idce">
+
+</div>
+</div>
+</div>
+</div><div class="place" id="idcf">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="idd0"></div>
+</div>
+<div class="side-effect-1"></div>
+<div class="side-effect-2"></div>
+<div class="side-effect-3"></div>
+</div>
+<div class="area-side right-side" id="idd1">
+<div class="place" id="idd2">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="idd3"></div>
+</div><div class="place" id="idd4">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="idd5">
+<div class="unit _unit-pos-22" id="unit_0__unit-pos-22">
+<div style="display:none;" id="idd6"></div>
+<div class="unit-show _wolf _black _fleshlike _another1 _current _prepare-to-appear _health100" id="idd7">
+<div class="unit-strip-props"></div>
+<div class="unit-attack-props">
+<div class="unit-attack-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-attack-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-cast-props">
+<div class="unit-cast-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-cast-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-death-props">
+<div class="death-props-explosion"></div>
+<div class="death-props-smoke"></div>
+<div class="death-props-particles"></div>
+<div class="death-props-spots"></div>
+<div class="death-props-drops"></div>
+</div>
+
+<div class="unit-layer-1">
+<div class="get-img-1"></div>
+<div class="get-img-2"></div>
+<div class="get-img-3"></div>
+<div class="bite-img-1"></div>
+<div class="bite-img-2"></div>
+<div class="buff-img-1"></div>
+<div class="buff-img-2"></div>
+<div class="buff-img-3"></div>
+<div class="debuff-img-1"></div>
+<div class="debuff-img-2"></div>
+<div class="debuff-img-3"></div>
+<div class="cast-aura-1"></div>
+<div class="get-aura-1"></div>
+<div class="proc-img-1"></div>
+<div class="unit-marker"></div>
+<div class="unit-layer-2">
+<div class="unit-talk"></div>
+<div class="unit-layer-3">
+
+<img id="idd8" style="display:none"></img>
+<div class="unit-img" id="idd9">
+<div class="preload-img"></div>
+</div>
+
+<div class="frames-img"></div>
+<div class="unit-idle-effects">
+<div class="unit-idle-effect-1"></div>
+<div class="unit-idle-effect-2"></div>
+</div>
+<div class="attack-plume"></div>
+<div class="cast-plume"></div>
+<div class="cast-img-wrap">
+<div class="cast-img-1"></div>
+<div class="cast-img-2"></div>
+<div class="cast-img-3"></div>
+<div class="cast-img-4"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="unit-hp" id="idda">
+<div class="unit-hp-fill" style="width: 100%" id="iddb"></div>
+<div class="unit-amount" id="iddc" title="0">1</div>
+</div>
+
+<div class="unit-death-img"></div>
+</div>
+<a class="unit-link" draggable="false" id="id7a" ignoreWebView="true" href="javascript:;" title="Черный Волк"></a>
+<div class="unit-buffs" id="iddd">
+
+
+</div>
+<div class="unit-pets" id="idde">
+
+</div>
+</div>
+</div>
+</div><div class="place" id="iddf">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="ide0">
+<div class="unit _unit-pos-23" id="unit_0__unit-pos-23">
+<div style="display:none;" id="ide1"></div>
+<div class="unit-show _wolf _gray _fleshlike _another2 _prepare-to-appear _health100" id="ide2">
+<div class="unit-strip-props"></div>
+<div class="unit-attack-props">
+<div class="unit-attack-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-attack-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-cast-props">
+<div class="unit-cast-1">
+<div class="unit-shoot"></div>
+</div>
+<div class="unit-cast-2">
+<div class="unit-shoot"></div>
+</div>
+</div>
+<div class="unit-death-props">
+<div class="death-props-explosion"></div>
+<div class="death-props-smoke"></div>
+<div class="death-props-particles"></div>
+<div class="death-props-spots"></div>
+<div class="death-props-drops"></div>
+</div>
+
+<div class="unit-layer-1">
+<div class="get-img-1"></div>
+<div class="get-img-2"></div>
+<div class="get-img-3"></div>
+<div class="bite-img-1"></div>
+<div class="bite-img-2"></div>
+<div class="buff-img-1"></div>
+<div class="buff-img-2"></div>
+<div class="buff-img-3"></div>
+<div class="debuff-img-1"></div>
+<div class="debuff-img-2"></div>
+<div class="debuff-img-3"></div>
+<div class="cast-aura-1"></div>
+<div class="get-aura-1"></div>
+<div class="proc-img-1"></div>
+<div class="unit-marker"></div>
+<div class="unit-layer-2">
+<div class="unit-talk"></div>
+<div class="unit-layer-3">
+
+<img id="ide3" style="display:none"></img>
+<div class="unit-img" id="ide4">
+<div class="preload-img"></div>
+</div>
+
+<div class="frames-img"></div>
+<div class="unit-idle-effects">
+<div class="unit-idle-effect-1"></div>
+<div class="unit-idle-effect-2"></div>
+</div>
+<div class="attack-plume"></div>
+<div class="cast-plume"></div>
+<div class="cast-img-wrap">
+<div class="cast-img-1"></div>
+<div class="cast-img-2"></div>
+<div class="cast-img-3"></div>
+<div class="cast-img-4"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="unit-hp" id="ide5">
+<div class="unit-hp-fill" style="width: 100%" id="ide6"></div>
+<div class="unit-amount" id="ide7" title="0">1</div>
+</div>
+
+<div class="unit-death-img"></div>
+</div>
+<a class="unit-link" draggable="false" id="id7b" ignoreWebView="true" href="javascript:;" title="Волк"></a>
+<div class="unit-buffs" id="ide8">
+
+
+</div>
+<div class="unit-pets" id="ide9">
+
+</div>
+</div>
+</div>
+</div><div class="place" id="idea">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="ideb"></div>
+</div><div class="place" id="idec">
+<div class="place-proj-img"></div>
+<div class="place-combat-text"></div>
+<div class="combat-entity-panel" id="ided"></div>
+</div>
+<div class="side-effect-1"></div>
+<div class="side-effect-2"></div>
+<div class="side-effect-3"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="area-control" id="idee" style="display: none;">
+<div id="showScrollDebug" style="position: absolute; z-index: 1000; width: 100%;left: 0;top:36px;text-align: center"></div>
+<div id="controlLinkLeft" class="area-control-left"></div>
+<div class="area-control-position">
+<div class="area-position-tag _danger" id="idef"></div>
+</div>
+<div id="controlLinkRight" class="area-control-right"></div>
+<a style="display: none;" id="id79" ignoreWebView="true" href="javascript:;"></a>
+</div>
+    <script type="text/javascript">
+    (() => {
+        'use strict';
+        let battlefield = document.getElementById('btfWrapper'),
+            bfWidth = battlefield.offsetWidth,
+            areas = document.getElementsByClassName('area'),
+            areaControl = {
+                left: document.querySelector('.area-control-left'),
+                right: document.querySelector('.area-control-right'),
+            },
+            posMax = areas.length - 1,
+            posMiddle = (areas.length - 1) / 2,
+            areasMarginTop = 15.835 / areas.length,
+            storedPosition = -1,
+            pos = 0,
+            posReportTiming = (+new Date);
+
+        let reSize = () => {
+            try {
+                bfWidth = battlefield.offsetWidth;
+                storedPosition < 0 ?
+                    pos = bfWidth * posMiddle :
+                    pos = bfWidth * storedPosition;
+
+                let w = bfWidth + 'px', m = areasMarginTop + '%';
+
+                for (let i = 0; i < areas.length; i++) {
+                    areas[i].style.width = w;
+                    areas[i].style.marginTop = m;
+                }
+
+                battlefield.scrollLeft = pos;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        Ptx.eventListenerAddPB(window, 'load', reSize, undefined, true);
+        Ptx.eventListenerAddPB(window, 'resize', reSize);
+        Ptx.eventListenerAddPB(window, 'orientationchange', reSize);
+
+        let addAreaCurrentPosition = (currentPosition) => {
+            let el = document.getElementsByClassName('area-position-tag');
+
+            for (let i = 0; i < (el.length); i = i + 1) {
+                i === currentPosition ?
+                    el[i].classList.add('_current') :
+                    el[i].classList.remove('_current');
+            }
+        }
+
+        if (areaControl.left !== null && areaControl.right !== null) {
+            let scrolledN = -1;
+            battlefield.onscroll = () => {
+                let scrolled = battlefield.pageXOffset || battlefield.scrollLeft;
+
+                if (scrolledN >= 0 && Math.abs(scrolled - scrolledN) < 10) {
+                    return;
+                }
+
+                scrolledN = scrolled;
+
+                let pos = Math.round(scrolled / bfWidth);
+
+                if (pos < 0) {
+                    pos = 0;
+                } else if (pos > posMax) {
+                    pos = posMax;
+                }
+
+                addAreaCurrentPosition(pos);
+
+                pos === 0 ?
+                    areaControl.left.classList.add('_lock') :
+                    areaControl.left.classList.remove('_lock');
+                pos >= posMax ?
+                    areaControl.right.classList.add('_lock') :
+                    areaControl.right.classList.remove('_lock');
+
+                try {
+                    let nowMilliseconds = (+new Date);
+
+                    if (nowMilliseconds - posReportTiming > 200) {
+                        posReportTiming = nowMilliseconds;
+                        let lnk = document.getElementById('id79');
+                        lnk.dispatchEvent(new Event("click"));
+                    }
+                } catch (e) {
+                    console.error('Report back failed: ', e);
+                }
+            };
+
+            areaControl.left.onclick = function () {
+                let delta = battlefield.scrollLeft;
+                delta % bfWidth === 0 ?
+                    battlefield.scrollLeft = delta - bfWidth :
+                    battlefield.scrollLeft = delta - (delta % bfWidth);
+            };
+
+            areaControl.right.onclick = function () {
+                let delta = battlefield.scrollLeft;
+                delta % bfWidth === 0 ?
+                    battlefield.scrollLeft = delta + bfWidth :
+                    battlefield.scrollLeft = delta + (bfWidth - (delta % bfWidth));
+            };
+        }
+
+        reSize();
+    })();
+    </script>
+    
+<div class="battlefield-controls" id="idf0">
+<span id="idf1"></span>
+<div id="idf2">
+<div class="ammo-counter" id="idf3" style="display: none;"></div>
+<div class="wrap-attack-button-link" id="idf4">
+<div id="idf5">
+<a id="ptx_combat_rich2_attack_link" class="attack-button-link" draggable="false" ignoreWebView="true" href="javascript:;" title="Атаковать"></a>
+<div class="attack-button _attack-ready" id="id7c">
+<div class="attack-button-text" id="idf6">17.7K</div>
+<div class="wrap-attack-button-counter">
+<svg version="1.1" baseProfile="full" class="attack-button-counter" xmlns="http://www.w3.org/2000/svg" id="idf7">
+<circle cx="50%" cy="50%" r="45%" style="stroke-dasharray: 283%, 300%;" id="idf8"></circle>
+</svg>
+</div>
+</div>
+<div class="time-counter" id="idf9" style="display: none;"></div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+<div class="controls-pets" id="idfa" style="display: none;">
+
+</div>
+<div class="controls-skills">
+
+<div class="wrap-skill-link _skill-pos-1" id="idfb">
+<div id="idfc">
+<a class="skill-link" draggable="false" id="id7d" ignoreWebView="true" href="javascript:;" title="Талисман Доблести"></a>
+<div class="skill-img _skill-img-talisman" id="id7e">
+<div class="time-counter" id="idfd"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-skill-link _skill-pos-2" id="idfe">
+<div id="idff">
+<a class="skill-link" draggable="false" id="id7f" ignoreWebView="true" href="javascript:;" title="Гром и Молния"></a>
+<div class="skill-img _skill-img-lighting" id="id80">
+<div class="time-counter" id="id100"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-skill-link _skill-pos-3" id="id101">
+<div id="id102">
+<a class="skill-link" draggable="false" id="id81" ignoreWebView="true" href="javascript:;" title="Ледяной Удар"></a>
+<div class="skill-img _skill-img-freezing" id="id82">
+<div class="time-counter" id="id103"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-skill-link _skill-pos-4" id="id104">
+<div id="id105">
+<a class="skill-link" draggable="false" id="id83" ignoreWebView="true" href="javascript:;" title="Ярость Богов"></a>
+<div class="skill-img _skill-img-rage" id="id84">
+<div class="time-counter" id="id106"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-skill-link _skill-pos-5" id="id107">
+<div id="id108">
+<a class="skill-link" draggable="false" id="id85" ignoreWebView="true" href="javascript:;" title="Рывок Жизни"></a>
+<div class="skill-img _skill-img-dodge" id="id86">
+<div class="time-counter" id="id109"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+</div>
+
+<div class="controls-potions">
+
+<div class="wrap-potion-link _potion-pos-1" id="id10a">
+<div id="id10b">
+<a class="potion-link" draggable="false" id="id87" ignoreWebView="true" href="javascript:;" title="Инфериум"></a>
+<div class="potion-link-img" id="id88">
+<img alt="рх" src="/images/potions/Potions_crit_3_32.png" class="p32img">
+<div class="time-counter" id="id10c">00:00</div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-potion-link _potion-pos-2" id="id10d">
+<div id="id10e">
+<a class="potion-link" draggable="false" id="id89" ignoreWebView="true" href="javascript:;" title="Антидот от Заражения"></a>
+<div class="potion-link-img" id="id8a">
+<img alt="рх" src="/images/potions/Unic_Antidot_32.png" class="p32img">
+<div class="time-counter" id="id10f">00:00</div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-potion-link _potion-pos-3" id="id110">
+<div id="id111">
+<a class="potion-link" draggable="false" id="id8b" ignoreWebView="true" href="javascript:;" title="Эликсир усиления"></a>
+<div class="potion-link-img" id="id8c">
+<img alt="рх" src="/images/potions/Potions_str_2_32.png" class="p32img">
+<div class="time-counter" id="id112">00:00</div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+</div>
+
+<div class="controls-devices">
+
+<div class="wrap-device-link _device-pos-1" id="id113">
+<div id="id114">
+<a class="device-link" draggable="false" id="id8d" ignoreWebView="true" href="javascript:;" title="Призма Вечного Льда"></a>
+<div class="device-link-img" id="id8e">
+<img width="32" height="32" alt="." border="0" src="/images/items/icons/icon_ny_crystal_32.png">
+<div class="time-counter" id="id115">00:00</div>
+<div class="charge-display" id="id116" style="display: none;"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-device-link _device-pos-2" id="id117">
+<div id="id118">
+<a class="device-link" draggable="false" id="id8f" ignoreWebView="true" href="javascript:;" title="Смеющиеся Маски Тикуана"></a>
+<div class="device-link-img" id="id90">
+<img width="32" height="32" alt="." border="0" src="/images/items/icons/icon_artifact_mask_2.png">
+<div class="time-counter" id="id119">00:00</div>
+<div class="charge-display" id="id11a" style="display: none;"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+<div class="wrap-device-link _device-pos-3" id="id11b">
+<div id="id11c">
+<a class="device-link" draggable="false" id="id91" ignoreWebView="true" href="javascript:;" title="Зеркало Тени I"></a>
+<div class="device-link-img" id="id92">
+<img width="32" height="32" alt="." border="0" src="/images/event/FireTower/icon_shadow-mirror-1_32.png">
+<div class="time-counter" id="id11d">00:00</div>
+<div class="charge-display" id="id11e" style="display: none;"></div>
+</div>
+</div>
+<div class="control-effect">
+<div class="control-effect-part"></div>
+<div class="control-effect-part"></div>
+</div>
+</div>
+
+</div>
+</div>
+<script type="text/javascript">
+    (() => {
+        let el = Ptx.nvlC(document.querySelector('.wrap-battlefield'), (e) => e.querySelector('.battlefield-controls'));
+
+        if (!el || el.onclick === null) {
+            Ptx.performOnLoad(() => {
+                let el = Ptx.nvlC(document.querySelector('.wrap-battlefield'), (e) => e.querySelector('.battlefield-controls'));
+
+                if (el && el.onclick === null) {
+                    el.onclick = (ev) => {
+                        Ptx.Shadows.Combat.worker.postMessage({ action: 'control_click', context: 'control_click' });
+                        return true;
+                    };
+                }
+            }, undefined, true);
+        }
+    })();
+</script></div>
+<div id="id11f" style="display: none;">
+<div id="id120" style="display: none;">
+
+</div>
+</div>
+<div class="battlefield-log" id="id121">
+<div id="id122">
+
+<span id="id123" style="position:absolute;bottom:100vh;opacity:0;pointer-events:none;"></span>
+
+<span id="id124">
+<ol id="fightLog">
+
+</ol>
+</span>
+
+</div>
+</div>
+</div>
+</div></div>
+<div class="b-panel">
+<div class="panel-inner">
+<div class="font-small text-italic c-moregray">
+<div class="font-small text-italic c-moregray">
+<img border="0" width="12" height="12" src="/images/icons/arr.png" alt=""/> ID подземелья: <span>197762896</span>
+</div>
+<span>(снова отправиться в это подземелье можно будет через 14 минут)</span>
+</div>
+
+</div>
+</div>
+
+
+
+<div id="id125">
+<div class="widget _roll-off _combat _target">
+<a class="widget-reload" href="https://vmmo.vten.ru/dungeon/combat/dSanctuary?1=normal" title="Обновить"></a>
+<a id="id126" style="display:none"></a>
+<a class="widget-roll-off" id="id93" ignoreWebView="true" href="javascript:;" title="Развернуть"></a>
+<div class="widget-img">
+<div class="dungeon-background-style _difficult-normal" style="width:64px;height:64px;background:url(&#039;/images/dungeons/icons/demon_64.png&#039;)  center top no-repeat"></div>
+</div>
+<div class="widget-content">
+<div class="widget-title"><span class="i12 i12-item_normal"></span> Святилище Накрила</div>
+
+<div class="widget-description">
+<div class="yellow">
+Банда в бою
+</div>
+</div>
+
+<div class="wrap-user-mini">
+
+</div>
+<table width="100%" border="0" cellpadding="0" cellspacing="0" class="widget-buttons">
+<tbody>
+<tr>
+
+<td width="50%" style="display: none;">
+<a class="go-btn mr5 font14 _night" href="https://vmmo.vten.ru/dungeon/standby/dSanctuary?1=normal">
+<span class="go-btn-border">
+<span class="go-btn-in">
+<span class="back-icon"></span>
+В подземелье
+<span class="navigator _number">!</span>
+</span>
+</span>
+</a>
+</td>
+<td width="50%">
+<a class="go-btn _night mr5 font14" href="https://vmmo.vten.ru/dungeon/combat/dSanctuary?1=normal&amp;ppAction=leaveParty">
+<span class="go-btn-border">
+<span class="go-btn-in">
+<span class="i12 i12-cross"></span>
+Покинуть банду
+</span>
+</span>
+</a>
+</td>
+</tr>
+
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div>
+<div class="info-box">
+
+<table border="0" cellpadding="0" cellspacing="0" width="100%" class="mb5">
+<tbody>
+<tr>
+<td width="46">
+<div class="round-progress">
+<img class="round-progress-img" src="/images/items/icons/iPMbase.png">
+<div class="round-progress-fill" style="height: 100%"></div>
+</div>
+</td>
+<td>
+<div>
+Готово
+</div>
+<div class="info">
+<span><span class="c-simple"></span><a class="iGood" href="https://vmmo.vten.ru/profs/receipt/rawOre"><span>Железная Руда</span></a></span>
+</div>
+</td>
+<td width="85">
+<a class="go-btn _single center _night pt5 pb5 mr5" href="https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.ILinkListener.0-professionPanel-container-completedBlock-repeatLink&amp;1=normal&amp;0=dSanctuary&amp;1=normal&amp;ppAction=craftAgain&amp;ppKey=3611742060281188352">
+<img src="/images/menu/refresh_icon.png" alt="">
+<div>
+Повторить
+</div>
+</a>
+</td>
+<td width="80">
+<a class="go-btn _single center pt5 pb5" href="https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.ILinkListener.0-professionPanel-container-completedBlock-takeLink&amp;1=normal&amp;0=dSanctuary&amp;1=normal&amp;ppAction=getCraftResult&amp;ppKey=3611742060281188352">
+<img src="/images/icons/tick.png" alt="V">
+<div>
+Забрать
+</div>
+</a>
+</td>
+</tr>
+<tr>
+<td colspan="4">
+
+<div class="c-boss">
+
+        + <img class="link-icon" src="/images/icons/miner.png"> 10 к навыку горного дела
+    
+</div>
+
+<div class="progressbar-bg mb5" style="display: none !important">
+<div class="progressbar-fill-blue" style="width: 25%"></div>
+<div class="progressbar-fill-delta" style="width: 0%"></div>
+</div>
+<div class="mt3">
+Результаты работы будут у тебя в рюкзаке.
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="" style="display: none;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" class="mt10 mb5">
+<tbody>
+<tr>
+<td colspan="3">
+</td>
+</tr>
+<tr>
+<td width="46" valign="top">
+<div class="round-progress">
+<img class="round-progress-img" src="/images/items/icons/iPMbase.png">
+<div class="round-progress-fill" style="height: 100%" id="id127"></div>
+</div>
+</td>
+<td >
+<div class="">
+<span>Идёт изготовление</span>:
+<span><span class="c-simple"></span><a class="iGood" href="https://vmmo.vten.ru/profs/receipt/rawOre"><span>Железная Руда</span></a></span>
+</div>
+<div class="mt3">
+<span class="yellow">Осталось <img src="/images/icons/clock.png" alt=""><span id="id128">Готово</span></span>
+</div>
+</td>
+<td width="80" valign="top">
+
+
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+
+<span style="display: none;">
+<div class="info-box _questFooter">
+<a class="info-box-open-link" href="https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.ILinkListener.0-questFooter-toggleFoldStateLink&amp;1=normal&amp;0=dSanctuary&amp;1=normal&amp;ppAction=foldQuest"></a>
+<div class="pb10" style="display: none;">
+<span class="c-low">Ты выполняешь...</span>
+<table border="0" cellpadding="0" cellspacing="0" width="100%" class="mt10">
+<tbody><tr>
+<td width="30" valign="top">
+<img src="/images/menu/question.png" alt="">
+</td>
+<td valign="top">
+<div>
+
+</div>
+<div>
+<span style="display: none;">
+<span>
+:
+<span class="nowrap" id="id129" style="display: none;">
+0
+<span>
+<span>
+<span class="i12 i12-money_gold"></span>
+<span>0</span>
+</span>
+
+</span>
+<span>/</span>
+<span>
+<span>
+<span class="i12 i12-money_gold"></span>
+<span>0</span>
+</span>
+
+</span>
+
+</span>
+
+
+Задание выполнено
+
+</span>
+</span>
+</div>
+<div>
+<img src="/images/icons/cross.png" alt="Х">
+<a class="c-low" href="https://vmmo.vten.ru/dungeon/combat/dSanctuary?6-1.ILinkListener.0-questFooter-unfoldedBlock-cancelLink&amp;1=normal&amp;0=dSanctuary&amp;1=normal&amp;ppAction=cancelQuest">Отказаться от задания</a>
+</div>
+</td>
+<td width="82" align="right">
+<span class="foot-info-link">
+<div class="mt10">
+К заданию
+</div>
+</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<img src="/images/menu/question.png" alt=""> <span class="c-low">
+<span class="task-btn-text" style="display: none;">
+<span>
+:
+<span class="nowrap" id="id12a" style="display: none;">
+0
+<span>
+<span>
+<span class="i12 i12-money_gold"></span>
+<span>0</span>
+</span>
+
+</span>
+<span>/</span>
+<span>
+<span>
+<span class="i12 i12-money_gold"></span>
+<span>0</span>
+</span>
+
+</span>
+
+</span>
+
+
+Задание выполнено
+
+</span>
+</span>
+</span>
+
+</div>
+</span>
+
+
+
+
+
+
+
+
+<div class="main-menu">
+<div class="main-menu-ava" style="background-image: url(&#039;/manekenimage/hd/x278/y57/w65/h65/decorBg:Under_back_Profile_640_380/mnkfhdd02:body-d_f_skin-0/mnkfd02:body-d_f_cloth-0/ifch00:20_Ice_chestF/ishldr00:Laty1/ihd00:ShlemDoblesti/ish00:EpicTitanShield/iwpn00:20_Ice_gun/iartfus2:artifact_mask_2_640/624811464.jpg&#039;)" id="id12b"></div>
+<div class="main-menu-bg"></div>
+<a class="main-menu-link _profile _18" title="Профиль" href="https://vmmo.vten.ru/user/239299464?u=https://vmmo.vten.ru/dungeon/combat/dSanctuary%3F6%261%3Dnormal" data-on-click-sound="ui profile-open">
+<span class="link-img"></span>
+<span class="link-effect"></span>
+<span class="link-title">Профиль</span>
+
+<span class="main-menu-lvl">29 ур.</span>
+</a>
+
+<div class="main-menu-exp">
+<div class="main-menu-exp-inner">
+<div class="main-menu-exp-fill" style="width: 60%;width:32%"></div>
+<div class="main-menu-exp-end"></div>
+</div>
+</div>
+
+<a class="main-menu-link _1 _19 _map" title="Карта Мира" href="https://vmmo.vten.ru/cities?continent=0" data-on-click-sound="ui profile-open">
+<span class="link-img"></span>
+<span class="link-effect"></span>
+<span class="link-title">Карта</span>
+</a>
+<a class="main-menu-link _2 _mansion _18" title="В город" href="https://vmmo.vten.ru/city" data-on-click-sound="ui profile-open">
+<span class="link-img"></span>
+<span class="link-effect"></span>
+<span class="link-title">Город</span>
+
+</a>
+<a class="main-menu-link _3 _guild" title="Гильдия" href="https://vmmo.vten.ru/guild/autosearch" data-on-click-sound="ui profile-open">
+<span class="link-img"></span>
+<span class="link-effect"></span>
+<span class="link-title">Гильдия</span>
+
+</a>
+<a class="main-menu-link _4 _18 _rack" title="Рюкзак" href="https://vmmo.vten.ru/user/rack?u=https://vmmo.vten.ru/dungeon/combat/dSanctuary%3F6%261%3Dnormal" data-on-click-sound="ui stranger-backpack-reduced">
+<span class="link-img"></span>
+<span class="link-effect"></span>
+<span class="link-title">Рюкзак</span>
+
+<span class="link-text">9/34</span>
+</a>
+</div>
+
+
+
+
+
+
+
+
+<div spa_ignore="true" ignoreWebView="true"><span class="">
+
+</span></div>
+</div>
+
+
+
+<div>
+<div></div>
+</div>
+
+<script src="/scripts/preload.js?v=1766042164517" type="text/javascript" drop_on_unload="true"></script><script src="/scripts/fight-rich2_20.js?v=1766042164517" type="text/javascript" drop_on_unload="true"></script><script src="/scripts/ux.js?v=1766042164517" type="text/javascript" drop_on_unload="true"></script><script type="text/javascript">
+    (() => {
+        'use strict';
+        if (!window.Ptx) {
+            window.Ptx = {};
+        }
+
+        if (!Ptx.Utils) {
+            Ptx.Utils = {};
+        }
+
+        Ptx.performOnLoadPB(() => {
+            if (Ptx.Utils.leash) {
+                if (!Ptx.Utils.leash.itvlIdx) {
+                    Ptx.Utils.leash.itvlIdx = Ptx.setInterval(
+                        () => {
+                            if (window.ptxIsCombatPage === true
+                                || window.ptxUserLevel === 0
+                                || window.ptxUserLevel >= 30) {
+                                return;
+                            }
+
+                            console.debug('Searching for leashable elements');
+                            const els = Array.from(document.querySelectorAll('._quest-leash'));
+
+                            if (els
+                                    && els.length > 0) {
+                                console.debug(els.length, 'leashable elements found');
+
+                                let max = 0;
+                                let elM = null;
+
+                                els.forEach((el) => {
+                                    if (window.ptxElCheckVisibility(el) === false) {
+                                        return;
+                                    }
+
+                                    let val = Number(Ptx.nvlC(el.dataset, (e) => e.leash) || 0);
+
+                                    if (val && val > max) {
+                                        max = val;
+                                        elM = el;
+                                    }
+                                });
+
+                                if (max > 0) {
+                                    Ptx.Utils.leash.create({target: elM, priority: 10});
+                                    console.debug('Created leash for ', elM)
+                                } else {
+                                    Ptx.Utils.leash.destroy();
+                                }
+                            } else {
+                                console.debug('No leashable elements found');
+                            }
+                        },
+                        1000,
+                        () => {
+                            Ptx.Utils.leash.destroy();
+                            delete Ptx.Utils.leash.itvlIdx;
+                        }
+                    );
+                }
+            }
+        }, undefined, true);
+    })();
+</script><script type="text/javascript">
+        Ptx.eventListenerAddPB(document, 'DOMContentLoaded', () => {
+            'use strict';
+
+            if (!window.Ptx) {
+                window.Ptx = {};
+            }
+
+            if (!Ptx.Ui) {
+                Ptx.Ui = {};
+            }
+
+            if (!Ptx.Ui.urlQuicktipHandler) {
+                Ptx.Ui.urlQuicktipHandler = (ev) => {
+                    if(ev.target.dataset.quicktip) {
+                        Ptx.Utils.Quicktip.create({target: ev.target});
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        ev.stopImmediatePropagation();
+                        return false;
+                    }
+                    if (Ptx.Utils.Quicktip.el && !Ptx.Utils.Quicktip.el.contains(ev.target) && !Ptx.Utils.Quicktip.el.scrollbar?.active) {
+                        Ptx.Utils.Quicktip.destroy()
+                    }
+
+                    return null;
+                }
+            }
+        })();
+    </script><script type="text/javascript">
+    (() => {
+        'use strict';
+        Ptx.performOnLoadPB(() => {
+            try {
+                var bodyId = document.getElementById('body_id');
+
+                if (bodyId) {
+                    if ("_dark-side".length > 0) {
+                        if (bodyId.classList.contains("_light-side")) {
+                            bodyId.classList.remove("_light-side");
+                        }
+                        if(bodyId.classList.contains("_dark-side")) {
+                            bodyId.classList.remove("_dark-side");
+                        }
+                        bodyId.classList.add("_dark-side");
+                       }
+                       else {
+                         console.warn('Body class settings failed because of empty class name')
+                       }
+                }
+            } catch (e) {
+                console.error('Body class set failed: ', e);
+            }
+        }, undefined, true);
+    })();
+    </script><script type="text/javascript">try {
+        var elU = document.getElementById('idc2').parentNode.querySelector('.place-combat-text');
+
+        if (elU) {
+            elU.className = 'place-combat-text ' + '_unit-pos-14';
+        }
+    } catch (e) {}</script><script type="text/javascript">try { Ptx.Shadows.Combat.unitAppear({placeId: Ptx.nvlC(Ptx.Shadows.Rich2.getPlaceBlock('unit_0__unit-pos-14'), (e) => e.id), amount: 1, appearTs: 13243346540484}); } catch (e) {}</script><script type="text/javascript">try {
+        var elU = document.getElementById('idd5').parentNode.querySelector('.place-combat-text');
+
+        if (elU) {
+            elU.className = 'place-combat-text ' + '_unit-pos-22';
+        }
+    } catch (e) {}</script><script type="text/javascript">try { Ptx.Shadows.Combat.unitAppear({placeId: Ptx.nvlC(Ptx.Shadows.Rich2.getPlaceBlock('unit_0__unit-pos-22'), (e) => e.id), amount: 1, appearTs: 13243347004092}); } catch (e) {}</script><script type="text/javascript">try {
+        var elU = document.getElementById('ide0').parentNode.querySelector('.place-combat-text');
+
+        if (elU) {
+            elU.className = 'place-combat-text ' + '_unit-pos-23';
+        }
+    } catch (e) {}</script><script type="text/javascript">try { Ptx.Shadows.Combat.unitAppear({placeId: Ptx.nvlC(Ptx.Shadows.Rich2.getPlaceBlock('unit_0__unit-pos-23'), (e) => e.id), amount: 1, appearTs: 13243347004148}); } catch (e) {}</script>
+<span id="pageBottomA"></span>
+</body>
+</html>

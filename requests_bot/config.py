@@ -125,6 +125,8 @@ def set_profile(profile_name):
     COOKIES_FILE = os.path.join(profile_dir, "cookies.json")
     STATS_FILE = os.path.join(profile_dir, "stats.json")
 
+    print(f"[CONFIG] COOKIES_FILE = {COOKIES_FILE}")
+
     # Загружаем конфиг профиля
     if os.path.exists(config_file):
         with open(config_file, "r", encoding="utf-8") as f:

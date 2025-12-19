@@ -13,8 +13,9 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 
 from requests_bot.config import (
-    BASE_URL, SCRIPT_DIR, COOKIES_FILE, SETTINGS_FILE, DEFAULT_HEADERS
+    BASE_URL, SCRIPT_DIR, SETTINGS_FILE, DEFAULT_HEADERS
 )
+import requests_bot.config as config  # Для динамического доступа к COOKIES_FILE
 
 class VMMOClient:
     """HTTP клиент для VMMO на requests"""
@@ -29,7 +30,9 @@ class VMMOClient:
     def load_cookies(self, cookies_path=None):
         """Загружает куки из файла (формат Playwright)"""
         if cookies_path is None:
-            cookies_path = COOKIES_FILE
+            cookies_path = config.COOKIES_FILE  # Динамически берём из config
+
+        print(f"[CLIENT] Loading cookies from: {cookies_path}")
 
         try:
             with open(cookies_path, "r", encoding="utf-8") as f:
@@ -188,7 +191,7 @@ class VMMOClient:
 
     def _save_cookies(self):
         """Сохраняет куки в файл (формат Playwright)"""
-        cookies_path = COOKIES_FILE
+        cookies_path = config.COOKIES_FILE
         cookies = []
 
         for cookie in self.session.cookies:
