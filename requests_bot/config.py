@@ -156,6 +156,11 @@ def get_profile_name():
     return _current_profile
 
 
+def get_profile_username():
+    """Возвращает username из профиля (для уведомлений)"""
+    return _profile_config.get("username", _current_profile or "unknown")
+
+
 def is_event_dungeon_enabled():
     """Проверяет, включен ли ивент для текущего профиля"""
     return _profile_config.get("event_dungeon_enabled", True)
@@ -260,7 +265,11 @@ def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
         dungeon_id: ID данжена (например 'dng:RestMonastery')
         dungeon_name: Название данжена
         difficulty: Текущая сложность
+
+    Returns:
+        tuple: (new_difficulty, should_skip) - новая сложность и нужно ли скипать
     """
+    global SKIP_DUNGEONS
     deaths = load_deaths()
 
     if dungeon_id not in deaths:
@@ -277,6 +286,19 @@ def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
         "difficulty": difficulty,
     })
 
+    # Если умер на normal - добавляем в skip
+    if difficulty == "normal":
+        deaths[dungeon_id]["current_difficulty"] = "skip"
+        deaths[dungeon_id]["skipped"] = True
+        print(f"[CONFIG] {dungeon_name}: умер на normal, данж будет скипаться!")
+
+        # Добавляем в SKIP_DUNGEONS если ещё нет
+        if dungeon_id not in SKIP_DUNGEONS:
+            SKIP_DUNGEONS.append(dungeon_id)
+
+        save_deaths(deaths)
+        return "skip", True
+
     # Снижаем сложность
     current_diff = deaths[dungeon_id].get("current_difficulty", "brutal")
     try:
@@ -287,11 +309,13 @@ def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
             print(f"[CONFIG] {dungeon_name}: сложность снижена {current_diff} -> {new_diff}")
         else:
             print(f"[CONFIG] {dungeon_name}: уже минимальная сложность (normal)")
+            new_diff = "normal"
     except ValueError:
         deaths[dungeon_id]["current_difficulty"] = "normal"
+        new_diff = "normal"
 
     save_deaths(deaths)
-    return deaths[dungeon_id]["current_difficulty"]
+    return new_diff, False
 
 
 def get_dungeon_difficulty(dungeon_id):

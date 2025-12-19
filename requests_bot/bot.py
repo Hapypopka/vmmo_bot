@@ -19,11 +19,11 @@ from requests_bot.mail import MailClient
 from requests_bot.backpack import BackpackClient
 from requests_bot.popups import PopupsClient
 from requests_bot.pets import PetClient
-from requests_bot.stats import init_stats, get_stats, print_stats
+from requests_bot.stats import init_stats, get_stats, print_stats, set_stats_profile
 from requests_bot.watchdog import reset_watchdog, check_watchdog, reset_no_progress_counter
 from requests_bot.config import (
     DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings,
-    set_profile, get_profile_name, is_event_dungeon_enabled, get_credentials,
+    set_profile, get_profile_name, get_profile_username, is_event_dungeon_enabled, get_credentials,
     is_pet_resurrection_enabled, record_death
 )
 from requests_bot.logger import (
@@ -328,11 +328,14 @@ class VMMOBot:
 
                     # Записываем смерть и снижаем сложность
                     current_diff = self.dungeon_runner.current_difficulty
-                    record_death(dungeon_id, dungeon_name, current_diff)
+                    new_diff, should_skip = record_death(dungeon_id, dungeon_name, current_diff)
 
                     # Уведомление в Telegram о смерти
-                    profile = get_profile_name() or "unknown"
-                    telegram_notify(f"💀 [{profile}] Умер в {dungeon_name} ({current_diff})")
+                    username = get_profile_username()
+                    if should_skip:
+                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} (normal) - данж скипается!")
+                    else:
+                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} ({current_diff} -> {new_diff})")
 
                     self.dungeon_runner.resurrect()
                     self.check_and_resurrect_pet()
@@ -341,8 +344,8 @@ class VMMOBot:
                     self.stats["watchdog_triggers"] += 1
                     log_dungeon_result(dungeon_name, result, actions)
                     # Уведомление в Telegram о застревании
-                    profile = get_profile_name() or "unknown"
-                    telegram_notify(f"⚠️ [{profile}] Watchdog: застрял в {dungeon_name}")
+                    username = get_profile_username()
+                    telegram_notify(f"⚠️ [{username}] Watchdog: застрял в {dungeon_name}")
                     # Пробуем вернуться в данжены
                     self.client.get("/dungeons?52")
                     reset_watchdog()
@@ -416,8 +419,8 @@ class VMMOBot:
                     log_debug(traceback.format_exc())
                     self.stats["errors"] += 1
                     # Уведомление в Telegram
-                    profile = get_profile_name() or "unknown"
-                    telegram_notify(f"🔴 [{profile}] Критическая ошибка!\n{e}")
+                    username = get_profile_username()
+                    telegram_notify(f"🔴 [{username}] Критическая ошибка!\n{e}")
                     # Пробуем восстановиться
                     time.sleep(5)
                     try:
@@ -457,6 +460,7 @@ def main():
     if args.profile:
         try:
             set_profile(args.profile)
+            set_stats_profile(args.profile)  # Устанавливаем профиль для статистики
         except ValueError as e:
             print(f"[ERROR] {e}")
             return

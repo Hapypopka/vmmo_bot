@@ -8,14 +8,36 @@ import time
 from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATS_FILE = os.path.join(SCRIPT_DIR, "stats.json")
+PROFILES_DIR = os.path.join(SCRIPT_DIR, "profiles")
+
+# Текущий файл статистики (устанавливается через set_stats_profile)
+_stats_file = None
+
+
+def set_stats_profile(profile_name):
+    """Устанавливает профиль для статистики"""
+    global _stats_file
+    if profile_name:
+        profile_dir = os.path.join(PROFILES_DIR, profile_name)
+        _stats_file = os.path.join(profile_dir, "stats.json")
+    else:
+        _stats_file = os.path.join(SCRIPT_DIR, "stats.json")
+
+
+def get_stats_file():
+    """Возвращает путь к файлу статистики"""
+    global _stats_file
+    if _stats_file is None:
+        _stats_file = os.path.join(SCRIPT_DIR, "stats.json")
+    return _stats_file
 
 
 def load_stats():
     """Загружает статистику из файла"""
-    if os.path.exists(STATS_FILE):
+    stats_file = get_stats_file()
+    if os.path.exists(stats_file):
         try:
-            with open(STATS_FILE, "r", encoding="utf-8") as f:
+            with open(stats_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
@@ -39,8 +61,9 @@ def load_stats():
 
 def save_stats(stats):
     """Сохраняет статистику в файл"""
+    stats_file = get_stats_file()
     try:
-        with open(STATS_FILE, "w", encoding="utf-8") as f:
+        with open(stats_file, "w", encoding="utf-8") as f:
             json.dump(stats, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[STATS] Ошибка сохранения: {e}")

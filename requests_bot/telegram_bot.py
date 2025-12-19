@@ -128,8 +128,8 @@ def restart_bot(profile: str) -> tuple[bool, str]:
 
 def get_stats(profile: str) -> str:
     """Возвращает статистику бота"""
-    # Статистика хранится в глобальном stats.json
-    stats_file = os.path.join(SCRIPT_DIR, "stats.json")
+    # Статистика хранится в папке профиля
+    stats_file = os.path.join(PROFILES_DIR, profile, "stats.json")
 
     if not os.path.exists(stats_file):
         return f"📊 {PROFILE_NAMES.get(profile, profile)}: нет данных"
