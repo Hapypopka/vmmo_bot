@@ -446,6 +446,7 @@ class VMMOBot:
 def main():
     """Точка входа"""
     import argparse
+    import atexit
 
     parser = argparse.ArgumentParser(description="VMMO Bot (requests)")
     parser.add_argument("-p", "--profile", type=str, default=None,
@@ -464,6 +465,36 @@ def main():
         except ValueError as e:
             print(f"[ERROR] {e}")
             return
+
+    # Проверка на дубликат процесса через lock-файл
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    profile_name = args.profile or "default"
+    lock_file = os.path.join(script_dir, "profiles", profile_name, ".lock")
+
+    # Проверяем существует ли lock и жив ли процесс
+    if os.path.exists(lock_file):
+        try:
+            with open(lock_file, "r") as f:
+                old_pid = int(f.read().strip())
+            # Проверяем жив ли процесс
+            os.kill(old_pid, 0)  # Не убивает, просто проверяет
+            print(f"[ERROR] Бот {profile_name} уже запущен (PID: {old_pid}). Выход.")
+            return
+        except (ProcessLookupError, ValueError, PermissionError):
+            # Процесс мёртв или PID невалидный - удаляем старый lock
+            pass
+
+    # Создаём lock-файл с нашим PID
+    with open(lock_file, "w") as f:
+        f.write(str(os.getpid()))
+
+    # Удаляем lock при выходе
+    def cleanup():
+        try:
+            os.remove(lock_file)
+        except:
+            pass
+    atexit.register(cleanup)
 
     bot = VMMOBot()
 
