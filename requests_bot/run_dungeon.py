@@ -558,7 +558,7 @@ class DungeonRunner:
         last_gcd_time = 0  # Глобальный КД
         skill_cooldowns = {}  # Индивидуальные КД скиллов {pos: last_use_time}
         GCD = 2.0  # Глобальный КД
-        ATTACK_CD = 0.8  # Задержка между атаками
+        ATTACK_CD = 0.6  # Задержка между атаками
         consecutive_no_units = 0  # Счётчик попыток без юнитов
 
         # Индивидуальные КД скиллов (из профиля или дефолтные)
