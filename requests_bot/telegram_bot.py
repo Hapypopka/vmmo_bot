@@ -279,9 +279,14 @@ waiting_for_ai_question: Dict[int, bool] = {}
 def ask_claude(prompt: str) -> str:
     """Отправляет запрос к Claude через юзера claude (с полными правами)"""
     try:
-        # Запускаем через su - claude чтобы работал --dangerously-skip-permissions
+        import base64
+        # Кодируем промпт в base64 чтобы избежать проблем со спецсимволами
+        encoded_prompt = base64.b64encode(prompt.encode('utf-8')).decode('ascii')
+
+        # Запускаем через su - claude, декодируем промпт на сервере
         result = subprocess.run(
-            ["su", "-", "claude", "-c", f"cd /home/claude/vmmo_bot && /home/claude/ask_claude.sh '{prompt}'"],
+            ["su", "-", "claude", "-c",
+             f"cd /home/claude/vmmo_bot && echo '{encoded_prompt}' | base64 -d | /home/claude/ask_claude_stdin.sh"],
             capture_output=True,
             text=True,
             timeout=900  # 15 минут на сложные задачи
