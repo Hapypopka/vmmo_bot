@@ -31,7 +31,8 @@ CONFIG_FILE = os.path.join(SCRIPT_DIR, "telegram_config.json")
 PROFILE_NAMES = {
     "char1": "nza",
     "char2": "Happypoq",
-    "char3": "Arilyn"
+    "char3": "Arilyn",
+    "char4": "Lovelion"
 }
 
 # Обратный маппинг
