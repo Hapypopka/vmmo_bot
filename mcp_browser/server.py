@@ -271,6 +271,25 @@ async def list_tools():
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="browser_login",
+            description="Залогиниться на vmmo.vten.ru по логину и паролю. По умолчанию использует Castertoyi",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "description": "Логин (по умолчанию: Castertoyi)",
+                        "default": "Castertoyi"
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Пароль (по умолчанию: Agesevemu1313!)",
+                        "default": "Agesevemu1313!"
+                    }
+                }
+            }
         )
     ]
 
@@ -416,6 +435,33 @@ async def call_tool(name: str, arguments: dict):
             return [TextContent(
                 type="text",
                 text=f"URL: {page.url}\nTitle: {await page.title()}\nViewport: {page.viewport_size}"
+            )]
+
+        elif name == "browser_login":
+            username = arguments.get("username", "Castertoyi")
+            password = arguments.get("password", "Agesevemu1313!")
+
+            # Переходим на страницу логина
+            await page.goto(f"{BASE_URL}/user/login", wait_until="domcontentloaded")
+
+            # Заполняем форму
+            await page.fill('input[name="username"]', username)
+            await page.fill('input[name="password"]', password)
+
+            # Нажимаем кнопку входа
+            await page.click('input[type="submit"], button[type="submit"]')
+            await page.wait_for_timeout(2000)
+
+            # Проверяем успех
+            current_url = page.url
+            title = await page.title()
+
+            if "login" in current_url.lower() or "вход" in title.lower():
+                return [TextContent(type="text", text=f"Login failed. Still on: {current_url}")]
+
+            return [TextContent(
+                type="text",
+                text=f"Logged in as: {username}\nCurrent URL: {current_url}\nTitle: {title}"
             )]
 
         else:

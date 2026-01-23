@@ -315,33 +315,27 @@ ssh -i ~/.ssh/id_ed25519_vmmo root@45.131.187.128 "fuser -k 5000/tcp; sleep 1; c
 
 MCP сервер для управления браузером через Claude Code.
 
-**Конфиг:** `.mcp.json`
-```json
-{
-  "mcpServers": {
-    "vmmo-browser": {
-      "command": "python",
-      "args": ["mcp_browser/server.py"],
-      "env": {
-        "VMMO_COOKIES_PATH": "profiles/char1/cookies.json",
-        "HEADLESS": "true"
-      }
-    }
-  }
-}
+### Дефолтный аккаунт (для исследований)
 ```
+Логин: Castertoyi
+Пароль: Agesevemu1313!
+```
+**ВАЖНО:** Использовать этот аккаунт по умолчанию. За чаров (char1-21) логиниться только по запросу пользователя!
 
-**Доступные инструменты:**
-- `browser_navigate` - переход на URL
-- `browser_get_html` - получить HTML страницы
-- `browser_get_text` - получить текст
-- `browser_click` - клик по элементу
-- `browser_fill` - ввод текста
-- `browser_screenshot` - скриншот
-- `browser_execute_js` - выполнить JS
-- `browser_wait` - ожидание элемента
-- `browser_load_profile` - загрузить профиль (char1-6)
-- `browser_info` - информация о странице
+### Доступные инструменты:
+| Инструмент | Описание |
+|------------|----------|
+| `browser_login` | **Залогиниться** (по умолчанию Castertoyi) |
+| `browser_navigate` | Переход на URL |
+| `browser_get_html` | Получить HTML страницы |
+| `browser_get_text` | Получить текст |
+| `browser_click` | Клик по элементу |
+| `browser_fill` | Ввод текста |
+| `browser_screenshot` | Скриншот |
+| `browser_execute_js` | Выполнить JS |
+| `browser_wait` | Ожидание элемента |
+| `browser_load_profile` | Загрузить профиль (char1-21) - только по запросу! |
+| `browser_info` | Информация о странице |
 
 ---
 
