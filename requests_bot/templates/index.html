@@ -3,10 +3,17 @@
 {% block title %}VMMO Bot - Обзор{% endblock %}
 
 {% block content %}
-{% macro render_bot_card(bot) %}
-<div class="card bot-card">
+{% macro render_bot_card(bot, rank=0) %}
+<div class="card bot-card {{ bot.status }}">
     <div class="bot-card-header">
-        <div>
+        <div class="bot-name-wrapper">
+            {% if rank == 1 %}
+            <span class="rank-badge rank-1" title="Топ-1 по доходу">🥇</span>
+            {% elif rank == 2 %}
+            <span class="rank-badge rank-2" title="Топ-2 по доходу">🥈</span>
+            {% elif rank == 3 %}
+            <span class="rank-badge rank-3" title="Топ-3 по доходу">🥉</span>
+            {% endif %}
             <span class="bot-name">{{ bot.name }}</span>
             {% if bot.is_main %}
             <span class="badge-main">MAIN</span>
@@ -132,19 +139,21 @@
 {% endmacro %}
 
 <div class="flex flex-between flex-center mb-2 flex-wrap gap-1">
-    <h1 class="page-title" style="margin: 0;">Обзор ботов</h1>
+    <h1 class="page-title" style="margin: 0;">
+        <span class="title-icon">🎮</span> Обзор ботов
+    </h1>
     <div class="btn-group">
-        <button class="btn btn-success" onclick="startAll()">Запустить всех</button>
-        <button class="btn btn-danger" onclick="stopAll()">Остановить всех</button>
-        <button class="btn btn-warning" onclick="resetAllSkips()">Сбросить скипы</button>
-        <button class="btn btn-purple" onclick="sellAllCrafts()">Продать крафты</button>
+        <button class="btn btn-success" onclick="startAll()">▶ Запустить всех</button>
+        <button class="btn btn-danger" onclick="stopAll()">⏹ Остановить всех</button>
+        <button class="btn btn-warning" onclick="resetAllSkips()">🔄 Сбросить скипы</button>
+        <button class="btn btn-purple" onclick="sellAllCrafts()">💰 Продать крафты</button>
     </div>
 </div>
 
 <!-- Мулы - Сворачиваемая секция -->
 {% if mules %}
 <div class="mules-section">
-    <h2 class="section-title">Мулы <span class="text-muted">({{ mules_summary.running_count }}/{{ mules_summary.total_count }} работают)</span></h2>
+    <h2 class="section-title">⛏️ Мулы <span class="text-muted">({{ mules_summary.running_count }}/{{ mules_summary.total_count }} работают)</span></h2>
 
     <!-- Сводка по мулам -->
     <div class="card mules-summary" onclick="toggleMules()">
@@ -214,13 +223,22 @@
 
             {% if mules_summary.total_hours > 0 and mules_summary.running_count > 0 %}
             {% set avg_hours = mules_summary.total_hours / mules_summary.running_count %}
-            <div class="flex flex-between mt-1">
-                <span class="text-muted">~{{ '%.1f' % avg_hours }} ч</span>
+            <div class="mules-stats-footer">
+                <div class="stat-item">
+                    <span class="stat-label">⏱️ Время</span>
+                    <span class="stat-value">~{{ '%.1f' % avg_hours }} ч</span>
+                </div>
                 {% if mules_summary.earned.get('золото', 0) and avg_hours > 0 %}
-                <span class="text-gold">{{ '%.1f' % (mules_summary.earned.get('золото', 0) / avg_hours) }} з/ч</span>
+                <div class="stat-item">
+                    <span class="stat-label">📈 Скорость</span>
+                    <span class="stat-value text-gold">{{ '%.1f' % (mules_summary.earned.get('золото', 0) / avg_hours) }} з/ч</span>
+                </div>
                 {% endif %}
                 {% if best_mule %}
-                <span><img src="{{ url_for('static', filename='icons/trophy.png') }}" class="res-icon-sm" onerror="this.style.display='none'"> {{ best_mule.name }} +{{ best_mule.earned.get('золото', 0) }}</span>
+                <div class="stat-item champion">
+                    <span class="champion-badge">{{ best_mule.name }}</span>
+                    <span class="stat-value text-gold">+{{ best_mule.earned.get('золото', 0) }}g</span>
+                </div>
                 {% endif %}
             </div>
             {% endif %}
@@ -230,7 +248,17 @@
     <!-- Карточки мулов -->
     <div id="mulesGrid" class="grid grid-3 mt-1" style="display: none;">
         {% for bot in mules %}
-        {{ render_bot_card(bot) }}
+        {# Определяем ранг по доходу золота #}
+        {% set gold_earned = bot.earned.get('золото', 0) %}
+        {% set rank = 0 %}
+        {% if best_mule and bot.name == best_mule.name %}
+            {% set rank = 1 %}
+        {% elif mules_sorted and mules_sorted|length > 1 and bot.name == mules_sorted[1].name %}
+            {% set rank = 2 %}
+        {% elif mules_sorted and mules_sorted|length > 2 and bot.name == mules_sorted[2].name %}
+            {% set rank = 3 %}
+        {% endif %}
+        {{ render_bot_card(bot, rank) }}
         {% endfor %}
     </div>
 </div>
@@ -238,7 +266,7 @@
 
 <!-- Мейны -->
 {% if mains %}
-<h2 class="section-title mt-2">Мейны</h2>
+<h2 class="section-title mt-2">⚔️ Мейны</h2>
 <div class="grid grid-3">
     {% for bot in mains %}
     {{ render_bot_card(bot) }}
@@ -320,6 +348,20 @@
         margin-left: 0;
     }
 
+    .bot-name-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .bot-name-wrapper .rank-badge {
+        font-size: 1.125rem;
+        background: none;
+        box-shadow: none;
+        width: auto;
+        height: auto;
+    }
+
     .badge-main {
         display: inline-block;
         padding: 0.15rem 0.4rem;
@@ -330,6 +372,19 @@
         border-radius: 4px;
         margin-left: 0.5rem;
         vertical-align: middle;
+    }
+
+    /* Running bot card glow effect */
+    .bot-card.running {
+        border-left: 3px solid var(--success);
+    }
+
+    .bot-card.stopped {
+        opacity: 0.75;
+    }
+
+    .bot-card.running:hover {
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), 0 0 20px var(--success-glow);
     }
 
     .bot-activity {

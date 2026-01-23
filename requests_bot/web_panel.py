@@ -506,20 +506,22 @@ def get_grouped_stats():
             mules_summary["resources"][key] = mules_summary["resources"].get(key, 0) + mule.get("resources", {}).get(key, 0)
             mules_summary["earned"][key] = mules_summary["earned"].get(key, 0) + mule.get("earned", {}).get(key, 0)
 
-    # Находим лучшего мула по заработку золота
-    best_mule = None
-    best_gold = 0
-    for mule in mules:
-        gold_earned = mule.get("earned", {}).get("золото", 0)
-        if gold_earned > best_gold:
-            best_gold = gold_earned
-            best_mule = mule
+    # Сортируем мулов по заработку золота (для рангов)
+    mules_sorted = sorted(
+        [m for m in mules if m.get("earned", {}).get("золото", 0) > 0],
+        key=lambda m: m.get("earned", {}).get("золото", 0),
+        reverse=True
+    )
+
+    # Лучший мул - первый в отсортированном списке
+    best_mule = mules_sorted[0] if mules_sorted else None
 
     return {
         "mains": mains,
         "mules": mules,
         "mules_summary": mules_summary,
         "best_mule": best_mule,
+        "mules_sorted": mules_sorted,
     }
 
 
@@ -987,6 +989,7 @@ def index():
                            mules=grouped["mules"],
                            mules_summary=grouped["mules_summary"],
                            best_mule=grouped["best_mule"],
+                           mules_sorted=grouped["mules_sorted"],
                            stats=all_stats,
                            total_stats=total_stats,
                            profile_names=PROFILE_NAMES)

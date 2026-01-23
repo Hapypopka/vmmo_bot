@@ -9,7 +9,7 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
         /* ═══════════════════════════════════════════════════════════════════
            🎨 VMMO Bot Panel - Modern Gaming Design
@@ -267,8 +267,9 @@
         }
 
         .navbar-brand {
-            font-size: 1.375rem;
-            font-weight: 800;
+            font-family: 'Rajdhani', 'Inter', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
             background: var(--gradient-brand);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -276,15 +277,22 @@
             text-decoration: none;
             display: flex;
             align-items: center;
-            gap: 0.625rem;
-            letter-spacing: -0.02em;
+            gap: 0.5rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            position: relative;
         }
 
         .navbar-brand::before {
             content: "⚔️";
-            font-size: 1.25rem;
+            font-size: 1.375rem;
             -webkit-text-fill-color: initial;
             filter: drop-shadow(0 0 8px var(--accent-glow));
+            animation: float 2s ease-in-out infinite;
+        }
+
+        .navbar-brand:hover::before {
+            animation: pulse 0.5s ease-in-out;
         }
 
         .navbar-center {
@@ -409,22 +417,40 @@
         }
 
         .page-title {
-            font-size: 1.75rem;
-            font-weight: 800;
+            font-family: 'Rajdhani', 'Inter', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
             margin-bottom: 0.5rem;
-            letter-spacing: -0.02em;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .title-icon {
+            font-size: 1.5rem;
+            animation: float 3s ease-in-out infinite;
         }
 
         [data-theme="dark"] .page-title {
-            background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--text);
+            text-shadow: 0 0 30px rgba(88, 101, 242, 0.3);
         }
 
         .page-subtitle {
             color: var(--text-muted);
             font-size: 0.9rem;
+        }
+
+        .section-title {
+            font-family: 'Rajdhani', 'Inter', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
         }
 
         /* ─────────────────────────────────────────────────────────────────
@@ -500,15 +526,136 @@
         }
 
         .bot-name {
-            font-size: 1.125rem;
+            font-family: 'Rajdhani', 'Inter', sans-serif;
+            font-size: 1.25rem;
             font-weight: 700;
             color: var(--text);
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        .bot-name::before {
+            content: '🤖';
+            margin-right: 0.375rem;
+            font-size: 1rem;
+        }
+
+        /* Special bot name styles for running/stopped */
+        .bot-card.running .bot-name {
+            color: var(--success);
+            text-shadow: 0 0 20px var(--success-glow);
+        }
+
+        .bot-card.stopped .bot-name {
+            color: var(--text-muted);
         }
 
         .bot-activity {
             font-size: 0.8rem;
             color: var(--text-muted);
             margin-top: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            background: var(--bg-input);
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .bot-craft {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            padding: 0.375rem 0.625rem;
+            background: rgba(88, 101, 242, 0.1);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 4px 4px 0;
+        }
+
+        /* Champion/Best Performer Badge */
+        .champion-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.375rem 0.75rem;
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #1e1f22;
+            font-family: 'Rajdhani', 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 0.8rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            box-shadow: 0 2px 10px rgba(251, 191, 36, 0.3);
+        }
+
+        .champion-badge::before {
+            content: '👑';
+            font-size: 1rem;
+        }
+
+        /* Rank badges */
+        .rank-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 0.75rem;
+        }
+
+        .rank-1 {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #1e1f22;
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+        }
+
+        .rank-2 {
+            background: linear-gradient(135deg, #94a3b8, #64748b);
+            color: #1e1f22;
+        }
+
+        .rank-3 {
+            background: linear-gradient(135deg, #cd7f32, #a0522d);
+            color: white;
+        }
+
+        /* Mules stats footer */
+        .mules-stats-footer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .stat-item.champion {
+            margin-left: auto;
+            flex-direction: row;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-family: 'Rajdhani', 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
         }
 
         .bot-resources {
