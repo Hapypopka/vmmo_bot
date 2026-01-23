@@ -668,6 +668,50 @@ def ask_claude(prompt):
         return {"success": False, "error": str(e)}
 
 
+def build_ingredient_chain(recipe_id, multiplier=1, depth=0, max_depth=5):
+    """
+    Рекурсивно строит цепочку ингредиентов для рецепта.
+
+    Args:
+        recipe_id: ID рецепта (например, "thorBar")
+        multiplier: Множитель количества (для вложенных рецептов)
+        depth: Текущая глубина рекурсии
+        max_depth: Максимальная глубина (защита от бесконечной рекурсии)
+
+    Returns:
+        list: [{"id": "thor", "name": "Тор", "amount": 5, "children": [...]}]
+    """
+    from requests_bot.craft import RECIPES, ITEM_NAMES
+
+    if depth >= max_depth:
+        return []
+
+    recipe = RECIPES.get(recipe_id)
+    if not recipe:
+        return []
+
+    requires = recipe.get("requires", {})
+    if not requires:
+        return []
+
+    result = []
+    for ing_id, ing_amount in requires.items():
+        total_amount = ing_amount * multiplier
+        ing_name = ITEM_NAMES.get(ing_id, ing_id)
+
+        # Рекурсивно получаем дочерние ингредиенты
+        children = build_ingredient_chain(ing_id, total_amount, depth + 1, max_depth)
+
+        result.append({
+            "id": ing_id,
+            "name": ing_name,
+            "amount": total_amount,
+            "children": children
+        })
+
+    return result
+
+
 def get_craft_info(profile):
     """
     Возвращает информацию о крафте для профиля.
@@ -675,6 +719,8 @@ def get_craft_info(profile):
     Returns:
         dict: {
             "active": str or None,  # Что сейчас крафтится (формат: "Предмет: 3/10")
+            "active_id": str or None,  # ID активного рецепта
+            "chain": list,  # Цепочка ингредиентов
             "queue": list,  # Очередь автокрафта
             "enabled": bool  # Включен ли автокрафт
         }
@@ -742,8 +788,15 @@ def get_craft_info(profile):
         # Формат: "Предмет: 3/10"
         active_craft = f"{item_name}: {current_count}/{final_batch}"
 
+    # Строим цепочку ингредиентов для активного рецепта
+    chain = []
+    if active_recipe_id:
+        chain = build_ingredient_chain(active_recipe_id)
+
     return {
         "active": active_craft,
+        "active_id": active_recipe_id,
+        "chain": chain,
         "queue": queue,
         "enabled": craft_enabled
     }
