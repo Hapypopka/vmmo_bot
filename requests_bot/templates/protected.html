@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Защищённые предметы - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <h1 class="page-title">Защищённые предметы</h1>
+    <div class="btn-group">
+        <button class="btn btn-success" onclick="showAddModal()">+ Добавить</button>
+        <button class="btn btn-warning" onclick="resetToDefault()">Сбросить к дефолту</button>
+        <a href="/" class="btn btn-dark">Назад</a>
+    </div>
+</div>
+
+<div class="card">
+    <p class="text-muted mb-2">
+        Эти предметы НЕ продаются и НЕ разбираются. Для частичного совпадения используйте часть названия (например "Оберегов" найдёт все ларцы оберегов).
+    </p>
+
+    <div id="itemsList" class="items-grid">
+        {% for item in items %}
+        <div class="item-tag" data-item="{{ item }}">
+            <span>{{ item }}</span>
+            <button class="item-remove" onclick="removeItem('{{ item }}')">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Модальное окно добавления -->
+<div id="addModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="width: 400px; max-width: 90%;">
+        <h3 class="card-title">Добавить предмет</h3>
+
+        <div class="form-group">
+            <label class="form-label">Название предмета</label>
+            <input type="text" class="form-input" id="new_item" placeholder="Введите название или часть названия">
+        </div>
+
+        <div class="flex gap-1">
+            <button class="btn btn-success" onclick="addItem()">Добавить</button>
+            <button class="btn btn-dark" onclick="hideAddModal()">Отмена</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .items-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .item-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.8rem;
+        background: linear-gradient(135deg, #2a3f5f 0%, #1a2744 100%);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 0.9rem;
+    }
+
+    .item-remove {
+        background: none;
+        border: none;
+        color: var(--danger);
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+        opacity: 0.7;
+    }
+
+    .item-remove:hover {
+        opacity: 1;
+    }
+</style>
+
+<script>
+    function showAddModal() {
+        document.getElementById('addModal').style.display = 'flex';
+        document.getElementById('new_item').focus();
+    }
+
+    function hideAddModal() {
+        document.getElementById('addModal').style.display = 'none';
+        document.getElementById('new_item').value = '';
+    }
+
+    async function addItem() {
+        const item = document.getElementById('new_item').value.trim();
+        if (!item) {
+            alert('Введите название предмета');
+            return;
+        }
+
+        const result = await apiCall('/api/protected/add', 'POST', { item });
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    }
+
+    async function removeItem(item) {
+        if (!confirm(`Удалить "${item}" из защищённых?`)) return;
+
+        const result = await apiCall('/api/protected/remove', 'POST', { item });
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    }
+
+    async function resetToDefault() {
+        if (!confirm('Сбросить список к дефолтным значениям?\n\nВсе добавленные предметы будут удалены!')) return;
+
+        const result = await apiCall('/api/protected/reset', 'POST');
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    }
+
+    // Закрытие модалки
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideAddModal();
+        if (e.key === 'Enter' && document.getElementById('addModal').style.display === 'flex') addItem();
+    });
+
+    document.getElementById('addModal').addEventListener('click', (e) => {
+        if (e.target.id === 'addModal') hideAddModal();
+    });
+</script>
+{% endblock %}

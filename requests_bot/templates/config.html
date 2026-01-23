@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки {{ name }} - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <h1 class="page-title">Настройки: {{ name }}</h1>
+    <a href="/" class="btn btn-dark">Назад</a>
+</div>
+
+<div class="grid grid-2">
+    <!-- Основные настройки -->
+    <div class="card">
+        <h3 class="card-title">Основные функции</h3>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Данжи</label>
+            <label class="toggle">
+                <input type="checkbox" id="dungeons_enabled"
+                       {{ 'checked' if config.get('dungeons_enabled', True) }}
+                       onchange="toggleSetting('{{ profile }}', 'dungeons_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Арена</label>
+            <label class="toggle">
+                <input type="checkbox" id="arena_enabled"
+                       {{ 'checked' if config.get('arena_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'arena_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Адские Игры</label>
+            <label class="toggle">
+                <input type="checkbox" id="hell_games_enabled"
+                       {{ 'checked' if config.get('hell_games_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'hell_games_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Ивент данжи</label>
+            <label class="toggle">
+                <input type="checkbox" id="event_dungeon_enabled"
+                       {{ 'checked' if config.get('event_dungeon_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'event_dungeon_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>НГ Ивенты</label>
+            <label class="toggle">
+                <input type="checkbox" id="ny_event_dungeon_enabled"
+                       {{ 'checked' if config.get('ny_event_dungeon_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'ny_event_dungeon_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Шахта выживания</label>
+            <label class="toggle">
+                <input type="checkbox" id="survival_mines_enabled"
+                       {{ 'checked' if config.get('survival_mines_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'survival_mines_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Крафт</label>
+            <label class="toggle">
+                <input type="checkbox" id="iron_craft_enabled"
+                       {{ 'checked' if config.get('iron_craft_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'iron_craft_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Воскрешение питомцев</label>
+            <label class="toggle">
+                <input type="checkbox" id="pet_resurrection_enabled"
+                       {{ 'checked' if config.get('pet_resurrection_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'pet_resurrection_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Крафт -->
+    <div class="card">
+        <h3 class="card-title">Очередь крафта</h3>
+
+        <!-- Автовыбор крафта -->
+        <div class="form-group flex flex-between flex-center mb-1" style="padding-bottom: 1rem; border-bottom: 1px solid #333;">
+            <div>
+                <label>Автовыбор крафта</label>
+                <div class="text-muted" style="font-size: 0.75rem;">Автоматически выбирает самый выгодный крафт</div>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="auto_select_craft"
+                       {{ 'checked' if config.get('auto_select_craft', True) }}
+                       onchange="toggleSetting('{{ profile }}', 'auto_select_craft')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Список предметов для автокрафта -->
+        <div id="craft-items-list" class="mb-1">
+            {% set craft_items = config.get('craft_items', []) %}
+            {% if craft_items %}
+                {% for item in craft_items %}
+                <div class="craft-item flex flex-between flex-center" style="padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 0.5rem;">
+                    <span>
+                        <strong>{{ craftable_items.get(item.item, item.item) }}</strong>
+                        <span class="text-muted">(партия: {{ item.batch_size }} шт)</span>
+                    </span>
+                    <button class="btn btn-sm btn-danger" onclick="removeCraftItem('{{ profile }}', {{ loop.index0 }})" style="padding: 0.25rem 0.5rem;">✕</button>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted" id="empty-items-msg">Список пуст</p>
+            {% endif %}
+        </div>
+
+        <!-- Добавление предмета -->
+        <div class="form-group">
+            <label class="form-label">Добавить предмет</label>
+            <div class="flex gap-1">
+                <select class="form-input" id="craft_item" style="flex: 2;">
+                    {% for item_id, item_name in craftable_items.items() %}
+                    <option value="{{ item_id }}">{{ item_name }}</option>
+                    {% endfor %}
+                </select>
+                <input type="number" class="form-input" id="craft_batch_size" value="5" min="1" placeholder="Партия" style="flex: 1;">
+                <button class="btn btn-primary" onclick="addCraftItem('{{ profile }}')" style="flex: 1;">+</button>
+            </div>
+        </div>
+
+        {% if craft_items %}
+        <button class="btn btn-danger btn-sm" onclick="clearCraftItems('{{ profile }}')">Очистить список</button>
+        {% endif %}
+    </div>
+
+    <!-- Продажа ресурсов -->
+    <div class="card">
+        <h3 class="card-title">Продажа ресурсов</h3>
+
+        {% set resource_sell = config.get('resource_sell', {}) %}
+
+        {% for res_key, res_name in resource_names.items() %}
+        {% set res_cfg = resource_sell.get(res_key, {'enabled': False, 'stack': 1000, 'reserve': 200}) %}
+        <div class="form-group" style="border-bottom: 1px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
+            <div class="flex flex-between flex-center mb-1">
+                <strong>{{ res_name }}</strong>
+                <label class="toggle">
+                    <input type="checkbox" id="sell_{{ res_key }}"
+                           {{ 'checked' if res_cfg.get('enabled', False) }}
+                           onchange="toggleResourceSell('{{ profile }}', '{{ res_key }}')">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="grid grid-2" style="gap: 0.5rem;">
+                <div>
+                    <label class="form-label">Стак</label>
+                    <input type="number" class="form-input" id="sell_{{ res_key }}_stack"
+                           value="{{ res_cfg.get('stack', 1000) }}"
+                           onchange="saveResourceSell('{{ profile }}', '{{ res_key }}')">
+                </div>
+                <div>
+                    <label class="form-label">Резерв</label>
+                    <input type="number" class="form-input" id="sell_{{ res_key }}_reserve"
+                           value="{{ res_cfg.get('reserve', 200) }}"
+                           onchange="saveResourceSell('{{ profile }}', '{{ res_key }}')">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Данжи -->
+    <div class="card">
+        <h3 class="card-title">Данжи</h3>
+
+        {% set only_dungeons = config.get('only_dungeons', []) %}
+
+        {% for dng_id, dng_name in all_dungeons.items() %}
+        <div class="form-group flex flex-between flex-center">
+            <label>{{ dng_name }}</label>
+            <label class="toggle">
+                <input type="checkbox"
+                       {{ 'checked' if dng_id in only_dungeons }}
+                       onchange="toggleDungeon('{{ profile }}', '{{ dng_id }}')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Скиллы -->
+    <div class="card">
+        <h3 class="card-title">Скиллы</h3>
+
+        {% set cooldowns = config.get('skill_cooldowns', {}) %}
+        {% set hp_thresholds = config.get('skill_hp_thresholds', {}) %}
+
+        <p class="text-muted mb-1">Кулдаун (сек) и порог HP (%) для использования скилла</p>
+
+        <div class="grid grid-2" style="gap: 0.5rem;">
+            <div class="form-group">
+                <label class="form-label">Скилл 1 КД (сек)</label>
+                <input type="number" step="0.5" class="form-input" id="cd_1"
+                       value="{{ cooldowns.get('1', 0) }}"
+                       onchange="saveCooldowns('{{ profile }}')">
+            </div>
+            <div class="form-group">
+                <label class="form-label">HP порог (%)</label>
+                <input type="number" class="form-input" id="hp_1"
+                       value="{{ hp_thresholds.get('1', '') }}"
+                       placeholder="Нет"
+                       onchange="saveHpThresholds('{{ profile }}')">
+            </div>
+        </div>
+
+        <div class="grid grid-2" style="gap: 0.5rem;">
+            <div class="form-group">
+                <label class="form-label">Скилл 2 КД (сек)</label>
+                <input type="number" step="0.5" class="form-input" id="cd_2"
+                       value="{{ cooldowns.get('2', 0) }}"
+                       onchange="saveCooldowns('{{ profile }}')">
+            </div>
+            <div class="form-group">
+                <label class="form-label">HP порог (%)</label>
+                <input type="number" class="form-input" id="hp_2"
+                       value="{{ hp_thresholds.get('2', '') }}"
+                       placeholder="Нет"
+                       onchange="saveHpThresholds('{{ profile }}')">
+            </div>
+        </div>
+
+        <div class="grid grid-2" style="gap: 0.5rem;">
+            <div class="form-group">
+                <label class="form-label">Скилл 3 КД (сек)</label>
+                <input type="number" step="0.5" class="form-input" id="cd_3"
+                       value="{{ cooldowns.get('3', 0) }}"
+                       onchange="saveCooldowns('{{ profile }}')">
+            </div>
+            <div class="form-group">
+                <label class="form-label">HP порог (%)</label>
+                <input type="number" class="form-input" id="hp_3"
+                       value="{{ hp_thresholds.get('3', '') }}"
+                       placeholder="Нет"
+                       onchange="saveHpThresholds('{{ profile }}')">
+            </div>
+        </div>
+    </div>
+
+    <!-- Прочее -->
+    <div class="card">
+        <h3 class="card-title">Прочее</h3>
+
+        <div class="form-group">
+            <label class="form-label">Порог рюкзака (слотов)</label>
+            <input type="number" class="form-input" id="backpack_threshold"
+                   value="{{ config.get('backpack_threshold', 18) }}"
+                   onchange="saveValue('{{ profile }}', 'backpack_threshold', this.value)">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Лимит боёв арены</label>
+            <input type="number" class="form-input" id="arena_max_fights"
+                   value="{{ config.get('arena_max_fights', 50) }}"
+                   onchange="saveValue('{{ profile }}', 'arena_max_fights', this.value)">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Макс волна шахты</label>
+            <input type="number" class="form-input" id="survival_mines_max_wave"
+                   value="{{ config.get('survival_mines_max_wave', 31) }}"
+                   onchange="saveValue('{{ profile }}', 'survival_mines_max_wave', this.value)">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Макс уровень шахты (пусто=любой)</label>
+            <input type="number" class="form-input" id="survival_mines_max_level"
+                   value="{{ config.get('survival_mines_max_level', '') }}"
+                   placeholder="Любой"
+                   onchange="saveValueOrNull('{{ profile }}', 'survival_mines_max_level', this.value)">
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>Сторона Света (Ад. Игры)</label>
+            <label class="toggle">
+                <input type="checkbox" id="is_light_side"
+                       {{ 'checked' if config.get('is_light_side', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'is_light_side')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Ссылки -->
+    <div class="card">
+        <h3 class="card-title">Дополнительно</h3>
+        <div class="flex gap-1">
+            <a href="/deaths/{{ profile }}" class="btn btn-purple">Смерти и сложность</a>
+            <a href="/logs/{{ profile }}" class="btn btn-dark">Логи</a>
+        </div>
+    </div>
+</div>
+
+<!-- JSON редактор -->
+<div class="card mt-2">
+    <h3 class="card-title">Raw JSON конфиг</h3>
+    <textarea id="json_config" class="form-input" style="font-family: monospace; min-height: 300px;">{{ config | tojson(indent=2) }}</textarea>
+    <button class="btn btn-primary mt-1" onclick="saveRawConfig('{{ profile }}')">Сохранить JSON</button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function toggleResourceSell(profile, resource) {
+        const config = await apiCall(`/api/config/${profile}`);
+        if (!config.resource_sell) config.resource_sell = {};
+        if (!config.resource_sell[resource]) {
+            config.resource_sell[resource] = {enabled: false, stack: 1000, reserve: 200};
+        }
+        config.resource_sell[resource].enabled = !config.resource_sell[resource].enabled;
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+
+    async function saveResourceSell(profile, resource) {
+        const config = await apiCall(`/api/config/${profile}`);
+        if (!config.resource_sell) config.resource_sell = {};
+        if (!config.resource_sell[resource]) {
+            config.resource_sell[resource] = {enabled: false, stack: 1000, reserve: 200};
+        }
+        config.resource_sell[resource].stack = parseInt(document.getElementById(`sell_${resource}_stack`).value) || 1000;
+        config.resource_sell[resource].reserve = parseInt(document.getElementById(`sell_${resource}_reserve`).value) || 200;
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+
+    async function toggleDungeon(profile, dungeonId) {
+        const config = await apiCall(`/api/config/${profile}`);
+        if (!config.only_dungeons) config.only_dungeons = [];
+
+        const idx = config.only_dungeons.indexOf(dungeonId);
+        if (idx > -1) {
+            config.only_dungeons.splice(idx, 1);
+        } else {
+            config.only_dungeons.push(dungeonId);
+        }
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+
+    // === Очередь крафта ===
+    async function addCraftItem(profile) {
+        const item = document.getElementById('craft_item').value;
+        const batch_size = parseInt(document.getElementById('craft_batch_size').value) || 5;
+
+        const result = await apiCall(`/api/craft_items/${profile}/add`, 'POST', {item, batch_size});
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (result.error || 'неизвестная'));
+        }
+    }
+
+    async function removeCraftItem(profile, index) {
+        const result = await apiCall(`/api/craft_items/${profile}/remove`, 'POST', {index});
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (result.error || 'неизвестная'));
+        }
+    }
+
+    async function clearCraftItems(profile) {
+        if (!confirm('Очистить весь список автокрафта?')) return;
+
+        const result = await apiCall(`/api/craft_items/${profile}/clear`, 'POST', {});
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (result.error || 'неизвестная'));
+        }
+    }
+
+    async function saveCooldowns(profile) {
+        const config = await apiCall(`/api/config/${profile}`);
+        if (!config.skill_cooldowns) config.skill_cooldowns = {};
+
+        const cd1 = parseFloat(document.getElementById('cd_1').value);
+        const cd2 = parseFloat(document.getElementById('cd_2').value);
+        const cd3 = parseFloat(document.getElementById('cd_3').value);
+
+        if (cd1 > 0) config.skill_cooldowns['1'] = cd1;
+        else delete config.skill_cooldowns['1'];
+
+        if (cd2 > 0) config.skill_cooldowns['2'] = cd2;
+        else delete config.skill_cooldowns['2'];
+
+        if (cd3 > 0) config.skill_cooldowns['3'] = cd3;
+        else delete config.skill_cooldowns['3'];
+
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+
+    async function saveValue(profile, key, value) {
+        const config = await apiCall(`/api/config/${profile}`);
+        config[key] = parseInt(value) || value;
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+
+    async function saveValueOrNull(profile, key, value) {
+        const config = await apiCall(`/api/config/${profile}`);
+        if (value && parseInt(value) > 0) {
+            config[key] = parseInt(value);
+        } else {
+            delete config[key];
+        }
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+
+    async function saveHpThresholds(profile) {
+        const config = await apiCall(`/api/config/${profile}`);
+        if (!config.skill_hp_thresholds) config.skill_hp_thresholds = {};
+
+        const hp1 = parseInt(document.getElementById('hp_1').value);
+        const hp2 = parseInt(document.getElementById('hp_2').value);
+        const hp3 = parseInt(document.getElementById('hp_3').value);
+
+        if (hp1 > 0) config.skill_hp_thresholds['1'] = hp1;
+        else delete config.skill_hp_thresholds['1'];
+
+        if (hp2 > 0) config.skill_hp_thresholds['2'] = hp2;
+        else delete config.skill_hp_thresholds['2'];
+
+        if (hp3 > 0) config.skill_hp_thresholds['3'] = hp3;
+        else delete config.skill_hp_thresholds['3'];
+
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+
+    async function saveRawConfig(profile) {
+        try {
+            const json = JSON.parse(document.getElementById('json_config').value);
+            const result = await apiCall(`/api/config/${profile}`, 'POST', json);
+            if (result.success) {
+                alert('Конфиг сохранён!');
+                location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (e) {
+            alert('Ошибка парсинга JSON: ' + e.message);
+        }
+    }
+</script>
+{% endblock %}

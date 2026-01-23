@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Логи {{ name }} - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <h1 class="page-title">Логи: {{ name }}</h1>
+    <div class="btn-group">
+        <button class="btn btn-primary" onclick="refreshLogs()">Обновить</button>
+        <a href="/" class="btn" style="background: #333;">Назад</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="flex flex-between flex-center mb-1">
+        <span class="text-muted">Последние 200 строк</span>
+        <label class="toggle">
+            <input type="checkbox" id="auto_refresh" checked onchange="toggleAutoRefresh()">
+            <span class="toggle-slider"></span>
+        </label>
+        <span class="text-muted">Автообновление</span>
+    </div>
+
+    <pre class="log-viewer" id="logs">{{ logs }}</pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let autoRefresh = true;
+    let refreshInterval;
+
+    function scrollToBottom() {
+        const logViewer = document.getElementById('logs');
+        logViewer.scrollTop = logViewer.scrollHeight;
+    }
+
+    async function refreshLogs() {
+        const result = await apiCall('/api/logs/{{ profile }}?lines=200');
+        document.getElementById('logs').textContent = result.logs;
+        scrollToBottom();
+    }
+
+    function toggleAutoRefresh() {
+        autoRefresh = document.getElementById('auto_refresh').checked;
+        if (autoRefresh) {
+            refreshInterval = setInterval(refreshLogs, 5000);
+        } else {
+            clearInterval(refreshInterval);
+        }
+    }
+
+    // Начальная прокрутка вниз
+    scrollToBottom();
+
+    // Автообновление каждые 5 секунд
+    refreshInterval = setInterval(refreshLogs, 5000);
+</script>
+{% endblock %}

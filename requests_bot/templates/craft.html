@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Крафт - VMMO Bot{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Автокрафт</h1>
+    <p class="page-subtitle">Настройки бесконечного крафта для всех персонажей</p>
+</div>
+
+<div class="grid grid-3">
+    {% for profile, name in profiles.items() %}
+    <div class="card">
+        <div class="flex flex-between flex-center mb-1">
+            <h3>{{ name }}</h3>
+            <span class="text-muted" style="font-size: 0.8rem;">{{ profile }}</span>
+        </div>
+
+        {% set config = configs.get(profile, {}) %}
+        {% set craft_items = config.get('craft_items', []) %}
+        {% set iron_craft_enabled = config.get('iron_craft_enabled', false) %}
+        {% set auto_select_craft = config.get('auto_select_craft', true) %}
+        {% set active_lock = craft_locks.get(profile) %}
+
+        <!-- Статус крафта -->
+        <div class="mb-1 flex gap-1">
+            {% if iron_craft_enabled %}
+                <span class="status status-running">
+                    <span class="status-dot"></span>
+                    Включён
+                </span>
+            {% else %}
+                <span class="status status-stopped">
+                    <span class="status-dot"></span>
+                    Выключен
+                </span>
+            {% endif %}
+            {% if auto_select_craft %}
+                <span class="badge badge-auto">Авто</span>
+            {% endif %}
+        </div>
+
+        <!-- Активный лок (автовыбор) -->
+        {% if active_lock and auto_select_craft %}
+        {% set progress = craft_progress.get(profile, {"current": 0, "batch": 5}) %}
+        <div class="auto-craft-item">
+            <div class="flex flex-between flex-center">
+                <div>
+                    <span class="auto-label">Автовыбор:</span>
+                    <span style="font-weight: 600;">{{ craftable_items.get(active_lock, active_lock) }}: {{ progress.current }}/{{ progress.batch }}</span>
+                </div>
+                <span class="badge badge-active">активен</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Список предметов для крафта (ручной) -->
+        {% if craft_items %}
+        <div style="margin-top: 1rem;">
+            <div class="text-muted mb-1" style="font-size: 0.8rem;">Ручной список:</div>
+            {% for item in craft_items %}
+            <div class="resource-item mb-1" style="padding: 0.75rem;">
+                <div class="flex flex-between w-full">
+                    <span style="font-weight: 600;">{{ craftable_items.get(item.item, item.item) }}</span>
+                    <span class="text-accent" style="font-weight: 600;">партия: {{ item.batch_size }} шт</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% elif not active_lock %}
+        <div class="text-muted" style="margin-top: 1rem; text-align: center; padding: 1rem; background: var(--glass); border-radius: 8px;">
+            {% if auto_select_craft %}
+            Автовыбор включён, ожидание запуска бота
+            {% else %}
+            Список пуст
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Кнопка настроек -->
+        <a href="/config/{{ profile }}" class="btn btn-primary w-full mt-2">
+            ⚙️ Настроить
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+    .craft-item {
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+    .craft-item:hover {
+        background: var(--bg-card-hover);
+        border-color: var(--accent);
+    }
+
+    .resource-item {
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .resource-item:hover {
+        border-color: var(--accent);
+        background: var(--bg-card-hover);
+    }
+
+    .auto-craft-item {
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(59, 130, 246, 0.4);
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .auto-label {
+        color: #93c5fd;
+        font-size: 0.8rem;
+        margin-right: 0.5rem;
+    }
+
+    .badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+
+    .badge-auto {
+        background: rgba(59, 130, 246, 0.2);
+        color: #93c5fd;
+        border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+
+    .badge-active {
+        background: rgba(34, 197, 94, 0.2);
+        color: #86efac;
+        border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+</style>
+
+{% endblock %}

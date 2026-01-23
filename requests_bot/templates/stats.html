@@ -1,0 +1,720 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="stats-header mb-2">
+    <h1 class="page-title">Статистика ресурсов</h1>
+    <div class="stats-filters">
+        <select id="profileSelect" class="form-select" onchange="saveFiltersAndLoad()">
+            <option value="all">Все персонажи</option>
+            {% for profile, name in profiles.items() %}
+            <option value="{{ profile }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+        <select id="periodSelect" class="form-select" onchange="saveFiltersAndLoad()">
+            <option value="day">За день</option>
+            <option value="week">За неделю</option>
+            <option value="month">За месяц</option>
+        </select>
+        <select id="modeSelect" class="form-select" onchange="saveFiltersAndLoad()">
+            <option value="sessions">По сессиям</option>
+            <option value="days">По дням</option>
+        </select>
+    </div>
+</div>
+
+<!-- Переключатели ресурсов -->
+<div class="card mb-2">
+    <div class="flex gap-1 flex-wrap">
+        <label class="resource-toggle active" data-resource="золото">
+            <img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="res-icon-sm">
+            <span>Золото</span>
+        </label>
+        <label class="resource-toggle active" data-resource="серебро">
+            <img src="{{ url_for('static', filename='icons/money_silver.png') }}" class="res-icon-sm">
+            <span>Серебро</span>
+        </label>
+        <label class="resource-toggle" data-resource="черепа">
+            <img src="{{ url_for('static', filename='icons/skull.png') }}" class="res-icon-sm">
+            <span>Черепа</span>
+        </label>
+        <label class="resource-toggle" data-resource="минералы">
+            <img src="{{ url_for('static', filename='icons/mineral.png') }}" class="res-icon-sm">
+            <span>Минералы</span>
+        </label>
+        <label class="resource-toggle" data-resource="сапфиры">
+            <img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="res-icon-sm">
+            <span>Сапфиры</span>
+        </label>
+        <label class="resource-toggle" data-resource="рубины">
+            <img src="{{ url_for('static', filename='icons/ruby.png') }}" class="res-icon-sm">
+            <span>Рубины</span>
+        </label>
+    </div>
+</div>
+
+<!-- График -->
+<div class="card mb-2">
+    <h3 class="card-title">История изменений</h3>
+    <div class="chart-container">
+        <canvas id="resourceChart"></canvas>
+    </div>
+    <div id="noDataMessage" class="text-muted text-center" style="display: none; padding: 3rem;">
+        Нет данных за выбранный период. Данные начнут появляться после запуска ботов.
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <!-- Сессии бота -->
+    <div class="card">
+        <h3 class="card-title">Сессии бота</h3>
+        <div id="sessionsList" class="sessions-list">
+            <div class="text-muted text-center">Загрузка...</div>
+        </div>
+    </div>
+
+    <!-- Изменения вне бота -->
+    <div class="card">
+        <h3 class="card-title">Изменения вне бота</h3>
+        <div id="offlineList" class="offline-list">
+            <div class="text-muted text-center">Загрузка...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Итоги -->
+<div class="card mt-2">
+    <h3 class="card-title">Итоги за период</h3>
+    <div id="summaryStats" class="summary-grid">
+        <div class="text-muted text-center">Загрузка...</div>
+    </div>
+</div>
+
+<!-- Текущие ресурсы -->
+<h2 class="mt-2 mb-1" style="color: var(--accent-hover); font-size: 1.5rem;">Текущие ресурсы</h2>
+<div class="card">
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Персонаж</th>
+                    <th>Статус</th>
+                    <th class="text-right"><img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="th-icon"> Золото</th>
+                    <th class="text-right"><img src="{{ url_for('static', filename='icons/skull.png') }}" class="th-icon"> Черепа</th>
+                    <th class="text-right"><img src="{{ url_for('static', filename='icons/mineral.png') }}" class="th-icon"> Минералы</th>
+                    <th class="text-right"><img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="th-icon"> Сапфиры</th>
+                    <th class="text-right"><img src="{{ url_for('static', filename='icons/ruby.png') }}" class="th-icon"> Рубины</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for bot in stats %}
+                <tr>
+                    <td><strong>{{ bot.name }}</strong></td>
+                    <td>
+                        <span class="status status-{{ bot.status }}">
+                            <span class="status-dot"></span>
+                            {{ 'Работает' if bot.status == 'running' else 'Стоп' }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <span class="text-gold">{{ bot.resources.get('золото', 0) }}</span>
+                        {% if bot.earned.get('золото', 0) != 0 %}
+                        <br><small class="{{ 'text-success' if bot.earned.get('золото', 0) > 0 else 'text-danger' }}">
+                            {{ '%+d' % bot.earned.get('золото', 0) }}
+                        </small>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        {{ bot.resources.get('черепа', 0) }}
+                        {% if bot.earned.get('черепа', 0) != 0 %}
+                        <br><small class="{{ 'text-success' if bot.earned.get('черепа', 0) > 0 else 'text-danger' }}">
+                            {{ '%+d' % bot.earned.get('черепа', 0) }}
+                        </small>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        {{ bot.resources.get('минералы', 0) }}
+                        {% if bot.earned.get('минералы', 0) != 0 %}
+                        <br><small class="{{ 'text-success' if bot.earned.get('минералы', 0) > 0 else 'text-danger' }}">
+                            {{ '%+d' % bot.earned.get('минералы', 0) }}
+                        </small>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        {{ bot.resources.get('сапфиры', 0) }}
+                        {% if bot.earned.get('сапфиры', 0) != 0 %}
+                        <br><small class="{{ 'text-success' if bot.earned.get('сапфиры', 0) > 0 else 'text-danger' }}">
+                            {{ '%+d' % bot.earned.get('сапфиры', 0) }}
+                        </small>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        {{ bot.resources.get('рубины', 0) }}
+                        {% if bot.earned.get('рубины', 0) != 0 %}
+                        <br><small class="{{ 'text-success' if bot.earned.get('рубины', 0) > 0 else 'text-danger' }}">
+                            {{ '%+d' % bot.earned.get('рубины', 0) }}
+                        </small>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .stats-header {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .stats-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .form-select {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        color: var(--text-color);
+        padding: 0.5rem 2.5rem 0.5rem 1rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        width: auto;
+        min-width: 120px;
+        flex: 1;
+    }
+
+    .form-select:focus {
+        outline: none;
+        border-color: var(--primary);
+    }
+
+    @media (min-width: 769px) {
+        .stats-header {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stats-filters {
+            flex-wrap: nowrap;
+        }
+        .form-select {
+            flex: none;
+            min-width: 140px;
+        }
+    }
+
+    .resource-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        background: rgba(0, 0, 0, 0.2);
+        border: 2px solid transparent;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+    }
+
+    .resource-toggle:hover {
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .resource-toggle.active {
+        border-color: var(--primary);
+        background: rgba(168, 85, 247, 0.2);
+    }
+
+    .res-icon-sm {
+        width: 16px;
+        height: 16px;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 400px;
+        width: 100%;
+    }
+
+    .sessions-list, .offline-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .session-item, .offline-item {
+        padding: 0.8rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .session-item:last-child, .offline-item:last-child {
+        border-bottom: none;
+    }
+
+    .session-time {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 0.3rem;
+    }
+
+    .session-profile {
+        font-weight: 600;
+        color: var(--accent);
+    }
+
+    .session-duration {
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .session-changes, .offline-changes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .change-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .change-badge.positive {
+        background: rgba(34, 197, 94, 0.2);
+        color: var(--success);
+    }
+
+    .change-badge.negative {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--danger);
+    }
+
+    .change-badge img {
+        width: 14px;
+        height: 14px;
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+    }
+
+    .summary-item {
+        text-align: center;
+        padding: 1rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+    }
+
+    .summary-item img {
+        width: 32px;
+        height: 32px;
+        margin-bottom: 0.5rem;
+    }
+
+    .summary-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .summary-value.positive { color: var(--success); }
+    .summary-value.negative { color: var(--danger); }
+
+    .summary-label {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-top: 0.3rem;
+    }
+
+    .th-icon {
+        width: 16px;
+        height: 16px;
+        vertical-align: middle;
+        margin-right: 0.3rem;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 300px;
+        }
+        .grid-2 {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<script>
+    let chart = null;
+    // Загружаем сохранённые настройки из localStorage
+    let activeResources = JSON.parse(localStorage.getItem('statsActiveResources')) || ['золото', 'серебро'];
+    const savedFilters = JSON.parse(localStorage.getItem('statsFilters')) || {};
+    let chartData = null;
+
+    // Функция восстановления состояния UI
+    function restoreUIState() {
+        // Восстанавливаем фильтры
+        const profileSelect = document.getElementById('profileSelect');
+        const periodSelect = document.getElementById('periodSelect');
+        const modeSelect = document.getElementById('modeSelect');
+
+        if (savedFilters.profile && profileSelect) {
+            // Проверяем что такой option существует
+            const option = profileSelect.querySelector(`option[value="${savedFilters.profile}"]`);
+            if (option) {
+                profileSelect.value = savedFilters.profile;
+            }
+        }
+
+        if (savedFilters.period && periodSelect) {
+            periodSelect.value = savedFilters.period;
+        } else if (periodSelect) {
+            periodSelect.value = 'week'; // дефолт
+        }
+
+        if (savedFilters.mode && modeSelect) {
+            modeSelect.value = savedFilters.mode;
+        } else if (modeSelect) {
+            modeSelect.value = 'sessions'; // дефолт
+        }
+
+        // Восстанавливаем toggles ресурсов
+        document.querySelectorAll('.resource-toggle').forEach(toggle => {
+            const resource = toggle.dataset.resource;
+            if (activeResources.includes(resource)) {
+                toggle.classList.add('active');
+            } else {
+                toggle.classList.remove('active');
+            }
+        });
+    }
+
+    // Восстанавливаем состояние при загрузке DOM
+    document.addEventListener('DOMContentLoaded', () => {
+        restoreUIState();
+        // Загружаем данные ПОСЛЕ восстановления UI
+        loadStats();
+    });
+
+    function saveFiltersAndLoad() {
+        const filters = {
+            profile: document.getElementById('profileSelect').value,
+            period: document.getElementById('periodSelect').value,
+            mode: document.getElementById('modeSelect').value
+        };
+        localStorage.setItem('statsFilters', JSON.stringify(filters));
+        loadStats();
+    }
+
+    const resourceColors = {
+        'золото': { line: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' },
+        'серебро': { line: '#94a3b8', bg: 'rgba(148, 163, 184, 0.1)' },
+        'черепа': { line: '#a78bfa', bg: 'rgba(167, 139, 250, 0.1)' },
+        'минералы': { line: '#34d399', bg: 'rgba(52, 211, 153, 0.1)' },
+        'сапфиры': { line: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
+        'рубины': { line: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' }
+    };
+
+    const resourceIcons = {
+        'золото': 'money_gold.png',
+        'серебро': 'money_silver.png',
+        'черепа': 'skull.png',
+        'минералы': 'mineral.png',
+        'сапфиры': 'sapphire.png',
+        'рубины': 'ruby.png'
+    };
+
+    // Toggle resource visibility
+    document.querySelectorAll('.resource-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            const resource = toggle.dataset.resource;
+            toggle.classList.toggle('active');
+
+            if (toggle.classList.contains('active')) {
+                if (!activeResources.includes(resource)) {
+                    activeResources.push(resource);
+                }
+            } else {
+                activeResources = activeResources.filter(r => r !== resource);
+            }
+
+            // Сохраняем в localStorage
+            localStorage.setItem('statsActiveResources', JSON.stringify(activeResources));
+
+            updateChart();
+        });
+    });
+
+    async function loadStats() {
+        const profile = document.getElementById('profileSelect').value;
+        const period = document.getElementById('periodSelect').value;
+        const mode = document.getElementById('modeSelect').value;
+
+        try {
+            // Load chart data
+            const chartResp = await apiCall(`/api/stats/chart/${profile}?period=${period}&mode=${mode}`);
+            if (chartResp.success) {
+                chartData = chartResp.data;
+                chartData.mode = mode;  // сохраняем режим для форматирования
+                updateChart();
+            }
+
+            // Load sessions
+            const sessionsResp = await apiCall(`/api/stats/sessions/${profile}`);
+            if (sessionsResp.success) {
+                renderSessions(sessionsResp.sessions);
+            }
+
+            // Load offline changes
+            const offlineResp = await apiCall(`/api/stats/offline/${profile}`);
+            if (offlineResp.success) {
+                renderOffline(offlineResp.changes);
+            }
+
+            // Load summary
+            const summaryResp = await apiCall(`/api/stats/summary/${profile}?period=${period}`);
+            if (summaryResp.success) {
+                renderSummary(summaryResp.summary);
+            }
+
+        } catch (e) {
+            console.error('Error loading stats:', e);
+        }
+    }
+
+    function updateChart() {
+        const chartContainer = document.querySelector('.chart-container');
+        const noDataMsg = document.getElementById('noDataMessage');
+
+        if (!chartData || !chartData.timestamps || chartData.timestamps.length === 0) {
+            chartContainer.style.display = 'none';
+            noDataMsg.style.display = 'block';
+            if (chart) {
+                chart.destroy();
+                chart = null;
+            }
+            return;
+        }
+
+        chartContainer.style.display = 'block';
+        noDataMsg.style.display = 'none';
+
+        const datasets = [];
+        for (const resource of activeResources) {
+            if (chartData.resources[resource]) {
+                datasets.push({
+                    label: resource.charAt(0).toUpperCase() + resource.slice(1),
+                    data: chartData.resources[resource],
+                    borderColor: resourceColors[resource].line,
+                    backgroundColor: resourceColors[resource].bg,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    pointHoverRadius: 5
+                });
+            }
+        }
+
+        const ctx = document.getElementById('resourceChart').getContext('2d');
+
+        if (chart) {
+            chart.destroy();
+        }
+
+        // Конвертируем timestamps в формат для отображения
+        const isDaysMode = chartData.mode === 'days';
+        const labels = chartData.timestamps.map(ts => {
+            const d = new Date(ts);
+            if (isDaysMode) {
+                // Для режима "по дням" показываем только дату
+                return d.toLocaleString('ru-RU', {day: '2-digit', month: '2-digit'});
+            } else {
+                // Для режима "по сессиям" показываем дату и время
+                return d.toLocaleString('ru-RU', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+            }
+        });
+
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: '#e2e8f0'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: function(context) {
+                                const idx = context[0].dataIndex;
+                                const ts = chartData.timestamps[idx];
+                                return new Date(ts).toLocaleString('ru-RU');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: '#94a3b8',
+                            maxRotation: 45,
+                            minRotation: 45,
+                            maxTicksLimit: 12
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#94a3b8'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderSessions(sessions) {
+        const container = document.getElementById('sessionsList');
+
+        if (!sessions || sessions.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center" style="padding: 2rem;">Нет данных о сессиях.<br>Данные появятся после запуска ботов.</div>';
+            return;
+        }
+
+        container.innerHTML = sessions.map(s => {
+            const startDate = new Date(s.start_time);
+            const endDate = s.end_time ? new Date(s.end_time) : null;
+            const duration = s.duration_hours ? `${s.duration_hours.toFixed(1)} ч` : 'В процессе';
+
+            let changesHtml = '';
+            if (s.earned && Object.keys(s.earned).length > 0) {
+                changesHtml = '<div class="session-changes">';
+                for (const [resource, value] of Object.entries(s.earned)) {
+                    if (value !== 0) {
+                        const cls = value > 0 ? 'positive' : 'negative';
+                        const icon = resourceIcons[resource] || 'money_gold.png';
+                        changesHtml += `
+                            <span class="change-badge ${cls}">
+                                <img src="/static/icons/${icon}">
+                                ${value > 0 ? '+' : ''}${value.toLocaleString()}
+                            </span>
+                        `;
+                    }
+                }
+                changesHtml += '</div>';
+            }
+
+            return `
+                <div class="session-item">
+                    <div class="session-time">
+                        <span class="session-profile">${s.profile || 'unknown'}</span> •
+                        ${startDate.toLocaleString('ru-RU')}
+                    </div>
+                    <div class="session-duration">Длительность: ${duration}</div>
+                    ${changesHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderOffline(changes) {
+        const container = document.getElementById('offlineList');
+
+        if (!changes || changes.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center" style="padding: 2rem;">Нет изменений вне бота.<br>Здесь будут показаны изменения ресурсов, произошедшие когда бот был выключен.</div>';
+            return;
+        }
+
+        container.innerHTML = changes.map(c => {
+            const date = new Date(c.detected_at);
+
+            let changesHtml = '<div class="offline-changes">';
+            for (const [resource, value] of Object.entries(c.changes)) {
+                if (value !== 0) {
+                    const cls = value > 0 ? 'positive' : 'negative';
+                    const icon = resourceIcons[resource] || 'money_gold.png';
+                    changesHtml += `
+                        <span class="change-badge ${cls}">
+                            <img src="/static/icons/${icon}">
+                            ${value > 0 ? '+' : ''}${value.toLocaleString()}
+                        </span>
+                    `;
+                }
+            }
+            changesHtml += '</div>';
+
+            return `
+                <div class="offline-item">
+                    <div class="session-time">
+                        <span class="session-profile">${c.profile || 'unknown'}</span> •
+                        ${date.toLocaleString('ru-RU')}
+                    </div>
+                    ${changesHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderSummary(summary) {
+        const container = document.getElementById('summaryStats');
+
+        if (!summary) {
+            container.innerHTML = '<div class="text-muted text-center">Нет данных за период</div>';
+            return;
+        }
+
+        const resources = ['золото', 'серебро', 'черепа', 'минералы', 'сапфиры', 'рубины'];
+
+        container.innerHTML = resources.map(resource => {
+            const value = summary[resource] || 0;
+            const cls = value > 0 ? 'positive' : value < 0 ? 'negative' : '';
+            const icon = resourceIcons[resource];
+            const displayValue = value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString();
+
+            return `
+                <div class="summary-item">
+                    <img src="/static/icons/${icon}">
+                    <div class="summary-value ${cls}">${displayValue}</div>
+                    <div class="summary-label">${resource}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Загрузка происходит в DOMContentLoaded после восстановления UI
+</script>
+{% endblock %}

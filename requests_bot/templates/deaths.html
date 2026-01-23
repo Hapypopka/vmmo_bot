@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Смерти {{ name }} - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <h1 class="page-title">Смерти и сложность: {{ name }}</h1>
+    <div class="btn-group">
+        <button class="btn btn-warning" onclick="resetSkips('{{ profile }}')">Сбросить скипы</button>
+        <button class="btn btn-danger" onclick="resetDeaths('{{ profile }}')">Сбросить всё</button>
+        <a href="/config/{{ profile }}" class="btn btn-primary">Настройки</a>
+        <a href="/" class="btn" style="background: #333;">Назад</a>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <!-- Статистика смертей -->
+    <div class="card">
+        <h3 class="card-title">Статистика смертей</h3>
+
+        {% if deaths %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Данжен</th>
+                    <th class="text-right">Смертей</th>
+                    <th>Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dng_id, dng_deaths in deaths.items() %}
+                <tr>
+                    <td>{{ dng_deaths.name if dng_deaths is mapping and dng_deaths.name else all_dungeons.get(dng_id, dng_id) }}</td>
+                    <td class="text-right text-danger">{{ dng_deaths.deaths|length if dng_deaths is mapping and dng_deaths.deaths else (dng_deaths.count if dng_deaths is mapping else dng_deaths) }}</td>
+                    <td>
+                        {% if dng_deaths is mapping and dng_deaths.skipped %}
+                        <span class="badge badge-danger">СКИП</span>
+                        {% elif dng_deaths is mapping and dng_deaths.current_difficulty %}
+                        <span class="badge badge-warning">{{ dng_deaths.current_difficulty }}</span>
+                        {% else %}
+                        <span class="badge badge-success">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted">Нет данных о смертях</p>
+        {% endif %}
+    </div>
+
+    <!-- Сложность данжей -->
+    <div class="card">
+        <h3 class="card-title">Сложность данжей</h3>
+        <p class="text-muted mb-1">Выберите сложность для каждого данжа. Пусто = авто.</p>
+
+        {% set dungeon_difficulties = config.get('dungeon_difficulties', {}) %}
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Данжен</th>
+                    <th>Сложность</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dng_id, dng_name in all_dungeons.items() %}
+                <tr>
+                    <td>{{ dng_name }}</td>
+                    <td>
+                        <select class="form-input" style="width: auto; padding: 0.5rem;"
+                                onchange="setDifficulty('{{ profile }}', '{{ dng_id }}', this.value)">
+                            <option value="">Авто</option>
+                            {% for diff_key, diff_name in difficulties.items() %}
+                            <option value="{{ diff_key }}"
+                                {{ 'selected' if dungeon_difficulties.get(dng_id) == diff_key }}>
+                                {{ diff_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Лимиты действий в данжах -->
+<div class="card mt-2">
+    <h3 class="card-title">Лимиты действий в данжах</h3>
+    <p class="text-muted mb-1">Максимум действий в данже перед выходом (защита от зависания)</p>
+
+    {% set action_limits = config.get('dungeon_action_limits', {'default': 500}) %}
+
+    <div class="grid grid-3">
+        <div class="form-group">
+            <label class="form-label">По умолчанию</label>
+            <input type="number" class="form-input" id="limit_default"
+                   value="{{ action_limits.get('default', 500) }}"
+                   onchange="saveActionLimit('{{ profile }}', 'default', this.value)">
+        </div>
+
+        {% for dng_id, dng_name in all_dungeons.items() %}
+        {% if dng_id in action_limits %}
+        <div class="form-group">
+            <label class="form-label">{{ dng_name }}</label>
+            <input type="number" class="form-input" id="limit_{{ dng_id }}"
+                   value="{{ action_limits.get(dng_id, '') }}"
+                   onchange="saveActionLimit('{{ profile }}', '{{ dng_id }}', this.value)">
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function resetSkips(profile) {
+        if (!confirm('Сбросить скипы данжей? (история смертей сохранится)')) return;
+        await apiCall(`/api/deaths/${profile}/reset_skips`, 'POST');
+        location.reload();
+    }
+
+    async function resetDeaths(profile) {
+        if (!confirm('Сбросить ВСЮ статистику смертей?')) return;
+        await apiCall(`/api/deaths/${profile}/reset`, 'POST');
+        location.reload();
+    }
+
+    async function setDifficulty(profile, dungeon, difficulty) {
+        await apiCall(`/api/deaths/${profile}/set_difficulty`, 'POST', {
+            dungeon: dungeon,
+            difficulty: difficulty
+        });
+    }
+
+    async function saveActionLimit(profile, dungeon, value) {
+        const config = await apiCall(`/api/config/${profile}`);
+        if (!config.dungeon_action_limits) config.dungeon_action_limits = {};
+
+        if (value && parseInt(value) > 0) {
+            config.dungeon_action_limits[dungeon] = parseInt(value);
+        } else if (dungeon !== 'default') {
+            delete config.dungeon_action_limits[dungeon];
+        }
+
+        await apiCall(`/api/config/${profile}`, 'POST', config);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Профили - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <h1 class="page-title">Управление профилями</h1>
+    <button class="btn btn-success" onclick="showCreateModal()">+ Добавить профиль</button>
+</div>
+
+<!-- Список профилей -->
+<div class="grid grid-3">
+    {% for p in profiles %}
+    <div class="card">
+        <div class="flex flex-between flex-center mb-1">
+            <h3>{{ p.name }}</h3>
+            <span class="status status-{{ p.status }}">
+                <span class="status-dot"></span>
+                {{ 'Работает' if p.status == 'running' else 'Остановлен' }}
+            </span>
+        </div>
+
+        <p class="text-muted mb-1">
+            Профиль: <strong>{{ p.profile }}</strong><br>
+            Логин: <strong>{{ p.username }}</strong>
+        </p>
+
+        <div class="flex gap-1">
+            <a href="/config/{{ p.profile }}" class="btn btn-primary btn-sm">Настройки</a>
+            <a href="/deaths/{{ p.profile }}" class="btn btn-purple btn-sm">Смерти</a>
+            <a href="/logs/{{ p.profile }}" class="btn btn-dark btn-sm">Логи</a>
+            <button class="btn btn-danger btn-sm" onclick="deleteProfile('{{ p.profile }}', '{{ p.name }}')">Удалить</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Модальное окно создания профиля -->
+<div id="createModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="width: 400px; max-width: 90%;">
+        <h3 class="card-title">Новый профиль</h3>
+
+        <div class="form-group">
+            <label class="form-label">Логин игры</label>
+            <input type="text" class="form-input" id="new_username" placeholder="Введите логин">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Пароль игры</label>
+            <input type="text" class="form-input" id="new_password" placeholder="Введите пароль">
+        </div>
+
+        <div class="flex gap-1">
+            <button class="btn btn-success" onclick="createProfile()">Создать</button>
+            <button class="btn btn-dark" onclick="hideCreateModal()">Отмена</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showCreateModal() {
+        document.getElementById('createModal').style.display = 'flex';
+        document.getElementById('new_username').focus();
+    }
+
+    function hideCreateModal() {
+        document.getElementById('createModal').style.display = 'none';
+        document.getElementById('new_username').value = '';
+        document.getElementById('new_password').value = '';
+    }
+
+    async function createProfile() {
+        const username = document.getElementById('new_username').value.trim();
+        const password = document.getElementById('new_password').value.trim();
+
+        if (!username || !password) {
+            alert('Введите логин и пароль');
+            return;
+        }
+
+        const result = await apiCall('/api/profiles/create', 'POST', {
+            username: username,
+            password: password
+        });
+
+        if (result.success) {
+            alert(`Профиль ${result.profile} создан!`);
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    }
+
+    async function deleteProfile(profile, name) {
+        if (!confirm(`Удалить профиль ${name}?\n\nВСЕ ДАННЫЕ БУДУТ УДАЛЕНЫ!`)) return;
+        if (!confirm(`Вы уверены? Это действие нельзя отменить!`)) return;
+
+        const result = await apiCall(`/api/profiles/${profile}/delete`, 'POST');
+
+        if (result.success) {
+            alert('Профиль удалён');
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    }
+
+    // Закрытие модалки по Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideCreateModal();
+    });
+
+    // Закрытие модалки по клику вне
+    document.getElementById('createModal').addEventListener('click', (e) => {
+        if (e.target.id === 'createModal') hideCreateModal();
+    });
+</script>
+{% endblock %}

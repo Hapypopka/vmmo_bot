@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+
+{% block title %}VMMO Bot - Обзор{% endblock %}
+
+{% block content %}
+{% macro render_bot_card(bot) %}
+<div class="card bot-card">
+    <div class="bot-card-header">
+        <div>
+            <span class="bot-name">{{ bot.name }}</span>
+            {% if bot.is_main %}
+            <span class="badge-main">MAIN</span>
+            {% endif %}
+        </div>
+        <span class="status status-{{ bot.status }}">
+            <span class="status-dot"></span>
+            {{ 'РАБОТАЕТ' if bot.status == 'running' else 'СТОП' }}
+        </span>
+    </div>
+
+    {% if bot.activity and bot.activity.activity %}
+    <div class="bot-activity">
+        {{ bot.activity.activity }}
+    </div>
+    {% endif %}
+
+    {% if bot.craft and bot.craft.active %}
+    <div class="bot-craft">
+        <span class="craft-toggle" onclick="toggleCraftChain(event, '{{ bot.profile }}')" style="cursor: pointer;">
+            {{ bot.craft.active }}
+            {% if bot.craft.chain %}
+            <span class="craft-arrow" id="craftArrow-{{ bot.profile }}">▼</span>
+            {% endif %}
+        </span>
+        {% if bot.craft.chain %}
+        <div class="craft-chain" id="craftChain-{{ bot.profile }}" style="display: none; margin-top: 0.5rem; padding-left: 0.75rem; font-size: 0.85rem; border-left: 2px solid #444;">
+            {% for item in bot.craft.chain %}
+            <div style="margin-top: 0.25rem;">
+                <span class="text-muted">•</span> {{ item.name }}:
+                <span class="{{ 'text-success' if item.have >= item.amount else 'text-danger' }}">{{ item.have }}</span>/<span class="text-gold">{{ item.amount }}</span>
+                {% if item.children %}
+                <div style="padding-left: 0.75rem; border-left: 1px solid #555;">
+                    {% for child in item.children %}
+                    <div style="margin-top: 0.15rem;">
+                        <span class="text-muted">•</span> {{ child.name }}:
+                        <span class="{{ 'text-success' if child.have >= child.amount else 'text-danger' }}">{{ child.have }}</span>/<span class="text-gold">{{ child.amount }}</span>
+                        {% if child.children %}
+                        <div style="padding-left: 0.75rem; border-left: 1px solid #666;">
+                            {% for grandchild in child.children %}
+                            <div style="margin-top: 0.15rem;">
+                                <span class="text-muted">•</span> {{ grandchild.name }}:
+                                <span class="{{ 'text-success' if grandchild.have >= grandchild.amount else 'text-danger' }}">{{ grandchild.have }}</span>/<span class="text-gold">{{ grandchild.amount }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="bot-resources">
+        <div class="resource-box">
+            <img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="res-icon">
+            <span class="text-gold">{{ bot.resources.get('золото', 0) }}</span>
+            {% if bot.earned.get('золото', 0) != 0 %}
+            <span class="resource-change {{ 'positive' if bot.earned.get('золото', 0) > 0 else 'negative' }}">
+                {{ '%+d' % bot.earned.get('золото', 0) }}
+            </span>
+            {% endif %}
+        </div>
+        <div class="resource-box">
+            <img src="{{ url_for('static', filename='icons/money_silver.png') }}" class="res-icon">
+            <span>{{ bot.resources.get('серебро', 0) }}</span>
+        </div>
+        <div class="resource-box">
+            <img src="{{ url_for('static', filename='icons/skull.png') }}" class="res-icon">
+            <span>{{ bot.resources.get('черепа', 0) }}</span>
+        </div>
+        <div class="resource-box">
+            <img src="{{ url_for('static', filename='icons/mineral.png') }}" class="res-icon">
+            <span>{{ bot.resources.get('минералы', 0) }}</span>
+            {% if bot.earned.get('минералы', 0) != 0 %}
+            <span class="resource-change {{ 'positive' if bot.earned.get('минералы', 0) > 0 else 'negative' }}">
+                {{ '%+d' % bot.earned.get('минералы', 0) }}
+            </span>
+            {% endif %}
+        </div>
+        <div class="resource-box">
+            <img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="res-icon">
+            <span>{{ bot.resources.get('сапфиры', 0) }}</span>
+            {% if bot.earned.get('сапфиры', 0) != 0 %}
+            <span class="resource-change {{ 'positive' if bot.earned.get('сапфиры', 0) > 0 else 'negative' }}">
+                {{ '%+d' % bot.earned.get('сапфиры', 0) }}
+            </span>
+            {% endif %}
+        </div>
+        <div class="resource-box">
+            <img src="{{ url_for('static', filename='icons/ruby.png') }}" class="res-icon">
+            <span>{{ bot.resources.get('рубины', 0) }}</span>
+            {% if bot.earned.get('рубины', 0) != 0 %}
+            <span class="resource-change {{ 'positive' if bot.earned.get('рубины', 0) > 0 else 'negative' }}">
+                {{ '%+d' % bot.earned.get('рубины', 0) }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if bot.hours > 0 %}
+    <div class="text-muted" style="font-size: 0.85rem; margin-top: 0.5rem;">
+        Работает: {{ '%.1f' % bot.hours }} ч
+    </div>
+    {% endif %}
+
+    <div class="bot-actions">
+        {% if bot.status == 'running' %}
+        <button class="btn btn-sm btn-danger" onclick="stopBot('{{ bot.profile }}')">Стоп</button>
+        <button class="btn btn-sm btn-warning" onclick="restartBot('{{ bot.profile }}')">Рестарт</button>
+        {% else %}
+        <button class="btn btn-sm btn-success" onclick="startBot('{{ bot.profile }}')">Старт</button>
+        {% endif %}
+        <a href="/config/{{ bot.profile }}" class="btn btn-sm btn-primary">Настройки</a>
+        <a href="/logs/{{ bot.profile }}" class="btn btn-sm btn-ghost">Логи</a>
+    </div>
+</div>
+{% endmacro %}
+
+<div class="flex flex-between flex-center mb-2 flex-wrap gap-1">
+    <h1 class="page-title" style="margin: 0;">Обзор ботов</h1>
+    <div class="btn-group">
+        <button class="btn btn-success" onclick="startAll()">Запустить всех</button>
+        <button class="btn btn-danger" onclick="stopAll()">Остановить всех</button>
+        <button class="btn btn-warning" onclick="resetAllSkips()">Сбросить скипы</button>
+        <button class="btn btn-purple" onclick="sellAllCrafts()">Продать крафты</button>
+    </div>
+</div>
+
+<!-- Мулы - Сворачиваемая секция -->
+{% if mules %}
+<div class="mules-section">
+    <h2 class="section-title">Мулы <span class="text-muted">({{ mules_summary.running_count }}/{{ mules_summary.total_count }} работают)</span></h2>
+
+    <!-- Сводка по мулам -->
+    <div class="card mules-summary" onclick="toggleMules()">
+        <div class="flex flex-between flex-center">
+            <div>
+                <strong>Все мулы <span id="mulesArrow">▲</span></strong>
+                <div class="text-muted" style="font-size: 0.85rem;">Нажмите чтобы раскрыть</div>
+            </div>
+            <span class="status status-running">
+                <span class="status-dot"></span>
+                {{ mules_summary.running_count }}/{{ mules_summary.total_count }}
+            </span>
+        </div>
+
+        <div class="mules-stats mt-1">
+            <div class="grid grid-3 gap-1">
+                <div class="resource-box">
+                    <img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="res-icon">
+                    <span class="text-gold">{{ mules_summary.resources.get('золото', 0) }}</span>
+                    {% if mules_summary.earned.get('золото', 0) != 0 %}
+                    <span class="resource-change {{ 'positive' if mules_summary.earned.get('золото', 0) > 0 else 'negative' }}">
+                        {{ '%+d' % mules_summary.earned.get('золото', 0) }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="resource-box">
+                    <img src="{{ url_for('static', filename='icons/money_silver.png') }}" class="res-icon">
+                    <span>{{ mules_summary.resources.get('серебро', 0) }}</span>
+                </div>
+                <div class="resource-box">
+                    <img src="{{ url_for('static', filename='icons/skull.png') }}" class="res-icon">
+                    <span>{{ mules_summary.resources.get('черепа', 0) }}</span>
+                    {% if mules_summary.earned.get('черепа', 0) != 0 %}
+                    <span class="resource-change {{ 'positive' if mules_summary.earned.get('черепа', 0) > 0 else 'negative' }}">
+                        {{ '%+d' % mules_summary.earned.get('черепа', 0) }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="resource-box">
+                    <img src="{{ url_for('static', filename='icons/mineral.png') }}" class="res-icon">
+                    <span>{{ mules_summary.resources.get('минералы', 0) }}</span>
+                    {% if mules_summary.earned.get('минералы', 0) != 0 %}
+                    <span class="resource-change {{ 'positive' if mules_summary.earned.get('минералы', 0) > 0 else 'negative' }}">
+                        {{ '%+d' % mules_summary.earned.get('минералы', 0) }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="resource-box">
+                    <img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="res-icon">
+                    <span>{{ mules_summary.resources.get('сапфиры', 0) }}</span>
+                    {% if mules_summary.earned.get('сапфиры', 0) != 0 %}
+                    <span class="resource-change {{ 'positive' if mules_summary.earned.get('сапфиры', 0) > 0 else 'negative' }}">
+                        {{ '%+d' % mules_summary.earned.get('сапфиры', 0) }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="resource-box">
+                    <img src="{{ url_for('static', filename='icons/ruby.png') }}" class="res-icon">
+                    <span>{{ mules_summary.resources.get('рубины', 0) }}</span>
+                    {% if mules_summary.earned.get('рубины', 0) != 0 %}
+                    <span class="resource-change {{ 'positive' if mules_summary.earned.get('рубины', 0) > 0 else 'negative' }}">
+                        {{ '%+d' % mules_summary.earned.get('рубины', 0) }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if mules_summary.total_hours > 0 and mules_summary.running_count > 0 %}
+            {% set avg_hours = mules_summary.total_hours / mules_summary.running_count %}
+            <div class="flex flex-between mt-1">
+                <span class="text-muted">~{{ '%.1f' % avg_hours }} ч</span>
+                {% if mules_summary.earned.get('золото', 0) and avg_hours > 0 %}
+                <span class="text-gold">{{ '%.1f' % (mules_summary.earned.get('золото', 0) / avg_hours) }} з/ч</span>
+                {% endif %}
+                {% if best_mule %}
+                <span><img src="{{ url_for('static', filename='icons/trophy.png') }}" class="res-icon-sm" onerror="this.style.display='none'"> {{ best_mule.name }} +{{ best_mule.earned.get('золото', 0) }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Карточки мулов -->
+    <div id="mulesGrid" class="grid grid-3 mt-1" style="display: none;">
+        {% for bot in mules %}
+        {{ render_bot_card(bot) }}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Мейны -->
+{% if mains %}
+<h2 class="section-title mt-2">Мейны</h2>
+<div class="grid grid-3">
+    {% for bot in mains %}
+    {{ render_bot_card(bot) }}
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Если нет разделения - показать всех -->
+{% if not mains and not mules %}
+<div class="grid grid-3">
+    {% for bot in stats %}
+    {{ render_bot_card(bot) }}
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Telegram бот -->
+<div class="tg-bot-section mt-2">
+    <div class="card">
+        <div class="flex flex-between flex-center">
+            <div>
+                <strong>Telegram бот</strong>
+                <span id="tgStatus" class="status status-stopped">
+                    <span class="status-dot"></span>
+                    <span id="tgStatusText">...</span>
+                </span>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-success" onclick="tgAction('start')">Старт</button>
+                <button class="btn btn-sm btn-danger" onclick="tgAction('stop')">Стоп</button>
+                <button class="btn btn-sm btn-warning" onclick="tgAction('restart')">Рестарт</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 0.75rem;
+    }
+
+    .mules-summary {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .mules-summary:hover {
+        border-color: var(--accent);
+    }
+
+    .res-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .res-icon-sm {
+        width: 14px;
+        height: 14px;
+        vertical-align: middle;
+    }
+
+    .resource-box {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.6rem;
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 8px;
+        font-size: 0.9rem;
+    }
+
+    .resource-box .resource-change {
+        margin-left: 0;
+    }
+
+    .badge-main {
+        display: inline-block;
+        padding: 0.15rem 0.4rem;
+        background: var(--warning);
+        color: #000;
+        font-size: 0.65rem;
+        font-weight: 700;
+        border-radius: 4px;
+        margin-left: 0.5rem;
+        vertical-align: middle;
+    }
+
+    .bot-activity {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--warning-bg);
+        border-left: 3px solid var(--warning);
+        border-radius: 0 8px 8px 0;
+        margin: 0.75rem 0;
+        color: var(--warning);
+    }
+
+    .bot-craft {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--accent-bg);
+        border-left: 3px solid var(--accent);
+        border-radius: 0 8px 8px 0;
+        margin: 0.75rem 0;
+        color: var(--accent-light);
+    }
+
+    .bot-resources {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin: 0.75rem 0;
+    }
+
+    .btn-purple {
+        background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+        color: white;
+        box-shadow: 0 2px 12px rgba(168, 85, 247, 0.4);
+    }
+
+    .btn-purple:hover {
+        box-shadow: 0 4px 20px rgba(168, 85, 247, 0.5);
+        transform: translateY(-1px);
+    }
+
+    @media (max-width: 768px) {
+        .bot-resources {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .tg-bot-section .card {
+        padding: 1rem 1.25rem;
+    }
+</style>
+
+<script>
+    // Восстанавливаем состояние дропдауна из localStorage
+    let mulesExpanded = localStorage.getItem('mulesExpanded') === 'true';
+
+    // Применяем сохранённое состояние при загрузке
+    document.addEventListener('DOMContentLoaded', function() {
+        const grid = document.getElementById('mulesGrid');
+        const arrow = document.getElementById('mulesArrow');
+        if (grid && arrow && mulesExpanded) {
+            grid.style.display = 'grid';
+            arrow.textContent = '▼';
+        }
+        // Проверяем статус TG бота
+        checkTgStatus();
+    });
+
+    function toggleMules() {
+        mulesExpanded = !mulesExpanded;
+        localStorage.setItem('mulesExpanded', mulesExpanded);
+
+        const grid = document.getElementById('mulesGrid');
+        const arrow = document.getElementById('mulesArrow');
+
+        if (mulesExpanded) {
+            grid.style.display = 'grid';
+            arrow.textContent = '▼';
+        } else {
+            grid.style.display = 'none';
+            arrow.textContent = '▲';
+        }
+    }
+
+    function toggleCraftChain(event, profile) {
+        event.stopPropagation();
+        const chain = document.getElementById('craftChain-' + profile);
+        const arrow = document.getElementById('craftArrow-' + profile);
+        if (!chain) return;
+
+        if (chain.style.display === 'none') {
+            chain.style.display = 'block';
+            if (arrow) arrow.textContent = '▲';
+        } else {
+            chain.style.display = 'none';
+            if (arrow) arrow.textContent = '▼';
+        }
+    }
+
+    async function resetAllSkips() {
+        if (!confirm('Сбросить все скипы данжей?')) return;
+        const result = await apiCall('/api/reset_skips', 'POST');
+        showToast(result.success ? 'Скипы сброшены!' : 'Ошибка', result.success ? 'success' : 'error');
+    }
+
+    async function sellAllCrafts() {
+        if (!confirm('Продать все крафты?')) return;
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = 'Продаю...';
+
+        try {
+            const result = await apiCall('/api/sell_crafts', 'POST');
+            showToast(result.success ? 'Крафты проданы!' : 'Ошибка', result.success ? 'success' : 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Продать крафты';
+        }
+    }
+
+    // TG бот
+    async function checkTgStatus() {
+        try {
+            const result = await apiCall('/api/telegram_bot/status');
+            const statusEl = document.getElementById('tgStatus');
+            const textEl = document.getElementById('tgStatusText');
+            if (result.running) {
+                statusEl.className = 'status status-running';
+                textEl.textContent = 'РАБОТАЕТ';
+            } else {
+                statusEl.className = 'status status-stopped';
+                textEl.textContent = 'СТОП';
+            }
+        } catch (e) {
+            console.error('TG status error:', e);
+        }
+    }
+
+    async function tgAction(action) {
+        const result = await apiCall(`/api/telegram_bot/${action}`, 'POST');
+        showToast(result.success ? `TG бот: ${action}` : 'Ошибка', result.success ? 'success' : 'error');
+        setTimeout(checkTgStatus, 2000);
+    }
+</script>
+{% endblock %}

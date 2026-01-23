@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Debug Center - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <h1 class="page-title">Debug Center</h1>
+    <a href="/" class="btn btn-dark">Назад</a>
+</div>
+
+<!-- Быстрые команды -->
+<div class="card mb-2">
+    <h3 class="card-title">Быстрые команды</h3>
+    <div class="debug-commands">
+        <button class="btn btn-primary" onclick="runCommand('status')">
+            Статус сервисов
+        </button>
+        <button class="btn btn-info" onclick="runCommand('errors')">
+            Поиск ошибок
+        </button>
+        <button class="btn btn-warning" onclick="runCommand('processes')">
+            Процессы
+        </button>
+        <button class="btn btn-dark" onclick="runCommand('locks')">
+            Lock файлы
+        </button>
+    </div>
+</div>
+
+<!-- Логи персонажа -->
+<div class="card mb-2">
+    <h3 class="card-title">Логи персонажа</h3>
+    <div class="flex gap-1">
+        <select id="logProfile" class="form-input" style="flex: 1;">
+            {% for profile, name in profiles.items() %}
+            <option value="{{ profile }}">{{ name }} ({{ profile }})</option>
+            {% endfor %}
+        </select>
+        <select id="logLines" class="form-input" style="width: 100px;">
+            <option value="50">50 строк</option>
+            <option value="100" selected>100 строк</option>
+            <option value="200">200 строк</option>
+            <option value="500">500 строк</option>
+        </select>
+        <button class="btn btn-success" onclick="getLogs()">Показать</button>
+        <button class="btn btn-danger" onclick="getErrors()">Ошибки</button>
+    </div>
+</div>
+
+<!-- Диагностика проблемы -->
+<div class="card mb-2">
+    <h3 class="card-title">Диагностика проблемы</h3>
+    <p class="text-muted mb-1">Опишите проблему - система найдёт причину в логах и коде</p>
+    <div class="flex gap-1">
+        <select id="debugProfile" class="form-input" style="width: 150px;">
+            <option value="">Все боты</option>
+            {% for profile, name in profiles.items() %}
+            <option value="{{ profile }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" id="debugProblem" class="form-input" style="flex: 1;"
+               placeholder="Например: не собирает лут, застревает в данже, крафт не работает...">
+        <button class="btn btn-primary" onclick="runDiagnostics()" id="diagBtn">Диагностика</button>
+    </div>
+    <div class="mt-1">
+        <small class="text-muted">Частые проблемы:</small>
+        <div class="debug-suggestions">
+            <span class="suggestion" onclick="setDebugProblem('бот застрял')">застрял</span>
+            <span class="suggestion" onclick="setDebugProblem('не собирает лут')">лут</span>
+            <span class="suggestion" onclick="setDebugProblem('крафт не работает')">крафт</span>
+            <span class="suggestion" onclick="setDebugProblem('умирает в данже')">смерти</span>
+            <span class="suggestion" onclick="setDebugProblem('сессия истекла')">сессия</span>
+            <span class="suggestion" onclick="setDebugProblem('ошибки подключения')">connection</span>
+        </div>
+    </div>
+</div>
+
+<!-- Свой вопрос к Claude -->
+<div class="card mb-2">
+    <h3 class="card-title">Вопрос к Claude</h3>
+    <div class="form-group">
+        <textarea class="form-input" id="question" rows="2"
+                  placeholder="Любой вопрос о ботах, коде или игре..."></textarea>
+    </div>
+    <button class="btn btn-success" onclick="askQuestion()" id="askBtn">Спросить</button>
+</div>
+
+<!-- Результат -->
+<div id="result" class="card mb-2" style="display: none;">
+    <div class="flex flex-between flex-center">
+        <h3 class="card-title" id="resultTitle">Результат</h3>
+        <div>
+            <button class="btn btn-sm btn-dark" onclick="copyResult()">Копировать</button>
+            <button class="btn btn-sm btn-danger" onclick="clearResult()">Очистить</button>
+        </div>
+    </div>
+    <div id="resultOutput" class="log-viewer"></div>
+</div>
+
+<!-- Загрузка -->
+<div id="loading" class="card" style="display: none;">
+    <div class="text-center">
+        <div class="spinner"></div>
+        <p class="text-muted mt-1" id="loadingText">Загрузка...</p>
+    </div>
+</div>
+
+<!-- Ошибка -->
+<div id="error" class="alert alert-danger mt-2" style="display: none;"></div>
+
+<style>
+.debug-commands {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.debug-suggestions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+.suggestion {
+    background: var(--bg-tertiary);
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+}
+.suggestion:hover {
+    background: var(--primary);
+    color: white;
+}
+.gap-1 {
+    gap: 0.5rem;
+}
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--bg-tertiary);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.log-viewer {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 500px;
+    overflow-y: auto;
+}
+.log-viewer .error { color: #ff6b6b; }
+.log-viewer .warning { color: #ffd43b; }
+.log-viewer .success { color: #51cf66; }
+.log-viewer .info { color: #74c0fc; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showLoading(text) {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('loadingText').textContent = text || 'Загрузка...';
+        document.getElementById('error').style.display = 'none';
+    }
+
+    function hideLoading() {
+        document.getElementById('loading').style.display = 'none';
+    }
+
+    function showResult(title, content) {
+        document.getElementById('resultTitle').textContent = title;
+        document.getElementById('resultOutput').innerHTML = formatOutput(content);
+        document.getElementById('result').style.display = 'block';
+        hideLoading();
+    }
+
+    function showError(msg) {
+        document.getElementById('error').textContent = msg;
+        document.getElementById('error').style.display = 'block';
+        hideLoading();
+    }
+
+    function clearResult() {
+        document.getElementById('result').style.display = 'none';
+    }
+
+    function copyResult() {
+        const text = document.getElementById('resultOutput').innerText;
+        navigator.clipboard.writeText(text);
+        alert('Скопировано!');
+    }
+
+    function formatOutput(text) {
+        // Подсветка ключевых слов
+        return text
+            .replace(/\[ERROR\]|ERROR|Exception|Traceback|failed|FAILED/gi, '<span class="error">$&</span>')
+            .replace(/\[WARNING\]|WARNING|warn/gi, '<span class="warning">$&</span>')
+            .replace(/\[INFO\]|SUCCESS|completed|done|OK/gi, '<span class="info">$&</span>')
+            .replace(/🟢|✅|running/gi, '<span class="success">$&</span>')
+            .replace(/🔴|❌|stopped/gi, '<span class="error">$&</span>')
+            .replace(/🟡/g, '<span class="warning">$&</span>');
+    }
+
+    function setDebugProblem(text) {
+        document.getElementById('debugProblem').value = text;
+    }
+
+    // Быстрые команды
+    async function runCommand(cmd) {
+        showLoading('Выполняю команду...');
+        try {
+            const response = await fetch('/api/debug/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: cmd })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showResult(data.title || 'Результат', data.output);
+            } else {
+                showError(data.error);
+            }
+        } catch (e) {
+            showError('Ошибка: ' + e.message);
+        }
+    }
+
+    // Логи персонажа
+    async function getLogs() {
+        const profile = document.getElementById('logProfile').value;
+        const lines = document.getElementById('logLines').value;
+        showLoading('Получаю логи...');
+        try {
+            const response = await fetch(`/api/debug/logs/${profile}?lines=${lines}`);
+            const data = await response.json();
+            if (data.success) {
+                showResult(`Логи ${data.name}`, data.logs);
+            } else {
+                showError(data.error);
+            }
+        } catch (e) {
+            showError('Ошибка: ' + e.message);
+        }
+    }
+
+    // Ошибки персонажа
+    async function getErrors() {
+        const profile = document.getElementById('logProfile').value;
+        showLoading('Ищу ошибки...');
+        try {
+            const response = await fetch(`/api/debug/errors/${profile}`);
+            const data = await response.json();
+            if (data.success) {
+                const output = data.errors.length > 0
+                    ? data.errors.join('\n')
+                    : 'Ошибок не найдено!';
+                showResult(`Ошибки ${data.name}`, output);
+            } else {
+                showError(data.error);
+            }
+        } catch (e) {
+            showError('Ошибка: ' + e.message);
+        }
+    }
+
+    // Диагностика проблемы
+    async function runDiagnostics() {
+        const profile = document.getElementById('debugProfile').value;
+        const problem = document.getElementById('debugProblem').value.trim();
+
+        if (!problem) {
+            alert('Опишите проблему');
+            return;
+        }
+
+        const btn = document.getElementById('diagBtn');
+        btn.disabled = true;
+        showLoading('Claude анализирует проблему... (до 2 мин)');
+
+        try {
+            const response = await fetch('/api/debug/diagnose', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile, problem })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showResult('Диагностика', data.response);
+            } else {
+                showError(data.error);
+            }
+        } catch (e) {
+            showError('Ошибка: ' + e.message);
+        }
+        btn.disabled = false;
+    }
+
+    // Вопрос к Claude
+    async function askQuestion() {
+        const question = document.getElementById('question').value.trim();
+        if (!question) {
+            alert('Введите вопрос');
+            return;
+        }
+
+        const btn = document.getElementById('askBtn');
+        btn.disabled = true;
+        showLoading('Claude думает... (до 2 мин)');
+
+        try {
+            const response = await fetch('/api/ai/ask', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showResult('Ответ Claude', data.response);
+            } else {
+                showError(data.error);
+            }
+        } catch (e) {
+            showError('Ошибка: ' + e.message);
+        }
+        btn.disabled = false;
+    }
+
+    // Enter для отправки
+    document.getElementById('debugProblem').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') runDiagnostics();
+    });
+    document.getElementById('question').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            askQuestion();
+        }
+    });
+</script>
+{% endblock %}

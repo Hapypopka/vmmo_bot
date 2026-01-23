@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Инвентарь - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="flex flex-between flex-center mb-2">
+    <h1 class="page-title">Инвентарь крафта</h1>
+    <div class="btn-group">
+        <button class="btn btn-primary" onclick="checkInventory()" id="checkBtn">Проверить инвентарь</button>
+        <a href="/" class="btn btn-dark">Назад</a>
+    </div>
+</div>
+
+<div class="card">
+    <div id="inventoryStatus" class="text-muted">
+        Нажмите "Проверить инвентарь" для загрузки данных.<br>
+        <small>Проверка занимает 30-60 секунд (нужно залогиниться на каждого персонажа)</small>
+    </div>
+
+    <div id="inventoryResult" style="display: none;">
+        <pre class="log-viewer" id="inventoryOutput"></pre>
+    </div>
+
+    <div id="inventoryError" class="alert alert-danger" style="display: none;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function checkInventory() {
+        const btn = document.getElementById('checkBtn');
+        const status = document.getElementById('inventoryStatus');
+        const result = document.getElementById('inventoryResult');
+        const output = document.getElementById('inventoryOutput');
+        const error = document.getElementById('inventoryError');
+
+        btn.disabled = true;
+        btn.textContent = 'Загрузка...';
+        status.innerHTML = 'Проверяю инвентарь всех персонажей...<br><small>Это займёт 30-60 секунд</small>';
+        result.style.display = 'none';
+        error.style.display = 'none';
+
+        try {
+            const response = await fetch('/api/inventory');
+            const data = await response.json();
+
+            if (data.success) {
+                output.textContent = data.output;
+                result.style.display = 'block';
+                status.style.display = 'none';
+            } else {
+                error.textContent = 'Ошибка: ' + data.error;
+                error.style.display = 'block';
+                status.style.display = 'none';
+            }
+        } catch (e) {
+            error.textContent = 'Ошибка запроса: ' + e.message;
+            error.style.display = 'block';
+            status.style.display = 'none';
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Проверить инвентарь';
+    }
+</script>
+{% endblock %}

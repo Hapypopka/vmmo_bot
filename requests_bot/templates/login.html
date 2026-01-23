@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход - VMMO Bot Panel</title>
+    <!-- Telegram Web App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-main: #0f0f1a;
+            --bg-card: #1a1a2e;
+            --border: #2d2d4a;
+            --accent: #8b5cf6;
+            --accent-glow: rgba(139, 92, 246, 0.4);
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            background: var(--bg-main);
+            background-image:
+                radial-gradient(ellipse at top, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(34, 197, 94, 0.05) 0%, transparent 50%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .login-box {
+            background: linear-gradient(145deg, var(--bg-card) 0%, rgba(26, 26, 46, 0.8) 100%);
+            border: 1px solid var(--border);
+            padding: 3rem;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .login-logo {
+            text-align: center;
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .login-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--accent) 0%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 2.5rem;
+            font-size: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            background: var(--bg-main);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px var(--accent-glow);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--danger);
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .footer-text {
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: 2rem;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-logo">⚔️</div>
+        <h1 class="login-title">VMMO Bot</h1>
+        <p class="login-subtitle">Панель управления</p>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+            <div class="form-group">
+                <input type="password"
+                       name="password"
+                       class="form-input"
+                       placeholder="Введите пароль"
+                       autofocus
+                       required>
+            </div>
+            <button type="submit" class="btn-login">Войти</button>
+        </form>
+
+        <p class="footer-text">Bot Management System</p>
+    </div>
+
+    <script>
+        // Telegram Web App автологин
+        if (window.Telegram && window.Telegram.WebApp) {
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+
+            // Если есть initData - пробуем автологин
+            if (tg.initData) {
+                // Показываем что идёт авторизация
+                document.querySelector('.login-subtitle').textContent = 'Авторизация через Telegram...';
+                document.querySelector('.btn-login').disabled = true;
+                document.querySelector('.btn-login').textContent = 'Подождите...';
+
+                fetch('/api/telegram_auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ initData: tg.initData })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = '/';
+                    } else {
+                        // Если автологин не сработал - показываем форму
+                        document.querySelector('.login-subtitle').textContent = 'Введите пароль';
+                        document.querySelector('.btn-login').disabled = false;
+                        document.querySelector('.btn-login').textContent = 'Войти';
+                    }
+                })
+                .catch(() => {
+                    document.querySelector('.login-subtitle').textContent = 'Панель управления';
+                    document.querySelector('.btn-login').disabled = false;
+                    document.querySelector('.btn-login').textContent = 'Войти';
+                });
+            }
+        }
+    </script>
+</body>
+</html>

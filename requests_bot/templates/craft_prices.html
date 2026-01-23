@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+{% block title %}Цены крафта - VMMO Bot{% endblock %}
+
+{% block content %}
+<div class="page-header flex flex-between flex-center">
+    <div>
+        <h1 class="page-title">Цены крафта</h1>
+        <p class="page-subtitle" id="modeDescription">Полный расчёт профитности "с нуля" (минералы → готовый предмет)</p>
+    </div>
+    <div class="flex gap-1 flex-wrap">
+        <select id="profileSelect" class="form-select" style="width: 150px;">
+            {% for profile, name in profiles.items() %}
+            <option value="{{ profile }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary" onclick="loadPrices(true)">
+            <span id="loadBtn">🔄 Обновить</span>
+        </button>
+    </div>
+</div>
+
+<div id="cacheInfo" class="alert alert-info mb-2" style="display: none;">
+    <span class="alert-icon">💾</span>
+    <span>Данные из кэша (<span id="cacheTime"></span>). Нажмите "Обновить" для загрузки актуальных цен.</span>
+</div>
+
+<div id="loading" class="card" style="display: none;">
+    <div class="text-center" style="padding: 2rem;">
+        <div class="btn-loading" style="width: 40px; height: 40px; margin: 0 auto 1rem; border-width: 3px;"></div>
+        <p class="text-muted">Загрузка цен с аукциона...</p>
+        <p class="text-muted" style="font-size: 0.8rem;">Это может занять 1-2 минуты</p>
+    </div>
+</div>
+
+<div id="error" class="alert alert-danger" style="display: none;">
+    <span class="alert-icon">!</span>
+    <span id="errorText"></span>
+</div>
+
+<div id="results" style="display: none;">
+    <!-- Переключатель режима -->
+    <div class="card mb-2">
+        <div class="flex flex-between flex-center">
+            <div class="flex gap-1">
+                <button class="btn btn-sm mode-btn active" id="modeFromScratch" onclick="setMode('scratch')">
+                    🔨 С нуля
+                </button>
+                <button class="btn btn-sm btn-dark mode-btn" id="modeBuyComponents" onclick="setMode('buy')">
+                    🛒 С покупкой компонентов
+                </button>
+            </div>
+            <div class="text-muted" style="font-size: 0.8rem;">
+                <span id="modeHint">Крафтим всё сами из минералов</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Сводка профита -->
+    <div class="card mb-2">
+        <div class="card-title">
+            <span class="card-title-icon">💰</span>
+            <span id="tableTitle">Профитность крафта (с нуля)</span>
+        </div>
+        <p class="text-muted mb-2" style="font-size: 0.8rem;" id="tableSubtitle">
+            Отсортировано по профиту в час. Учитывается полное время крафта всех компонентов.
+        </p>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Рецепт</th>
+                        <th>Продажа</th>
+                        <th>Себест.</th>
+                        <th>Профит</th>
+                        <th>%</th>
+                        <th id="thResources">Ресурсы</th>
+                        <th>Время</th>
+                        <th>з/час</th>
+                    </tr>
+                </thead>
+                <tbody id="profitTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Цены материалов -->
+    <div class="card">
+        <div class="card-title">
+            <span class="card-title-icon">📦</span>
+            Цены базовых ресурсов (за 1 шт)
+        </div>
+        <div class="grid grid-3" id="pricesGrid"></div>
+    </div>
+</div>
+
+<style>
+    .alert-info {
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #93c5fd;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+    }
+    .profit-positive { color: var(--success); font-weight: 600; }
+    .profit-negative { color: var(--danger); font-weight: 600; }
+    .price-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 10px;
+    }
+    .price-name { font-weight: 500; }
+    .price-value { color: var(--gold); font-weight: 600; }
+    .time-badge {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    .resource-badge {
+        font-size: 0.75rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: var(--accent-bg);
+        color: var(--accent);
+    }
+    .profit-hour {
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+    .profit-hour.positive { color: var(--success); }
+    .profit-hour.negative { color: var(--danger); }
+    .mode-btn {
+        transition: all 0.2s;
+    }
+    .mode-btn.active {
+        background: var(--primary);
+        color: white;
+    }
+    .components-badge {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        display: block;
+        margin-top: 2px;
+    }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let isLoading = false;
+let currentMode = 'scratch';  // 'scratch' или 'buy'
+let cachedData = null;  // Кэшируем данные чтобы не перезагружать при смене режима
+
+// При загрузке страницы сначала пробуем взять из кэша
+document.addEventListener('DOMContentLoaded', () => {
+    loadFromCache();
+});
+
+async function loadFromCache() {
+    try {
+        const response = await fetch('/api/craft_prices/cached');
+        const data = await response.json();
+
+        if (data.success && data.cached) {
+            cachedData = data;
+            renderResults(data);
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('cacheInfo').style.display = 'flex';
+            document.getElementById('cacheTime').textContent = data.cached_at || 'неизвестно';
+        }
+    } catch (e) {
+        console.log('No cache available');
+    }
+}
+
+async function loadPrices(forceRefresh = false) {
+    if (isLoading) return;
+    isLoading = true;
+
+    const profile = document.getElementById('profileSelect').value;
+    const loadBtn = document.getElementById('loadBtn');
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const results = document.getElementById('results');
+    const cacheInfo = document.getElementById('cacheInfo');
+
+    loadBtn.innerHTML = '<span class="btn-loading"></span>';
+    loading.style.display = 'block';
+    error.style.display = 'none';
+    cacheInfo.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/craft_prices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            cachedData = data;
+            renderResults(data);
+            results.style.display = 'block';
+        } else {
+            document.getElementById('errorText').textContent = data.error;
+            error.style.display = 'flex';
+        }
+    } catch (e) {
+        document.getElementById('errorText').textContent = e.message;
+        error.style.display = 'flex';
+    } finally {
+        loadBtn.innerHTML = '🔄 Обновить';
+        loading.style.display = 'none';
+        isLoading = false;
+    }
+}
+
+function setMode(mode) {
+    currentMode = mode;
+
+    // Обновляем кнопки
+    document.getElementById('modeFromScratch').classList.toggle('active', mode === 'scratch');
+    document.getElementById('modeFromScratch').classList.toggle('btn-dark', mode !== 'scratch');
+    document.getElementById('modeBuyComponents').classList.toggle('active', mode === 'buy');
+    document.getElementById('modeBuyComponents').classList.toggle('btn-dark', mode !== 'buy');
+
+    // Обновляем подсказки
+    if (mode === 'scratch') {
+        document.getElementById('modeHint').textContent = 'Крафтим всё сами из минералов';
+        document.getElementById('tableTitle').textContent = 'Профитность крафта (с нуля)';
+        document.getElementById('tableSubtitle').textContent = 'Отсортировано по профиту в час. Учитывается полное время крафта всех компонентов.';
+        document.getElementById('thResources').textContent = 'Ресурсы';
+    } else {
+        document.getElementById('modeHint').textContent = 'Покупаем компоненты на аукционе';
+        document.getElementById('tableTitle').textContent = 'Профитность крафта (с покупкой)';
+        document.getElementById('tableSubtitle').textContent = 'Покупаем готовые компоненты, крафтим только последний шаг. Время = только финальный крафт.';
+        document.getElementById('thResources').textContent = 'Покупаем';
+    }
+
+    // Перерисовываем таблицу если есть данные
+    if (cachedData) {
+        renderResults(cachedData);
+    }
+}
+
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+        return `${hours}ч ${minutes}м`;
+    }
+    return `${minutes}м`;
+}
+
+function renderResults(data) {
+    // Таблица профита
+    const profitTable = document.getElementById('profitTable');
+    profitTable.innerHTML = '';
+
+    if (data.profits && data.profits.length > 0) {
+        // Исключаем рецепты которые не используются в автокрафте
+        const EXCLUDED_RECIPES = ['copperOre', 'twilightSteel', 'twilightAnthracite'];
+
+        // Сортируем по нужному профиту в час
+        let sorted = [...data.profits].filter(item => !EXCLUDED_RECIPES.includes(item.recipe_id));
+        if (currentMode === 'buy') {
+            sorted.sort((a, b) => (b.buy_profit_per_hour || 0) - (a.buy_profit_per_hour || 0));
+        } else {
+            sorted.sort((a, b) => b.profit_per_hour - a.profit_per_hour);
+        }
+
+        sorted.forEach(item => {
+            let cost, profit, profitPercent, time, profitPerHour, resourcesHtml;
+
+            if (currentMode === 'buy') {
+                cost = item.buy_cost || 0;
+                profit = item.buy_profit || 0;
+                profitPercent = item.buy_profit_percent || 0;
+                time = item.buy_time || 0;
+                profitPerHour = item.buy_profit_per_hour || 0;
+
+                // Покупаемые компоненты
+                let resources = [];
+                if (item.buy_components && item.buy_components !== 'нет') {
+                    resources.push(`🛒 ${item.buy_components}`);
+                }
+                if (item.buy_minerals > 0) resources.push(`💎${item.buy_minerals}`);
+                if (item.buy_sapphires > 0) resources.push(`💠${item.buy_sapphires}`);
+                if (item.buy_rubies > 0) resources.push(`🔴${item.buy_rubies}`);
+                if (item.buy_silver > 0) resources.push(`🪙${item.buy_silver}`);
+                resourcesHtml = resources.join(', ') || '-';
+            } else {
+                cost = item.full_cost;
+                profit = item.full_profit;
+                profitPercent = item.full_profit_percent;
+                time = item.full_time;
+                profitPerHour = item.profit_per_hour;
+
+                // Ресурсы с нуля
+                let resources = [];
+                if (item.full_minerals > 0) resources.push(`💎${item.full_minerals}`);
+                if (item.full_sapphires > 0) resources.push(`💠${item.full_sapphires}`);
+                if (item.full_rubies > 0) resources.push(`🔴${item.full_rubies}`);
+                if (item.full_silver > 0) resources.push(`🪙${item.full_silver}`);
+                resourcesHtml = resources.join(', ') || '-';
+            }
+
+            const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
+            const profitSign = profit >= 0 ? '+' : '';
+            const hourClass = profitPerHour >= 0 ? 'positive' : 'negative';
+            const hourSign = profitPerHour >= 0 ? '+' : '';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${item.name}</strong></td>
+                <td>${item.sell_price.toFixed(2)}з</td>
+                <td>${cost.toFixed(2)}з</td>
+                <td class="${profitClass}">${profitSign}${profit.toFixed(2)}з</td>
+                <td class="${profitClass}">${profitSign}${profitPercent.toFixed(0)}%</td>
+                <td><span class="resource-badge">${resourcesHtml}</span></td>
+                <td class="time-badge">${formatTime(time)}</td>
+                <td class="profit-hour ${hourClass}">${hourSign}${profitPerHour.toFixed(1)}</td>
+            `;
+            profitTable.appendChild(row);
+        });
+    }
+
+    // Сетка цен базовых ресурсов
+    const pricesGrid = document.getElementById('pricesGrid');
+    pricesGrid.innerHTML = '';
+
+    if (data.prices) {
+        // Показываем только базовые ресурсы
+        const baseResources = ['Минерал', 'Сапфир', 'Рубин'];
+
+        baseResources.forEach(name => {
+            const price = data.prices[name];
+            if (price !== undefined) {
+                const card = document.createElement('div');
+                card.className = 'price-card';
+                card.innerHTML = `
+                    <span class="price-name">${name}</span>
+                    <span class="price-value">${price.toFixed(4)}з</span>
+                `;
+                pricesGrid.appendChild(card);
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

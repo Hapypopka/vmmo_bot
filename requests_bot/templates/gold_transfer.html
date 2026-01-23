@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block title %}Трансфер золота - VMMO Bot Panel{% endblock %}
+
+{% block content %}
+<div class="page-header mb-2">
+    <h1 class="page-title">Трансфер золота</h1>
+    <p class="text-muted">Передача золота между персонажами через аукцион</p>
+</div>
+
+<!-- Выбор получателя -->
+<div class="card mb-2">
+    <h3 class="card-title">Получатель (мейн)</h3>
+    <div class="flex items-center" style="gap: 1rem;">
+        <select id="mainProfile" class="form-select" style="flex: 1;">
+            {% for profile, name in profiles.items() %}
+            <option value="{{ profile }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+        <span id="mainRubies" class="ruby-text" style="white-space: nowrap;">Рубины: ?</span>
+    </div>
+    <p class="text-muted" style="font-size: 0.85rem; margin-top: 0.5rem;">
+        Мейн выставляет рубины на аукцион, альты их покупают → золото идёт мейну
+    </p>
+</div>
+
+<!-- Таблица альтов -->
+<div class="card mb-2">
+    <div class="flex justify-between items-center mb-1">
+        <h3 class="card-title" style="margin: 0;">Отправители (альты)</h3>
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="selectAll()">Выбрать всех</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadBalances()">Обновить балансы</button>
+        </div>
+    </div>
+
+    <div id="loadingBalances" class="text-center text-muted" style="padding: 2rem;">
+        Загрузка...
+    </div>
+
+    <div id="altsTable" style="display: none;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 40px;"></th>
+                    <th>Персонаж</th>
+                    <th>Баланс</th>
+                    <th>Перевести</th>
+                </tr>
+            </thead>
+            <tbody id="altsBody">
+                <!-- Заполняется JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Итого и кнопка -->
+<div class="card mb-2">
+    <div class="flex justify-between items-center">
+        <div>
+            <span class="text-muted">Итого к переводу:</span>
+            <strong id="totalAmount" style="font-size: 1.5rem; color: var(--gold); margin-left: 0.5rem;">0з</strong>
+            <span class="text-muted" style="margin-left: 0.5rem;">(после комиссии ~<span id="totalReceived">0</span>з)</span>
+        </div>
+        <button id="startTransferBtn" class="btn btn-primary" onclick="startTransfer()" disabled>
+            Начать перевод
+        </button>
+        <button id="stopTransferBtn" class="btn btn-danger" onclick="stopTransfer()" style="display: none;">
+            Остановить
+        </button>
+    </div>
+</div>
+
+<!-- Лог операций -->
+<div class="card">
+    <h3 class="card-title">Лог операций</h3>
+    <div id="transferLog" class="log-container" style="max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+        <div class="text-muted">Операции будут отображаться здесь...</div>
+    </div>
+</div>
+
+<style>
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.table th, .table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+.table th {
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+.table tr:hover {
+    background: var(--bg-card-hover);
+}
+.table tr.disabled {
+    opacity: 0.5;
+}
+.amount-input {
+    width: 80px;
+    padding: 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text);
+}
+.amount-input:disabled {
+    opacity: 0.5;
+}
+.btn-all {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+}
+.log-container {
+    background: var(--bg-input);
+    padding: 1rem;
+    border-radius: 8px;
+}
+.log-entry {
+    margin-bottom: 0.25rem;
+}
+.log-entry.success {
+    color: var(--success);
+}
+.log-entry.error {
+    color: var(--danger);
+}
+.log-entry.info {
+    color: var(--text-secondary);
+}
+.gold-text {
+    color: var(--gold);
+}
+.ruby-text {
+    color: var(--ruby);
+}
+</style>
+
+<script>
+let balances = {};
+const RESERVE_GOLD = 10;
+const AUCTION_FEE = 0.05;
+
+// Загружаем данные с главной страницы при старте
+document.addEventListener('DOMContentLoaded', loadFromStats);
+
+function loadFromStats() {
+    // Используем данные с главной страницы (быстро, без запросов к игре)
+    const loading = document.getElementById('loadingBalances');
+    const table = document.getElementById('altsTable');
+
+    fetch('/api/stats')
+        .then(function(r) { return r.json(); })
+        .then(function(stats) {
+            loading.style.display = 'none';
+
+            // Преобразуем формат stats в формат balances
+            // stats содержит profile в поле bot.profile или можем использовать имя
+            balances = {};
+            for (var i = 0; i < stats.length; i++) {
+                var bot = stats[i];
+                var profile = bot.profile || ('char' + (i + 1));
+                var gold = bot.resources ? (bot.resources['золото'] || 0) : 0;
+                var ruby = bot.resources ? (bot.resources['рубины'] || 0) : 0;
+
+                balances[profile] = {
+                    name: bot.name,
+                    gold: gold,
+                    ruby: ruby,
+                    can_transfer: gold > RESERVE_GOLD
+                };
+            }
+
+            renderAltsTable();
+            table.style.display = 'block';
+        })
+        .catch(function(err) {
+            loading.textContent = 'Ошибка загрузки: ' + err;
+        });
+}
+
+function loadBalances() {
+    // Полная загрузка с сервера игры (медленно, но актуально)
+    const loading = document.getElementById('loadingBalances');
+    const table = document.getElementById('altsTable');
+
+    loading.style.display = 'block';
+    loading.textContent = 'Загрузка актуальных балансов... (может занять минуту)';
+    table.style.display = 'none';
+
+    fetch('/api/gold_balances')
+        .then(r => r.json())
+        .then(data => {
+            loading.style.display = 'none';
+
+            if (!data.success) {
+                alert('Ошибка: ' + data.error);
+                return;
+            }
+
+            balances = data.balances;
+            renderAltsTable();
+            table.style.display = 'block';
+        })
+        .catch(err => {
+            loading.style.display = 'none';
+            alert('Ошибка загрузки: ' + err);
+        });
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.alt-checkbox:not(:disabled)');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+    });
+
+    updateTotal();
+}
+
+function renderAltsTable() {
+    const mainProfile = document.getElementById('mainProfile').value;
+    const tbody = document.getElementById('altsBody');
+    tbody.innerHTML = '';
+
+    // Показать рубины мейна
+    const mainInfo = balances[mainProfile];
+    if (mainInfo) {
+        document.getElementById('mainRubies').textContent = `Рубины: ${mainInfo.ruby}`;
+    }
+
+    for (const [profile, info] of Object.entries(balances)) {
+        // Пропускаем мейна
+        if (profile === mainProfile) continue;
+
+        const maxTransfer = Math.max(0, info.gold - RESERVE_GOLD);
+        // Альтам нужно только золото! Рубины нужны только мейну для выставления
+        const canTransfer = maxTransfer > 0;
+
+        const tr = document.createElement('tr');
+        if (!canTransfer) tr.className = 'disabled';
+
+        tr.innerHTML = `
+            <td>
+                <input type="checkbox"
+                       class="alt-checkbox"
+                       data-profile="${profile}"
+                       ${canTransfer ? '' : 'disabled'}
+                       onchange="updateTotal()">
+            </td>
+            <td>${info.name}</td>
+            <td><span class="gold-text">${info.gold}з</span></td>
+            <td>
+                ${canTransfer ? `
+                    <input type="number"
+                           class="amount-input"
+                           data-profile="${profile}"
+                           data-max="${maxTransfer}"
+                           value="${maxTransfer}"
+                           min="1"
+                           max="${maxTransfer}"
+                           onchange="updateTotal()">
+                    <button class="btn btn-secondary btn-all" onclick="setMax('${profile}')">Макс</button>
+                ` : `
+                    <span class="text-muted">мало золота</span>
+                `}
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    }
+
+    updateTotal();
+}
+
+function setMax(profile) {
+    const input = document.querySelector(`.amount-input[data-profile="${profile}"]`);
+    if (input) {
+        input.value = input.dataset.max;
+        updateTotal();
+    }
+}
+
+function updateTotal() {
+    let total = 0;
+
+    document.querySelectorAll('.alt-checkbox:checked').forEach(checkbox => {
+        const profile = checkbox.dataset.profile;
+        const input = document.querySelector(`.amount-input[data-profile="${profile}"]`);
+        if (input) {
+            total += parseInt(input.value) || 0;
+        }
+    });
+
+    document.getElementById('totalAmount').textContent = total + 'з';
+    document.getElementById('totalReceived').textContent = Math.floor(total * (1 - AUCTION_FEE));
+    document.getElementById('startTransferBtn').disabled = total <= 0;
+}
+
+function startTransfer() {
+    const mainProfile = document.getElementById('mainProfile').value;
+    const transfers = [];
+
+    document.querySelectorAll('.alt-checkbox:checked').forEach(checkbox => {
+        const profile = checkbox.dataset.profile;
+        const input = document.querySelector(`.amount-input[data-profile="${profile}"]`);
+        if (input) {
+            transfers.push({
+                profile: profile,
+                amount: parseInt(input.value) || 0
+            });
+        }
+    });
+
+    if (transfers.length === 0) {
+        alert('Выберите хотя бы одного альта');
+        return;
+    }
+
+    const log = document.getElementById('transferLog');
+    log.innerHTML = '';
+    addLog('Начинаю трансфер...', 'info');
+    addLog(`Получатель: ${mainProfile}`, 'info');
+    addLog(`Отправители: ${transfers.map(t => t.profile + ' (' + t.amount + 'з)').join(', ')}`, 'info');
+
+    document.getElementById('startTransferBtn').disabled = true;
+    document.getElementById('startTransferBtn').style.display = 'none';
+    document.getElementById('stopTransferBtn').style.display = 'inline-block';
+
+    fetch('/api/gold_transfer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            main_profile: mainProfile,
+            transfers: transfers
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('startTransferBtn').disabled = false;
+        document.getElementById('startTransferBtn').style.display = 'inline-block';
+        document.getElementById('stopTransferBtn').style.display = 'none';
+        document.getElementById('stopTransferBtn').disabled = false;
+        document.getElementById('stopTransferBtn').textContent = 'Остановить';
+
+        if (!data.success) {
+            addLog('Ошибка: ' + data.error, 'error');
+            return;
+        }
+
+        const result = data.result;
+
+        addLog('', 'info');
+        addLog('=== Результаты ===', 'info');
+
+        for (const detail of result.details) {
+            const status = detail.status === 'ok' ? 'success' : 'error';
+            addLog(`${detail.profile}: ${detail.transferred}з ${detail.status}`, status);
+            if (detail.error) {
+                addLog(`  Ошибка: ${detail.error}`, 'error');
+            }
+        }
+
+        addLog('', 'info');
+        addLog(`Итого передано: ${result.total_transferred}з`, 'info');
+        addLog(`Мейн получит: ~${result.total_received}з`, 'success');
+
+        if (result.mail_collected) {
+            addLog(`Собрано из почты: ${result.mail_collected.gold}з ${result.mail_collected.silver}с`, 'success');
+        }
+
+        if (result.stopped) {
+            addLog('Трансфер был остановлен пользователем', 'error');
+        }
+
+        if (result.warning) {
+            addLog('⚠️ ' + result.warning, 'error');
+        }
+
+        // Обновляем балансы (быстро из кэша, не с сервера игры)
+        loadFromStats();
+    })
+    .catch(err => {
+        document.getElementById('startTransferBtn').disabled = false;
+        document.getElementById('startTransferBtn').style.display = 'inline-block';
+        document.getElementById('stopTransferBtn').style.display = 'none';
+        document.getElementById('stopTransferBtn').disabled = false;
+        document.getElementById('stopTransferBtn').textContent = 'Остановить';
+        addLog('Ошибка: ' + err, 'error');
+    });
+}
+
+function stopTransfer() {
+    addLog('Отправляю запрос на остановку...', 'info');
+    document.getElementById('stopTransferBtn').disabled = true;
+    document.getElementById('stopTransferBtn').textContent = 'Останавливаю...';
+
+    fetch('/api/gold_transfer/stop', {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                addLog('Запрос на остановку отправлен', 'info');
+            } else {
+                addLog('Ошибка остановки: ' + data.error, 'error');
+            }
+        })
+        .catch(err => {
+            addLog('Ошибка: ' + err, 'error');
+        });
+}
+
+function addLog(message, type) {
+    const log = document.getElementById('transferLog');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.textContent = message;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+// При изменении мейна - перерисовать таблицу
+document.getElementById('mainProfile').addEventListener('change', function() {
+    if (Object.keys(balances).length > 0) {
+        renderAltsTable();
+    }
+});
+</script>
+{% endblock %}
