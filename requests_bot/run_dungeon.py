@@ -331,7 +331,6 @@ class DungeonRunner:
 
     def get_all_available_dungeons(self, section_id=None):
         """Получает список всех доступных данженов из всех вкладок в dungeon_tabs"""
-        print("\n[*] Loading dungeons page...")
         resp = self.client.get("/dungeons?52")
 
         # Извлекаем API URLs
@@ -370,7 +369,6 @@ class DungeonRunner:
                 print(f"[WARN] Failed to load tab {tab}: {e}")
 
         available = []
-        print(f"[*] Found {len(all_dungeons)} dungeons")
 
         try:
 
@@ -387,13 +385,11 @@ class DungeonRunner:
                 dng_id = d.get("id")
 
                 if cooldown:
-                    mins = cooldown // 1000 // 60
-                    secs = cooldown // 1000 % 60
-                    print(f"  - {name}: CD {mins}m {secs}s")
+                    pass  # На КД - не логируем
                 elif dng_id in skipped_ids:
-                    print(f"  - {name}: SKIP (deaths.json)")
+                    pass  # Скипнут - не логируем
                 elif config_module.ONLY_DUNGEONS and dng_id not in config_module.ONLY_DUNGEONS:
-                    print(f"  - {name}: SKIP (not in only_dungeons)")
+                    pass  # Не в списке - не логируем
                 else:
                     print(f"  - {name}: READY")
                     available.append({"id": dng_id, "name": name})

@@ -6,10 +6,15 @@
 
 import re
 import time
+import traceback
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-from requests_bot.config import BASE_URL, HELL_GAMES_URL, CITY_URL
+from requests_bot.config import (
+    BASE_URL, HELL_GAMES_URL, CITY_URL,
+    is_craft_ready_soon, is_iron_craft_enabled
+)
+from requests_bot.craft import CyclicCraftClient
 
 
 class HellGamesClient:
@@ -458,15 +463,10 @@ class HellGamesClient:
 
             # Проверяем готовность скилла из HTML (учитывает дебаффы врагов)
             if not skills_status[pos]["ready"]:
-                remaining = skills_status[pos]["remaining_cd"]
-                if remaining > 0:
-                    print(f"[HELL] Скилл {pos} на КД, осталось {remaining}с")
                 continue
 
             # Скилл готов - используем
-            # Добавляем timestamp как для атаки
-            import time as time_module
-            timestamp = int(time_module.time() * 1000)
+            timestamp = int(time.time() * 1000)
             full_url = f"{skill_urls[pos]}&_={timestamp}&tmt=19"
 
             resp = self._make_ajax_request(full_url)
@@ -492,8 +492,7 @@ class HellGamesClient:
             return False
 
         # Добавляем timestamp параметры как в браузере
-        import time as time_module
-        timestamp = int(time_module.time() * 1000)
+        timestamp = int(time.time() * 1000)
         full_url = f"{action_url}&_={timestamp}&tmt=19"
 
         try:
@@ -601,10 +600,7 @@ class HellGamesClient:
                     print(f"[HELL] Осталось {current_minute}м {remaining % 60}с")
                     last_log_minute = current_minute
 
-                # Проверяем крафт КАЖДУЮ итерацию (вынесено из блока выше)
-                from requests_bot.config import is_craft_ready_soon, is_iron_craft_enabled, get_craft_finish_time
-                import time as time_module
-
+                # Проверяем крафт
                 craft_enabled = is_iron_craft_enabled()
                 craft_ready = is_craft_ready_soon(threshold_seconds=15) if craft_enabled else False
 
@@ -615,7 +611,6 @@ class HellGamesClient:
                     time.sleep(2)
 
                     # Проверяем и забираем/перезапускаем крафт
-                    from requests_bot.craft import CyclicCraftClient
                     craft = CyclicCraftClient(self.client, profile=self.profile)
 
                     # Первый вызов: забирает готовый крафт
@@ -676,7 +671,6 @@ class HellGamesClient:
                         time.sleep(2)
 
             except Exception as e:
-                import traceback
                 print(f"[HELL] !!!!! ОШИБКА В ЦИКЛЕ БОЯ: {e} !!!!!")
                 print(f"[HELL] Traceback:\n{traceback.format_exc()}")
                 time.sleep(2)

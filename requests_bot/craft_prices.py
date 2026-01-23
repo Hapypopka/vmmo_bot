@@ -24,6 +24,9 @@ CRAFT_LOCKS_FILE = os.path.join(SCRIPT_DIR, "shared_craft_locks.json")
 CRAFT_LOCKS_LOCKFILE = os.path.join(SCRIPT_DIR, "shared_craft_locks.lock")
 LOCK_TTL = 7200  # 2 часа - лок протухает если бот не обновил
 
+# Комиссия аукциона (5%)
+AUCTION_FEE = 0.05
+
 # File lock для атомарных операций с локами
 import fcntl
 
@@ -160,7 +163,9 @@ def get_sorted_recipes_by_profit():
             recipe_profits.append((recipe_id, 0))
             continue
 
-        profit = sell_price - total_cost
+        # Учитываем комиссию аукциона 5%
+        net_sell_price = sell_price * (1 - AUCTION_FEE)
+        profit = net_sell_price - total_cost
         profit_per_hour = (profit / total_time) * 3600
         recipe_profits.append((recipe_id, profit_per_hour))
 
@@ -200,7 +205,6 @@ def acquire_craft_lock(profile):
                     recipe_id = lock_info.get("recipe_id")
                     locks[profile]["timestamp"] = now
                     save_craft_locks(locks)
-                    print(f"[CRAFT_LOCKS] {profile}: продлеваю лок на {recipe_id}")
                     return recipe_id
 
             # Считаем ботов на каждом рецепте (внутри лока!)
@@ -499,10 +503,12 @@ def get_best_craft_from_cache():
         if total_time <= 0:
             continue
 
-        profit = sell_price - total_cost
+        # Учитываем комиссию аукциона 5%
+        net_sell_price = sell_price * (1 - AUCTION_FEE)
+        profit = net_sell_price - total_cost
         profit_per_hour = (profit / total_time) * 3600
 
-        print(f"[CRAFT_PRICES] {result_name}: продажа={sell_price:.2f}з, себестоимость={total_cost:.2f}з, "
+        print(f"[CRAFT_PRICES] {result_name}: продажа={sell_price:.2f}з (-5%={net_sell_price:.2f}з), себестоимость={total_cost:.2f}з, "
               f"профит={profit:.2f}з, профит/час={profit_per_hour:.2f}з")
 
         if profit_per_hour > best_profit_per_hour:
@@ -978,12 +984,15 @@ class CraftPriceChecker:
             materials_cost["Рубин"] = ruby_cost
             total_cost += ruby_cost
 
-        profit = sell_price - total_cost
+        # Учитываем комиссию аукциона 5%
+        net_sell_price = sell_price * (1 - AUCTION_FEE)
+        profit = net_sell_price - total_cost
         profit_percent = (profit / total_cost * 100) if total_cost > 0 else 0
 
         return {
             "name": result_name,
-            "sell_price": sell_price,
+            "sell_price": sell_price,  # цена до комиссии (для отображения)
+            "net_sell_price": net_sell_price,  # цена после комиссии
             "cost": total_cost,
             "profit": profit,
             "profit_percent": profit_percent,
@@ -1047,8 +1056,9 @@ class CraftPriceChecker:
         # Время = только этот крафт
         craft_time = recipe.get("craft_time", 0)
 
-        # Профит
-        profit = sell_price - total_cost
+        # Профит (учитываем комиссию аукциона 5%)
+        net_sell_price = sell_price * (1 - AUCTION_FEE)
+        profit = net_sell_price - total_cost
         profit_percent = (profit / total_cost * 100) if total_cost > 0 else 0
         profit_per_hour = (profit / craft_time * 3600) if craft_time > 0 else 0
 
@@ -1091,8 +1101,8 @@ class CraftPriceChecker:
                 profit_info["full_cost"] = full_cost["total_cost"]
                 profit_info["craft_steps"] = full_cost["craft_steps"]
 
-                # Профит "с нуля" = цена продажи - полная себестоимость
-                profit_info["full_profit"] = profit_info["sell_price"] - full_cost["total_cost"]
+                # Профит "с нуля" = цена продажи (после комиссии) - полная себестоимость
+                profit_info["full_profit"] = profit_info["net_sell_price"] - full_cost["total_cost"]
                 if full_cost["total_cost"] > 0:
                     profit_info["full_profit_percent"] = (profit_info["full_profit"] / full_cost["total_cost"]) * 100
                 else:

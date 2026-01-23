@@ -299,7 +299,8 @@ class MailClient:
         self.collected_silver += stats["silver"]
         self.messages_processed += stats["messages"]
 
-        print(f"[MAIL] Готово: {stats['messages']} писем, {stats['gold']}g {stats['silver']}s")
+        if stats["messages"] > 0:
+            print(f"[MAIL] Готово: {stats['messages']} писем, {stats['gold']}g {stats['silver']}s")
         return stats
 
     def check_and_collect(self, on_backpack_full=None):
@@ -312,7 +313,6 @@ class MailClient:
         Returns:
             dict: Статистика сбора
         """
-        print("[MAIL] Проверяю почту...")
         return self.process_mailbox(on_backpack_full)
 
 

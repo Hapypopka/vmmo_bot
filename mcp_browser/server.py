@@ -37,7 +37,7 @@ DEFAULT_COOKIES_PATH = os.environ.get(
     str(Path(__file__).parent.parent / "profiles" / "char1" / "cookies.json")
 )
 
-BASE_URL = "https://vmmo.vten.ru"
+BASE_URL = "https://m.vten.ru"  # Мобильная версия (как боты)
 
 server = Server("vmmo-browser")
 
@@ -67,17 +67,43 @@ def convert_cookies_for_playwright(cookies: list) -> list:
 
 
 async def ensure_browser():
-    """Запускает браузер если ещё не запущен"""
+    """Запускает браузер если ещё не запущен или был закрыт"""
     global browser, page, playwright_instance
 
+    # Проверяем что браузер жив
+    need_restart = False
     if browser is None:
+        need_restart = True
+    else:
+        try:
+            # Пробуем обратиться к браузеру - если закрыт, будет ошибка
+            if not browser.is_connected():
+                need_restart = True
+        except Exception:
+            need_restart = True
+
+    if need_restart:
+        # Закрываем старые ресурсы если есть
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+        if playwright_instance:
+            try:
+                await playwright_instance.stop()
+            except Exception:
+                pass
+
+        # Создаём новый браузер
         playwright_instance = await async_playwright().start()
         browser = await playwright_instance.chromium.launch(
             headless=os.environ.get("HEADLESS", "true").lower() == "true"
         )
         context = await browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            viewport={"width": 500, "height": 844},
+            device_scale_factor=3,
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1"
         )
         page = await context.new_page()
 
@@ -273,8 +299,16 @@ async def list_tools():
             }
         ),
         Tool(
+            name="browser_reset",
+            description="Принудительно перезапустить браузер (если завис или закрыт вручную)",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
             name="browser_login",
-            description="Залогиниться на vmmo.vten.ru по логину и паролю. По умолчанию использует Castertoyi",
+            description="Залогиниться на m.vten.ru по логину и паролю. По умолчанию использует Castertoyi",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -437,27 +471,49 @@ async def call_tool(name: str, arguments: dict):
                 text=f"URL: {page.url}\nTitle: {await page.title()}\nViewport: {page.viewport_size}"
             )]
 
+        elif name == "browser_reset":
+            # Принудительно закрываем и пересоздаём браузер
+            if browser:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
+            if playwright_instance:
+                try:
+                    await playwright_instance.stop()
+                except Exception:
+                    pass
+            browser = None
+            page = None
+            playwright_instance = None
+
+            # Создаём новый
+            page = await ensure_browser()
+            return [TextContent(type="text", text="Browser reset complete. New browser started.")]
+
         elif name == "browser_login":
             username = arguments.get("username", "Castertoyi")
             password = arguments.get("password", "Agesevemu1313!")
 
-            # Переходим на страницу логина
-            await page.goto(f"{BASE_URL}/user/login", wait_until="domcontentloaded")
+            # Переходим на главную (там форма логина)
+            await page.goto("https://vmmo.vten.ru/", wait_until="domcontentloaded")
 
-            # Заполняем форму
-            await page.fill('input[name="username"]', username)
-            await page.fill('input[name="password"]', password)
+            # Заполняем форму (поле называется "login", не "username"!)
+            await page.fill('#login', username)
+            await page.fill('#password', password)
 
             # Нажимаем кнопку входа
-            await page.click('input[type="submit"], button[type="submit"]')
-            await page.wait_for_timeout(2000)
+            await page.click('button[type="submit"]')
+            await page.wait_for_timeout(3000)
 
             # Проверяем успех
             current_url = page.url
             title = await page.title()
 
-            if "login" in current_url.lower() or "вход" in title.lower():
-                return [TextContent(type="text", text=f"Login failed. Still on: {current_url}")]
+            # Если остались на странице с формой логина - ошибка
+            login_form = await page.query_selector('#login')
+            if login_form:
+                return [TextContent(type="text", text=f"Login failed. Still on login page: {current_url}")]
 
             return [TextContent(
                 type="text",

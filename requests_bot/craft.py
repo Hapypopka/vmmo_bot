@@ -25,6 +25,16 @@ except ImportError:
     def log_info(msg): print(f"[INFO] {msg}")
     def log_warning(msg): print(f"[WARN] {msg}")
 
+# Уведомления в Telegram
+def _notify_craft_issue(profile: str, recipe_name: str, reason: str):
+    """Отправляет уведомление о проблеме с крафтом в Telegram"""
+    try:
+        from requests_bot.telegram_bot import notify_sync
+        message = f"[{profile}] Крафт: {recipe_name}\n{reason}\nВозможно рецепт не изучен!"
+        notify_sync(message)
+    except Exception as e:
+        print(f"[CRAFT] Не удалось отправить уведомление: {e}")
+
 # Названия предметов для поиска в инвентаре
 ITEM_NAMES = {
     # Железная цепочка
@@ -295,10 +305,6 @@ class IronCraftClient:
             if not backpack.go_to_next_page(page):
                 break
 
-        print(f"[CRAFT] Инвентарь: жел.руда={inventory['rawOre']}, железо={inventory['iron']}, жел.слиток={inventory['ironBar']}, "
-              f"мед.руда={inventory['copperOre']}, медь={inventory['copper']}, мед.слиток={inventory['copperBar']}, "
-              f"бронза={inventory['bronze']}, бронз.слиток={inventory['bronzeBar']}, "
-              f"платина={inventory['platinum']}, плат.слиток={inventory['platinumBar']}")
         return inventory
 
     def get_iron_inventory(self):
@@ -522,12 +528,19 @@ class IronCraftClient:
         if not start_btn:
             print("[CRAFT] Не найдена кнопка 'Начать работу'")
             page_text = soup.get_text().lower()
+            known_reason = False
             if "обновлен" in page_text and "сервер" in page_text:
                 print("[CRAFT] Сервер на обновлении - ждём...")
+                known_reason = True
             elif "недостаточно" in page_text or "не хватает" in page_text:
                 print("[CRAFT] Не хватает материалов!")
+                known_reason = True
             elif "вход" in page_text or "авторизац" in page_text:
                 print("[CRAFT] Сессия истекла - нужна переавторизация!")
+                known_reason = True
+
+            if not known_reason:
+                _notify_craft_issue(self.profile, recipe['name'], "Не найдена кнопка 'Начать работу'")
             return False
 
         start_url = start_btn.get("href")
@@ -640,6 +653,7 @@ class IronCraftClient:
             _RECIPE_PAGE_CACHE[receipt_id] = found_on_page
 
         if not create_btn:
+            recipe_name = ITEM_NAMES.get(receipt_id, receipt_id)
             print(f"[CRAFT] Не найдена кнопка 'Создать' для {receipt_id}")
             # Отладка: выводим все go-btn на странице
             all_btns = soup.select("a.go-btn")
@@ -653,6 +667,8 @@ class IronCraftClient:
                 print(f"[CRAFT] DEBUG: Найдены nav links ({len(nav_links)}):")
                 for link in nav_links[:5]:
                     print(f"  - {link.get('href', '')[:60]} | text: {link.get_text(strip=True)[:20]}")
+            # Уведомление - скорее всего рецепт не изучен
+            _notify_craft_issue(self.profile, recipe_name, "Не найдена кнопка 'Создать'")
             return False
 
         create_url = create_btn.get("href")
@@ -687,6 +703,9 @@ class IronCraftClient:
             page_text = soup.get_text().lower()
             if "недостаточно" in page_text or "не хватает" in page_text:
                 print("[CRAFT] Не хватает материалов для слитка!")
+            else:
+                # Неизвестная причина - уведомляем
+                _notify_craft_issue(self.profile, recipe['name'], "Не найдена кнопка 'Начать работу' (level 2+)")
             return False
 
         start_url = start_btn.get("href")
@@ -769,11 +788,9 @@ class IronCraftClient:
               f"слитки:{self.crafted_bars}/{self.target_bars}) ===")
 
         status = self.get_craft_status()
-        print(f"[CRAFT] Статус: in_progress={status['in_progress']}, ready={status['ready']}, type={status['type']}")
 
         # Крафт в процессе - ждём
         if status["in_progress"] and not status["ready"]:
-            print("[CRAFT] Крафт в процессе, ждём...")
             return "waiting"
 
         # Крафт готов
@@ -1117,11 +1134,8 @@ class IronCraftClient:
                     self.sell_all_iron()
                     return True
 
-                print(f"[CRAFT] Итерация {iteration + 1}: нужен {RECIPES[next_type]['name']}")
-
                 # Проверяем статус текущего крафта
                 status = self.get_craft_status()
-                print(f"[CRAFT] Статус: in_progress={status['in_progress']}, ready={status['ready']}, type={status['type']}")
 
                 # Крафт в процессе - ждём
                 if status["in_progress"] and not status["ready"]:
@@ -1239,8 +1253,6 @@ class CyclicCraftClient(IronCraftClient):
             print(f"[CRAFT] Накоплено {item_name}: {current_count}/{batch_size} → продаю")
             self._sell_item_batch(best_item_id)
             return True, 5  # Проверить снова через 5 сек
-        else:
-            print(f"[CRAFT] Инвентарь {item_name}: {current_count}/{batch_size} (автоподбор batch)")
 
         # 2. Проверка статуса крафта
         status = self.get_craft_status()
@@ -1262,9 +1274,7 @@ class CyclicCraftClient(IronCraftClient):
 
             # Проверяем каждые 30 секунд вместо полного времени крафта
             # Это позволяет быстрее забрать готовый крафт
-            wait_time = 30
-            print(f"[CRAFT] Крафт в процессе ({craft_type}), проверка через {wait_time}с")
-            return True, wait_time
+            return True, 30
 
         # 3. Запустить новый крафт
         # Определяем самый выгодный крафт из кэша цен (или используем fallback)

@@ -396,8 +396,6 @@ class ResourceSellerClient:
             print("[SELL] Не удалось получить ресурсы")
             return stats
 
-        print(f"[SELL] Текущие ресурсы: {current_resources}")
-
         for res_key, res_settings in settings.items():
             if not res_settings.get("enabled", False):
                 continue
@@ -410,8 +408,7 @@ class ResourceSellerClient:
             # Сколько стаков можно продать?
             available = current - reserve
             if available < stack:
-                print(f"[SELL] {res_name}: {current} (нужно {reserve + stack} для продажи)")
-                continue
+                continue  # Недостаточно для продажи - не логируем
 
             stacks_to_sell = available // stack
             print(f"[SELL] {res_name}: {current}, продаём {stacks_to_sell} x {stack}")
@@ -429,7 +426,8 @@ class ResourceSellerClient:
                 current_resources = self.get_current_resources()
 
         self.sold_count = stats["sold"]
-        print(f"[SELL] Итого продано: {stats['sold']}, ошибок: {stats['errors']}")
+        if stats["sold"] > 0 or stats["errors"] > 0:
+            print(f"[SELL] Итого продано: {stats['sold']}, ошибок: {stats['errors']}")
         return stats
 
 
