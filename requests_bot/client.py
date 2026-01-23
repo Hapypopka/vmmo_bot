@@ -450,30 +450,22 @@ class VMMOClient:
         Returns:
             bool: True если ремонт выполнен, False если не нужен или ошибка
         """
-        print("[REPAIR] Проверяю снаряжение...")
-
         # Переходим на страницу профиля
         resp = self.get(f"{BASE_URL}/user")
         if not resp:
-            print("[REPAIR] Не удалось загрузить профиль")
             return False
 
         html = self.current_page
-        print(f"[REPAIR] Загружена страница профиля ({len(html)} символов)")
 
         # Ищем apiGetUrl в HTML - это Vue API endpoint для получения данных профиля
         api_get_match = re.search(r"apiGetUrl:\s*'([^']+)'", html)
         api_link_match = re.search(r"apiLinkUrl:\s*'([^']+)'", html)
 
         if not api_get_match or not api_link_match:
-            print("[REPAIR] Не найдены API endpoints в HTML")
-            # Фолбек на старый метод через HTML парсинг
             return self._repair_equipment_legacy()
 
         api_get_url = api_get_match.group(1)
         api_link_url = api_link_match.group(1)
-
-        print(f"[REPAIR] Получаю данные профиля...")
 
         # Запрашиваем JSON с данными профиля
         headers = {
@@ -484,13 +476,10 @@ class VMMOClient:
         try:
             resp = self.session.get(api_get_url, headers=headers)
             if resp.status_code != 200:
-                print(f"[REPAIR] Ошибка получения данных профиля: {resp.status_code}")
                 return False
 
             data = resp.json()
-            print(f"[REPAIR] Получены данные профиля, ключи: {list(data.keys())}")
-        except Exception as e:
-            print(f"[REPAIR] Ошибка парсинга JSON: {e}")
+        except Exception:
             return False
 
         # Извлекаем данные о ремонте
@@ -498,20 +487,16 @@ class VMMOClient:
         mannequin = profile.get("mannequin", {})
         repair_info = mannequin.get("repair", {})
 
-        print(f"[REPAIR] repair_info: {repair_info}")
-
         percent = repair_info.get("percent", 100)
         link_id = repair_info.get("link_id")
 
         if percent >= 100:
-            print(f"[REPAIR] Снаряжение в порядке ({percent}%)")
             return False
 
         if not link_id:
-            print(f"[REPAIR] Прочность {percent}%, но link_id не найден!")
             return False
 
-        print(f"[REPAIR] Прочность {percent}%, выполняю ремонт (link_id={link_id})...")
+        print(f"[REPAIR] Прочность {percent}%, выполняю ремонт...")
 
         # Выполняем ремонт через apiLinkUrl
         repair_url = f"{api_link_url}&link_id={link_id}"
@@ -519,18 +504,10 @@ class VMMOClient:
         try:
             resp = self.session.get(repair_url, headers=headers)
             if resp.status_code == 200:
-                result = resp.json()
-                if result.get("status") == "OK":
-                    print("[REPAIR] Ремонт выполнен успешно!")
-                    return True
-                else:
-                    print(f"[REPAIR] Ответ сервера: {result}")
-                    return True  # Считаем успехом, если получили ответ
-            else:
-                print(f"[REPAIR] Ошибка ремонта: {resp.status_code}")
-                return False
-        except Exception as e:
-            print(f"[REPAIR] Ошибка запроса ремонта: {e}")
+                print("[REPAIR] Ремонт выполнен!")
+                return True
+            return False
+        except Exception:
             return False
 
     def _repair_equipment_legacy(self):
@@ -542,7 +519,6 @@ class VMMOClient:
         # Ищем блок ремонта
         repair_div = soup.select_one("div.repair-c.mannequin-repair")
         if not repair_div:
-            print("[REPAIR] Блок ремонта не найден на странице")
             return False
 
         # Получаем процент прочности
@@ -554,18 +530,12 @@ class VMMOClient:
         try:
             percent = int(percent_text.replace("%", ""))
         except ValueError:
-            print(f"[REPAIR] Не удалось распарсить процент: {percent_text}")
             return False
 
         if percent >= 100:
-            print(f"[REPAIR] Снаряжение в порядке ({percent}%)")
             return False
 
-        # Legacy метод не реализован - Vue API должен работать
-        # Если попали сюда - что-то не так с Vue API endpoints
-        print(f"[REPAIR] Прочность {percent}%, нужен ремонт!")
-        print("[REPAIR] ⚠️ Vue API недоступен, legacy ремонт не реализован")
-        print("[REPAIR] Попробуй зайти в игру вручную и проверить страницу /user")
+        # Legacy метод не реализован
         return False
 
     def find_wicket_link(self, element_id=None, href_contains=None, text_contains=None):

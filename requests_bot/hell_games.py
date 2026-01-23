@@ -471,7 +471,6 @@ class HellGamesClient:
 
             resp = self._make_ajax_request(full_url)
             if resp and resp.status_code == 200:
-                print(f"[HELL] Использован скилл {pos}")
                 self.last_gcd_time = now
                 # Собираем лут через refresher каждые 3 атаки
                 self.attack_count += 1
@@ -554,15 +553,9 @@ class HellGamesClient:
 
         # Проверяем и ремонтируем снаряжение перед боем
         try:
-            print("[HELL] Проверяем снаряжение...")
-            if self.client.repair_equipment():
-                print("[HELL] Снаряжение отремонтировано перед боем")
-            else:
-                print("[HELL] Снаряжение в порядке")
-        except Exception as e:
-            print(f"[HELL] Ошибка проверки ремонта: {e}")
-
-        print("[HELL] Входим в Hell Games...")
+            self.client.repair_equipment()
+        except Exception:
+            pass
         if not self.enter_hell_games():
             print("[HELL] ===== ОШИБКА ВХОДА =====")
             return False
