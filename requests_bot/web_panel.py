@@ -668,20 +668,51 @@ def ask_claude(prompt):
         return {"success": False, "error": str(e)}
 
 
-def build_ingredient_chain(recipe_id, multiplier=1, depth=0, max_depth=5):
+def get_craft_inventory_cache(profile):
+    """
+    Читает кэш инвентаря крафта для профиля.
+
+    Returns:
+        dict: {"rawOre": int, "iron": int, ...} или пустой dict
+    """
+    cache_file = os.path.join(PROFILES_DIR, profile, "craft_inventory.json")
+
+    if not os.path.exists(cache_file):
+        return {}
+
+    try:
+        with open(cache_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Проверяем что кэш не слишком старый (2 часа)
+        import time
+        timestamp = data.get("timestamp", 0)
+        if time.time() - timestamp > 7200:
+            return {}
+
+        return data.get("inventory", {})
+    except Exception:
+        return {}
+
+
+def build_ingredient_chain(recipe_id, inventory=None, multiplier=1, depth=0, max_depth=5):
     """
     Рекурсивно строит цепочку ингредиентов для рецепта.
 
     Args:
         recipe_id: ID рецепта (например, "thorBar")
+        inventory: dict с текущим инвентарём {"rawOre": 10, "iron": 5, ...}
         multiplier: Множитель количества (для вложенных рецептов)
         depth: Текущая глубина рекурсии
         max_depth: Максимальная глубина (защита от бесконечной рекурсии)
 
     Returns:
-        list: [{"id": "thor", "name": "Тор", "amount": 5, "children": [...]}]
+        list: [{"id": "thor", "name": "Тор", "amount": 5, "have": 3, "children": [...]}]
     """
     from requests_bot.craft import RECIPES, ITEM_NAMES
+
+    if inventory is None:
+        inventory = {}
 
     if depth >= max_depth:
         return []
@@ -698,14 +729,16 @@ def build_ingredient_chain(recipe_id, multiplier=1, depth=0, max_depth=5):
     for ing_id, ing_amount in requires.items():
         total_amount = ing_amount * multiplier
         ing_name = ITEM_NAMES.get(ing_id, ing_id)
+        have_amount = inventory.get(ing_id, 0)
 
         # Рекурсивно получаем дочерние ингредиенты
-        children = build_ingredient_chain(ing_id, total_amount, depth + 1, max_depth)
+        children = build_ingredient_chain(ing_id, inventory, total_amount, depth + 1, max_depth)
 
         result.append({
             "id": ing_id,
             "name": ing_name,
             "amount": total_amount,
+            "have": have_amount,
             "children": children
         })
 
@@ -791,7 +824,9 @@ def get_craft_info(profile):
     # Строим цепочку ингредиентов для активного рецепта
     chain = []
     if active_recipe_id:
-        chain = build_ingredient_chain(active_recipe_id)
+        # Получаем кэш инвентаря
+        inventory = get_craft_inventory_cache(profile)
+        chain = build_ingredient_chain(active_recipe_id, inventory)
 
     return {
         "active": active_craft,

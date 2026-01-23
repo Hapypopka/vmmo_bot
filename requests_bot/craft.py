@@ -305,7 +305,36 @@ class IronCraftClient:
             if not backpack.go_to_next_page(page):
                 break
 
+        # Сохраняем инвентарь в кэш для веб-панели
+        self._save_inventory_cache(inventory)
+
         return inventory
+
+    def _save_inventory_cache(self, inventory):
+        """Сохраняет инвентарь в файл для веб-панели"""
+        import json
+        import os
+        import time
+
+        try:
+            # Путь к файлу кэша
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            profiles_dir = os.path.join(os.path.dirname(script_dir), "profiles")
+            cache_file = os.path.join(profiles_dir, self.profile, "craft_inventory.json")
+
+            # Создаём директорию если нет
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+
+            # Сохраняем с временной меткой
+            data = {
+                "inventory": inventory,
+                "timestamp": time.time()
+            }
+
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+        except Exception as e:
+            print(f"[CRAFT] Ошибка сохранения кэша инвентаря: {e}")
 
     def get_iron_inventory(self):
         """Обратная совместимость - возвращает только железные материалы"""
