@@ -151,6 +151,10 @@ class VMMOBot:
         except Exception as e:
             log_debug(f"Ошибка проверки ремонта: {e}")
 
+        # ПЕРВЫМ ДЕЛОМ - проверяем крафт!
+        log_info("[CRAFT] Проверяю крафт сразу после логина...")
+        self.check_craft()
+
         # Инициализируем файловую статистику
         self.bot_stats = init_stats()
         print_stats()  # Показываем накопленную статистику
@@ -169,6 +173,33 @@ class VMMOBot:
         except Exception as e:
             log_debug(f"Ошибка проверки крафта: {e}")
         return False
+
+    def check_craft(self):
+        """
+        ГЛАВНАЯ проверка крафта - вызывается ВЕЗДЕ!
+        Это первый приоритет бота - крафт важнее всего.
+
+        Returns:
+            bool: True если крафт был обработан (забран/запущен)
+        """
+        if not is_iron_craft_enabled():
+            # Iron craft отключен - используем простую проверку repeat
+            return self.try_restart_craft()
+
+        try:
+            # Вызываем в цикле пока возвращает wait_time <= 5 (был забор или продажа)
+            # Это нужно чтобы после забора сразу запустился новый крафт
+            crafted = False
+            for _ in range(3):  # Максимум 3 итерации чтобы не зациклиться
+                is_active, wait_time = self.do_craft_step()
+                if is_active:
+                    crafted = True
+                if wait_time > 5:
+                    break  # Крафт запущен или в процессе - выходим
+            return crafted
+        except Exception as e:
+            log_error(f"[CRAFT] Ошибка в check_craft: {e}")
+            return False
 
     def try_arena(self):
         """Запускает арену если включена. Вызывается один раз в начале сессии."""
@@ -210,6 +241,9 @@ class VMMOBot:
                 except Exception as e:
                     log_debug(f"Ошибка воскрешения после арены: {e}")
 
+            # После арены СРАЗУ проверяем крафт!
+            self.check_craft()
+
         except Exception as e:
             log_error(f"[ARENA] Ошибка: {e}")
             log_debug(tb_module.format_exc())
@@ -219,7 +253,7 @@ class VMMOBot:
         log_debug("Проверяю почту...")
 
         # Проверяем крафт перед сбором почты
-        self.try_restart_craft()
+        self.check_craft()
 
         try:
             stats = self.mail_client.check_and_collect(
@@ -263,7 +297,7 @@ class VMMOBot:
             self.client.get("/city")
 
             # Проверяем крафт при каждой очистке рюкзака
-            self.try_restart_craft()
+            self.check_craft()
 
             current, total = self.backpack_client.get_backpack_count()
             log_debug(f"Рюкзак: {current}/{total}")
@@ -410,10 +444,18 @@ class VMMOBot:
         """
         Основной цикл прохождения данженов.
         Возвращает True если нужно продолжать, False для остановки.
+
+        ПРИОРИТЕТ: Крафт > Ивенты > Данжены > Hell Games
+        Крафт проверяется ВЕЗДЕ перед каждым действием!
         """
         # Сбрасываем watchdog в начале цикла
         reset_watchdog()
         reset_no_progress_counter()
+
+        # ============================================
+        # ПЕРВЫМ ДЕЛОМ - КРАФТ! Это главный приоритет!
+        # ============================================
+        self.check_craft()
 
         # Периодически сохраняем снэпшот ресурсов (раз в час)
         try:
@@ -477,12 +519,12 @@ class VMMOBot:
                     dungeon_name = dungeon_config["name"]
                     dungeon_id = dungeon_config["id"]
 
-                    # Сначала очищаем рюкзак и почту (включает проверку крафта)
+                    # Сначала очищаем рюкзак и почту
                     self.cleanup_backpack()
                     self.check_and_collect_mail()
 
-                    # Проверяем крафт перед ивентом
-                    self.try_restart_craft()
+                    # ОБЯЗАТЕЛЬНО проверяем крафт перед ивентом!
+                    self.check_craft()
 
                     # Пробуем войти в ивент-данжен
                     log_debug(f"Проверяю ивент: {dungeon_name}...")
@@ -512,6 +554,8 @@ class VMMOBot:
                         log_dungeon_result(dungeon_name, fight_result, actions)
                         # Парсим реальное КД с сервера и записываем
                         set_event_cooldown(dungeon_key, self.client)
+                        # Проверяем крафт после ивента!
+                        self.check_craft()
                     elif fight_result == "died":
                         self.stats["deaths"] += 1
                         log_dungeon_result(dungeon_name, fight_result, actions)
@@ -522,6 +566,8 @@ class VMMOBot:
                                 log_info("Снаряжение отремонтировано после смерти")
                         except Exception as e:
                             log_debug(f"Ошибка ремонта после смерти: {e}")
+                        # Проверяем крафт даже после смерти!
+                        self.check_craft()
                     else:
                         log_debug(f"{dungeon_name}: неизвестный результат '{fight_result}'")
 
@@ -535,29 +581,15 @@ class VMMOBot:
         else:
             log_debug("Ивент-данжены отключены для этого профиля")
 
-        # 2. Проверяем рюкзак и почту (финальная очистка)
+        # 2. Проверяем рюкзак и почту
         self.cleanup_backpack()
         self.check_and_collect_mail()
 
         # 2.1. Проверяем ежедневные награды (если включены)
         self.check_and_collect_daily_rewards()
 
-        # 2.5. Проверяем крафт (если включен)
-        if is_iron_craft_enabled():
-            # Используем единый метод для всех режимов (iron/bronze/platinum)
-            # Вызываем в цикле пока возвращает wait_time <= 5 (был забор или продажа)
-            # Это нужно чтобы после забора сразу запустился новый крафт
-            for _ in range(3):  # Максимум 3 итерации чтобы не зациклиться
-                is_active, wait_time = self.do_craft_step()
-                if wait_time > 5:
-                    break  # Крафт запущен или в процессе - выходим
-        else:
-            # Iron craft отключен - просто повторяем любой готовый крафт
-            try:
-                if self.backpack_client.repeat_craft_if_ready():
-                    log_info("Крафт перезапущен")
-            except Exception as e:
-                log_debug(f"Ошибка проверки крафта: {e}")
+        # 2.5. Проверяем крафт - используем единый метод
+        self.check_craft()
 
         # 3. Получаем список данженов (если включены)
         dungeons = []
@@ -595,6 +627,8 @@ class VMMOBot:
                 except Exception as e:
                     log_error(f"Ошибка Заброшенной Шахты: {e}")
                     self.stats["errors"] += 1
+                # После Survival Mines СРАЗУ проверяем крафт!
+                self.check_craft()
 
             elif min_cd > 0 and is_iron_craft_enabled():
                 # Приоритет 2: Крафт (пока ждём КД)
@@ -625,8 +659,8 @@ class VMMOBot:
                             except Exception as e:
                                 log_error(f"Ошибка Hell Games: {e}")
                                 self.stats["errors"] += 1
-                            # После Hell Games проверяем крафт (уже в городе)
-                            self.try_restart_craft()
+                            # После Hell Games СРАЗУ проверяем крафт!
+                            self.check_craft()
                 else:
                     # Hell Games не включены - проверяем почту/рюкзак и ждём
                     wait_time = min(min_cd, 60)
@@ -646,8 +680,8 @@ class VMMOBot:
                 except Exception as e:
                     log_error(f"Ошибка Hell Games: {e}")
                     self.stats["errors"] += 1
-                # После Hell Games проверяем крафт (уже в городе)
-                self.try_restart_craft()
+                # После Hell Games СРАЗУ проверяем крафт!
+                self.check_craft()
 
             elif min_cd > 0:
                 # Ничего не включено - просто ждём
@@ -656,7 +690,10 @@ class VMMOBot:
                 log_info(f"Все данжены на КД. Ждём {wait_time}с...")
                 time.sleep(wait_time)
 
-            # После активности снова проверяем данжены (если включены)
+            # После активности СНАЧАЛА проверяем крафт!
+            self.check_craft()
+
+            # Потом проверяем данжены (если включены)
             if is_dungeons_enabled():
                 try:
                     dungeons, api_link_url = self.dungeon_runner.get_all_available_dungeons()
@@ -673,8 +710,8 @@ class VMMOBot:
             dungeon_name = dungeon['name']
             dungeon_id = dungeon['id']
 
-            # Проверяем крафт перед каждым данженом
-            self.try_restart_craft()
+            # ОБЯЗАТЕЛЬНО проверяем крафт перед КАЖДЫМ данженом!
+            self.check_craft()
 
             set_activity(f"⚔️ {dungeon_name}")
             log_dungeon_start(dungeon_name, dungeon_id)
@@ -721,12 +758,8 @@ class VMMOBot:
                     self.check_and_collect_mail()
                     self.check_and_resurrect_pet()
 
-                    # Проверяем крафт после каждого данжена
-                    if is_iron_craft_enabled():
-                        try:
-                            self.do_craft_step()
-                        except Exception as e:
-                            log_debug(f"Ошибка крафта после данжена: {e}")
+                    # ОБЯЗАТЕЛЬНО проверяем крафт после КАЖДОГО данжена!
+                    self.check_craft()
 
                 elif result == "died":
                     self.stats["deaths"] += 1
@@ -755,6 +788,8 @@ class VMMOBot:
                             log_info("Снаряжение отремонтировано после смерти")
                     except Exception as e:
                         log_debug(f"Ошибка ремонта после смерти: {e}")
+                    # Проверяем крафт даже после смерти!
+                    self.check_craft()
 
                 elif result in ("watchdog", "stuck"):
                     self.stats["watchdog_triggers"] += 1

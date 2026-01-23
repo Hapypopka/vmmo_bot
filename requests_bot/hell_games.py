@@ -593,9 +593,9 @@ class HellGamesClient:
                     print(f"[HELL] Осталось {current_minute}м {remaining % 60}с")
                     last_log_minute = current_minute
 
-                # Проверяем крафт
+                # Проверяем крафт - выходим ЗАРАНЕЕ (60 сек до готовности)
                 craft_enabled = is_iron_craft_enabled()
-                craft_ready = is_craft_ready_soon(threshold_seconds=15) if craft_enabled else False
+                craft_ready = is_craft_ready_soon(threshold_seconds=60) if craft_enabled else False
 
                 if craft_enabled and craft_ready:
                     print("[HELL] Крафт скоро завершится! Выходим в город...")
