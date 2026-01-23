@@ -16,8 +16,11 @@ from requests_bot.combat import CombatParser
 from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_watchdog
 from requests_bot.config import (
     BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR,
-    get_skill_cooldowns, get_dungeon_difficulty, get_skill_hp_threshold
+    get_skill_cooldowns, get_dungeon_difficulty, get_skill_hp_threshold,
+    load_deaths, get_extra_dungeons
 )
+from requests_bot import config as config_module  # Для доступа к ONLY_DUNGEONS
+from requests_bot.logger import log_info, log_debug, log_error
 
 
 class DungeonRunner:
@@ -30,6 +33,235 @@ class DungeonRunner:
         self.page_id = None
         self.current_dungeon_id = None  # Текущий данжен для лимитов
         self.current_difficulty = "brutal"  # Текущая сложность
+        self.collected_loot = set()  # ID собранного лута
+        self.loot_take_url = None  # Сохраняем URL для сбора лута из начальной боевой страницы
+        self.report_back_url = None  # URL для activity reporter (lnkReportBack)
+        self.last_report_back_time = 0  # Время последнего report back
+        self.metronome_url = None  # URL для metronome heartbeat
+        self.last_metronome_time = 0  # Время последнего metronome
+        self.metronome_count = 0  # Счётчик пульсов metronome (dls параметр)
+        self.refresher_url = None  # URL для refresher (сбор лута)
+        self.attack_count = 0  # Счётчик атак для периодического сбора лута
+
+    def _save_loot_url_from_combat_page(self):
+        """Сохраняет lootTakeUrl из страницы боя"""
+        html = self.client.current_page
+        if not html:
+            return
+
+        # Сохраняем lootTakeUrl
+        loot_url_match = re.search(r"lootTakeUrl\s*=\s*['\"]([^'\"]+)['\"]", html)
+        loot_url = loot_url_match.group(1) if loot_url_match else None
+        if loot_url:
+            self.loot_take_url = loot_url
+            log_debug(f"[LOOT] Saved loot URL")
+        else:
+            log_error(f"[LOOT] WARNING: lootTakeUrl NOT FOUND!")
+
+        # КРИТИЧНО: Отправляем "page rendered ping" - это активирует отправку лута!
+        # Браузер отправляет этот запрос после рендеринга страницы
+        # Формат: ptxPageRenderedPingUrl = 'URL?pageId-IEndpointBehaviorListener.5-&params'
+        page_rendered_match = re.search(r"ptxPageRenderedPingUrl\s*=\s*'([^']+)'", html)
+        if page_rendered_match:
+            page_rendered_url = page_rendered_match.group(1)
+            try:
+                resp = self.client.session.get(page_rendered_url, timeout=5)
+                log_debug(f"[LOOT] Page rendered ping: {resp.status_code}")
+            except Exception as e:
+                log_error(f"[LOOT] Page rendered ping failed: {e}")
+
+        # Сохраняем URL для activity reporter (lnkReportBack)
+        # Браузер периодически отправляет этот запрос чтобы сообщить серверу об активности
+        # Формат: IBehaviorListener.0-combatPanel-container-lnkReportBack
+        report_back_match = re.search(r'"u":"([^"]*lnkReportBack[^"]*)"', html)
+        if report_back_match:
+            self.report_back_url = report_back_match.group(1)
+
+        # Сохраняем URL для metronome heartbeat
+        # КРИТИЧНО: Браузер отправляет metronome каждые ~1-2 секунды
+        # Формат: IEndpointBehaviorListener.1-combatPanel-container с ctx=metronome
+        # Ищем pageId из URL для формирования metronome URL
+        page_id_match = re.search(r"ptxPageId\s*=\s*(\d+)", html)
+        if page_id_match:
+            page_id = page_id_match.group(1)
+            # Формируем базовый URL для metronome
+            # Пример: /dungeon/combat/dSanctuary?1362-IEndpointBehaviorListener.1-combatPanel-container&1=normal
+            combat_base = self.combat_url.split("?")[0] if self.combat_url else ""
+            difficulty_match = re.search(r"1=(normal|hard|impossible)", self.combat_url or "")
+            difficulty_param = f"1={difficulty_match.group(1)}" if difficulty_match else "1=normal"
+            self.metronome_url = f"{combat_base}?{page_id}-IEndpointBehaviorListener.1-combatPanel-container&{difficulty_param}"
+            self.metronome_count = 0  # Сбрасываем счётчик
+            # Сохраняем page_id для refresher
+            self.page_id = page_id
+            # Формируем refresher URL для сбора лута
+            # Формат: dungeon/combat/XXX?{pageId}-1.IBehaviorListener.0-combatPanel-container-battlefield-refresher&1=normal
+            self.refresher_url = f"{combat_base}?{page_id}-1.IBehaviorListener.0-combatPanel-container-battlefield-refresher&{difficulty_param}"
+            self.attack_count = 0  # Сбрасываем счётчик атак
+
+    def _collect_loot(self, ajax_response=None):
+        """Собирает лут из AJAX-ответа или текущей страницы
+
+        Args:
+            ajax_response: requests.Response от AJAX-запроса (приоритет)
+                          Если None - используем self.client.current_page
+        """
+        # AJAX-ответ содержит лут, current_page - нет (он не обновляется после AJAX)
+        if ajax_response is not None:
+            try:
+                html = ajax_response.text
+            except:
+                html = None
+        else:
+            html = self.client.current_page
+
+        if not html:
+            return 0
+
+        # Используем сохранённый loot_url (из начальной страницы боя)
+        # lootTakeUrl приходит только при первой загрузке, не в AJAX-ответах
+        loot_url = self.loot_take_url
+        if not loot_url:
+            # Fallback: пробуем найти в текущей странице (вдруг это полная загрузка)
+            # Формат: Ptx.Shadows.Combat.lootTakeUrl = 'URL'
+            loot_url_match = re.search(r"lootTakeUrl\s*=\s*['\"]([^'\"]+)['\"]", html)
+            if loot_url_match:
+                loot_url = loot_url_match.group(1)
+                self.loot_take_url = loot_url  # Сохраняем для будущих вызовов
+
+        # Ищем ID лута двумя способами
+        loot_ids = set()
+        # HTML: <div id="loot_box_77322"
+        loot_ids.update(re.findall(r'id="loot_box_(\d+)"', html))
+        # JS: dropLoot({id: '77322'
+        loot_ids.update(re.findall(r"dropLoot\s*\(\s*\{[^}]*id:\s*'(\d+)'", html))
+
+        # DEBUG: логируем что нашли
+        if loot_ids:
+            new_loot = loot_ids - self.collected_loot
+            if new_loot:
+                log_info(f"[LOOT] Найдено {len(new_loot)} новых: {new_loot}")
+
+        # Если есть лут но нет URL - логируем проблему
+        if loot_ids and not loot_url:
+            log_error(f"[LOOT] НАЙДЕН ЛУТ ({len(loot_ids)} шт) НО НЕТ loot_url! IDs: {loot_ids}")
+            return 0
+
+        if not loot_url:
+            return 0
+
+        collected = 0
+        for loot_id in loot_ids:
+            if loot_id not in self.collected_loot:
+                collect_url = loot_url + loot_id
+                self.client.get(collect_url)
+                self.collected_loot.add(loot_id)
+                collected += 1
+                log_info(f"[LOOT] Собран: {loot_id}")
+
+        return collected
+
+    def _collect_loot_from_ajax(self, ajax_text):
+        """
+        Собирает лут из AJAX-ответа атаки.
+
+        Лут приходит в теге <evaluate> как:
+        Ptx.Shadows.Combat.dropLoot({
+            id: '3643008',
+            type: 1,
+            img: '/images/items/icons/...',
+            ...
+        });
+        """
+        if not ajax_text:
+            return 0
+
+        # Ищем dropLoot вызовы в AJAX ответе
+        # Паттерн: dropLoot({id: '12345', ...}) - [\s\S]*? для многострочного матча
+        loot_matches = re.findall(r"dropLoot\s*\(\s*\{[\s\S]*?id:\s*'(\d+)'", ajax_text)
+
+        # Дебаг: проверяем есть ли dropLoot в ответе вообще
+        if "dropLoot" in ajax_text:
+            log_info(f"[LOOT] AJAX содержит dropLoot! Найдено ID: {loot_matches}")
+            if not loot_matches:
+                # Сохраняем для дебага
+                debug_path = os.path.join(SCRIPT_DIR, "debug_ajax_with_loot.xml")
+                with open(debug_path, "w", encoding="utf-8") as f:
+                    f.write(ajax_text)
+                log_error(f"[LOOT] dropLoot найден но regex не сработал! Saved to {debug_path}")
+
+        if not loot_matches:
+            return 0
+
+        loot_url = self.loot_take_url
+        if not loot_url:
+            log_error(f"[LOOT] AJAX содержит лут ({len(loot_matches)} шт) но нет loot_url!")
+            return 0
+
+        collected = 0
+        for loot_id in loot_matches:
+            if loot_id not in self.collected_loot:
+                collect_url = loot_url + loot_id
+                try:
+                    self.client.session.get(collect_url)  # Быстрый GET без сохранения страницы
+                    self.collected_loot.add(loot_id)
+                    collected += 1
+                    log_info(f"[LOOT] Собран из AJAX: {loot_id}")
+                except Exception as e:
+                    log_error(f"[LOOT] Ошибка сбора {loot_id}: {e}")
+
+        return collected
+
+    def _collect_loot_via_refresher(self):
+        """Собирает лут через refresher endpoint (основной метод сбора)
+
+        Лут в VMMO приходит через refresher, а не через WebSocket/AJAX атаки.
+        Браузер вызывает refresher каждые 500ms, мы вызываем каждые 3 атаки.
+
+        Returns:
+            int: Количество собранного лута
+        """
+        if not self.refresher_url:
+            return 0
+
+        try:
+            # Вызываем refresher
+            resp = self.client.session.get(self.refresher_url, timeout=10)
+            if resp.status_code != 200:
+                return 0
+
+            response_text = resp.text
+
+            # Ищем lootTakeUrl в ответе refresher (он там есть!)
+            loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", response_text)
+            if loot_url_match:
+                self.loot_take_url = loot_url_match.group(1)
+
+            # Ищем все dropLoot в ответе
+            if "dropLoot" not in response_text:
+                return 0
+
+            # Парсим ID лута
+            loot_ids = re.findall(r"id:\s*'(\d+)'", response_text)
+            if not loot_ids or not self.loot_take_url:
+                return 0
+
+            collected = 0
+            for loot_id in loot_ids:
+                if loot_id not in self.collected_loot:
+                    take_url = self.loot_take_url + loot_id
+                    try:
+                        self.client.session.get(take_url, timeout=5)
+                        self.collected_loot.add(loot_id)
+                        collected += 1
+                        log_info(f"[LOOT] Собран: {loot_id}")
+                    except Exception as e:
+                        log_error(f"[LOOT ERROR] {e}")
+
+            return collected
+
+        except Exception as e:
+            log_error(f"[REFRESHER ERROR] {e}")
+            return 0
 
     def _set_difficulty(self, target="brutal"):
         """
@@ -97,8 +329,8 @@ class DungeonRunner:
                 else:
                     self.current_difficulty = "normal"
 
-    def get_all_available_dungeons(self, section_id="tab2"):
-        """Получает список всех доступных данженов"""
+    def get_all_available_dungeons(self, section_id=None):
+        """Получает список всех доступных данженов из всех вкладок в dungeon_tabs"""
         print("\n[*] Loading dungeons page...")
         resp = self.client.get("/dungeons?52")
 
@@ -120,17 +352,36 @@ class DungeonRunner:
             "Referer": resp.url,
         }
 
-        section_url = f"{api_section_url}&section_id={section_id}"
-        dungeons_resp = self.client.session.get(section_url, headers=headers)
+        # Получаем список вкладок из конфига (по умолчанию tab2)
+        from requests_bot.config import get_dungeon_tabs
+        tabs_to_load = get_dungeon_tabs() if section_id is None else [section_id]
+
+        all_dungeons = []
+
+        # Загружаем все вкладки
+        for tab in tabs_to_load:
+            section_url = f"{api_section_url}&section_id={tab}"
+            dungeons_resp = self.client.session.get(section_url, headers=headers)
+            try:
+                data = dungeons_resp.json()
+                tab_dungeons = data.get("section", {}).get("dungeons", [])
+                all_dungeons.extend(tab_dungeons)
+            except Exception as e:
+                print(f"[WARN] Failed to load tab {tab}: {e}")
 
         available = []
+        print(f"[*] Found {len(all_dungeons)} dungeons")
+
         try:
-            data = dungeons_resp.json()
-            dungeons = data.get("section", {}).get("dungeons", [])
 
-            print(f"[*] Found {len(dungeons)} dungeons")
+            # Загружаем актуальный список скипнутых данжей из deaths.json
+            deaths = load_deaths()
+            skipped_ids = set(SKIP_DUNGEONS)  # Из конфига
+            for dungeon_id, data in deaths.items():
+                if data.get("skipped") or data.get("current_difficulty") == "skip":
+                    skipped_ids.add(dungeon_id)
 
-            for d in dungeons:
+            for d in all_dungeons:
                 cooldown = d.get("cooldown", 0)
                 name = d.get("name", "?").replace("<br>", " ")
                 dng_id = d.get("id")
@@ -139,8 +390,10 @@ class DungeonRunner:
                     mins = cooldown // 1000 // 60
                     secs = cooldown // 1000 % 60
                     print(f"  - {name}: CD {mins}m {secs}s")
-                elif dng_id in SKIP_DUNGEONS:
-                    print(f"  - {name}: SKIP (blacklisted)")
+                elif dng_id in skipped_ids:
+                    print(f"  - {name}: SKIP (deaths.json)")
+                elif config_module.ONLY_DUNGEONS and dng_id not in config_module.ONLY_DUNGEONS:
+                    print(f"  - {name}: SKIP (not in only_dungeons)")
                 else:
                     print(f"  - {name}: READY")
                     available.append({"id": dng_id, "name": name})
@@ -222,6 +475,15 @@ class DungeonRunner:
         """Входит в данжен и начинает бой"""
         print(f"\n[*] Entering dungeon: {dungeon_id}")
         self.current_dungeon_id = dungeon_id  # Сохраняем для лимитов
+        self.collected_loot.clear()  # Очищаем лут от предыдущего данжена
+        self.loot_take_url = None  # Сбрасываем URL лута
+
+        # Проверяем и ремонтируем снаряжение перед входом
+        try:
+            if self.client.repair_equipment():
+                print("[*] Снаряжение отремонтировано перед данженом")
+        except Exception as e:
+            print(f"[*] Ошибка проверки ремонта: {e}")
 
         headers = {
             "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -311,15 +573,33 @@ class DungeonRunner:
         # 5. Ищем кнопку "Начать бой"
         result = self._start_combat()
         # "completed" здесь маловероятно при входе, но если уже завершено - это тоже успех
+        # "stuck" - баг игры, кнопка не работает - пропускаем данж
+        # "died" - подземелье закрыто (смерть без воскрешения)
+        if result == "stuck":
+            return "stuck"
+        if result == "died":
+            return "died"
         return result == True or result == "completed"
 
     def _start_combat(self, retry=0):
         """Начинает бой из lobby/standby/step страницы"""
         html = self.client.current_page
         soup = self.client.soup()
+        current_url = self.client.current_url or ""
+
+        # Проверяем "Подземелье закрыто" (смерть без воскрешения)
+        if "DungeonClosedPage" in current_url or "Подземелье закрыто" in (html or ""):
+            print("[*] Подземелье закрыто (смерть без воскрешения)")
+            # Пробуем покинуть банду
+            leave_url = self._find_leave_party_url()
+            if leave_url:
+                print("[*] Покидаем банду после смерти...")
+                self.client.get(leave_url)
+                time.sleep(1)
+            return "died"
 
         # Проверяем сначала - может данжен уже завершён
-        url_lower = self.client.current_url.lower()
+        url_lower = current_url.lower()
         if "dungeoncompleted" in url_lower:
             print("[*] Dungeon already completed (URL)")
             return "completed"
@@ -340,6 +620,7 @@ class DungeonRunner:
                     resp = self.client.get(href)
                     if "/combat" in resp.url:
                         self.combat_url = resp.url
+                        self._save_loot_url_from_combat_page()
                         return True
                     # Проверяем - может это был последний этап и данжен завершён
                     resp_url_lower = resp.url.lower()
@@ -365,6 +646,7 @@ class DungeonRunner:
             print(f"[*] Starting combat (ppAction)...")
             resp = self.client.get(start_url)
             self.combat_url = resp.url
+            self._save_loot_url_from_combat_page()
             return "/combat" in resp.url
 
         # Вариант 3: Прямая ссылка на /combat/
@@ -373,6 +655,7 @@ class DungeonRunner:
             print(f"[*] Found direct combat link")
             resp = self.client.get(combat_link.group(1))
             self.combat_url = resp.url
+            self._save_loot_url_from_combat_page()
             return "/combat" in resp.url
 
         # Вариант 4: Wicket AJAX linkStartCombat
@@ -405,6 +688,7 @@ class DungeonRunner:
                     print(f"[*] Redirecting to combat: {combat_url}")
                     resp = self.client.get(combat_url)
                     self.combat_url = resp.url
+                    self._save_loot_url_from_combat_page()
                     return "/combat" in resp.url
 
                 # Ищем Loading content
@@ -414,6 +698,7 @@ class DungeonRunner:
                     print(f"[*] Loading combat: {combat_url}")
                     resp = self.client.get(combat_url)
                     self.combat_url = resp.url
+                    self._save_loot_url_from_combat_page()
                     return "/combat" in resp.url
 
         # Retry: страница могла не загрузиться полностью
@@ -423,8 +708,43 @@ class DungeonRunner:
             self.client.get(self.client.current_url)  # Обновляем страницу
             return self._start_combat(retry=retry + 1)
 
+        # Баг игры: кнопка "Начать бой!" без AJAX обработчика (Пороги Шэдоу Гарда)
+        # Пробуем покинуть банду и вернуться к списку данжей
+        current_url = self.client.current_url or ""
+        print(f"[DEBUG] Current URL after retries: {current_url}")
+
+        if "/dungeon/lobby/" in current_url:
+            leave_url = self._find_leave_party_url()
+            print(f"[DEBUG] Leave party URL: {leave_url}")
+            if leave_url:
+                print("[*] Застряли в lobby (баг игры). Покидаем банду...")
+                resp = self.client.get(leave_url)
+                time.sleep(1)
+                # Возвращаем "stuck" чтобы бот знал что нужно пропустить этот данж
+                return "stuck"
+            else:
+                print("[*] Застряли в lobby, но кнопка 'Покинуть банду' не найдена")
+                # Пробуем просто перейти в город
+                self.client.get(f"{self.base_url}/city")
+                return "stuck"
+
         print("[ERR] Could not start combat")
         return False
+
+    def _find_leave_party_url(self):
+        """Ищет URL для кнопки 'Покинуть банду' в лобби"""
+        html = self.client.current_page
+        if not html:
+            return None
+
+        # Ищем ссылку с ppAction=leaveParty
+        match = re.search(r'href="([^"]*ppAction=leaveParty[^"]*)"', html)
+        if match:
+            url = match.group(1).replace("&amp;", "&")
+            if not url.startswith("http"):
+                url = self.base_url + url
+            return url
+        return None
 
     def _make_ajax_request(self, url):
         """AJAX запрос для боя"""
@@ -434,14 +754,104 @@ class DungeonRunner:
 
         base_path = self.combat_url.split("?")[0].replace(self.base_url, "") if self.combat_url else ""
 
+        # Добавляем timestamp и tmt как браузер
+        import random
+        timestamp = int(time.time() * 1000)
+        tmt = random.randint(10, 50)  # Браузер шлёт примерно такие значения
+
+        # Добавляем параметры к URL
+        separator = "&" if "?" in url else "?"
+        url_with_params = f"{url}{separator}_={timestamp}&tmt={tmt}"
+
         headers = {
             "Wicket-Ajax": "true",
             "Wicket-Ajax-BaseURL": base_path.lstrip("/"),
+            "Wicket-FocusedElementId": "ptx_combat_rich2_attack_link",
             "X-Requested-With": "XMLHttpRequest",
             "Accept": "application/xml, text/xml, */*; q=0.01",
             "Referer": self.combat_url or self.client.current_url,
         }
-        return self.client.session.get(url, headers=headers)
+        return self.client.session.get(url_with_params, headers=headers)
+
+    def _send_activity_report(self):
+        """
+        Отправляет activity report серверу (lnkReportBack).
+        Браузер отправляет этот запрос периодически чтобы сообщить серверу об активности.
+        Без этого сервер может считать клиента неактивным и не отправлять лут.
+        """
+        if not self.report_back_url:
+            return
+
+        now = time.time()
+        # Отправляем не чаще чем раз в 3 секунды
+        if now - self.last_report_back_time < 3:
+            return
+
+        try:
+            base_path = self.combat_url.split("?")[0].replace(self.base_url, "") if self.combat_url else ""
+            timestamp = int(now * 1000)
+
+            headers = {
+                "Wicket-Ajax": "true",
+                "Wicket-Ajax-BaseURL": base_path.lstrip("/"),
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/xml, text/xml, */*; q=0.01",
+                "Referer": self.combat_url or self.client.current_url,
+            }
+
+            url = f"{self.report_back_url}&_={timestamp}"
+            self.client.session.get(url, headers=headers, timeout=5)
+            self.last_report_back_time = now
+            log_debug("[LOOT] Activity report sent")
+        except Exception as e:
+            log_debug(f"[LOOT] Activity report failed: {e}")
+
+    def _send_metronome(self):
+        """
+        Отправляет metronome heartbeat серверу.
+        КРИТИЧНО: Браузер отправляет это каждые 1-2 секунды!
+        Без этого сервер считает клиента неактивным и НЕ отправляет лут через WebSocket.
+
+        Формат запроса:
+        ?pageId-IEndpointBehaviorListener.1-combatPanel-container&1=normal&tmt=-1006&ctx=metronome&dls=3&tmgs=&stteHdn=false
+        """
+        if not self.metronome_url:
+            return
+
+        now = time.time()
+        # Отправляем каждые 1.5 секунды (браузер шлёт каждые 1-2 сек)
+        if now - self.last_metronome_time < 1.5:
+            return
+
+        try:
+            import random
+            self.metronome_count += 1
+            # tmt - какой-то timing, браузер шлёт отрицательные значения
+            tmt = random.randint(-2000, -500)
+
+            # Формируем URL с параметрами metronome
+            url = f"{self.metronome_url}&tmt={tmt}&ctx=metronome&dls={self.metronome_count}&tmgs=&stteHdn=false"
+
+            headers = {
+                "Accept": "application/json,text/html,application/xhtml+xml,application/xml",
+                "Referer": f"{self.base_url}/scripts/combat_callback.js",
+            }
+
+            resp = self.client.session.get(url, headers=headers, timeout=5)
+            self.last_metronome_time = now
+
+            # Проверяем ответ
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    if data.get("status") == "OK":
+                        log_debug(f"[LOOT] Metronome OK (dls={self.metronome_count})")
+                    else:
+                        log_debug(f"[LOOT] Metronome response: {data}")
+                except:
+                    log_debug(f"[LOOT] Metronome sent (non-JSON response)")
+        except Exception as e:
+            log_debug(f"[LOOT] Metronome failed: {e}")
 
     def check_and_use_stalker_seal(self):
         """
@@ -504,45 +914,6 @@ class DungeonRunner:
         print("[EVENT] Не удалось активировать Печать за 10 попыток")
         return False
 
-    def check_shadow_guard_tutorial(self):
-        """
-        Проверяет, находимся ли мы в туториале Shadow Guard (Пороги Шэдоу Гарда).
-        Если видим "Голос Джека" — нужно покинуть банду, т.к. там слишком много врагов.
-        Возвращает True если нажали "Покинуть банду".
-        """
-        html = self.client.current_page
-        soup = self.client.soup()
-        if not soup:
-            return False
-
-        # Проверяем наличие battlefield-lore с текстом Джека
-        lore = soup.select_one("div.battlefield-lore-inner, div.lore-inner")
-        if not lore:
-            return False
-
-        lore_text = lore.get_text(strip=True).lower()
-
-        # Если это туториал Shadow Guard (Голос Джека)
-        if "голос джека" not in lore_text and "джек" not in lore_text:
-            return False
-
-        print("[SHADOW] Обнаружен туториал Shadow Guard (Голос Джека) — выходим!")
-
-        # Ищем кнопку "Покинуть банду"
-        for btn in soup.select("a.go-btn"):
-            btn_text = btn.get_text(strip=True)
-            if "Покинуть банду" in btn_text:
-                href = btn.get("href")
-                if href and not href.startswith("javascript"):
-                    leave_url = urljoin(self.client.current_url, href)
-                    self.client.get(leave_url)
-                    print("[SHADOW] Покинули Shadow Guard туториал")
-                    time.sleep(2)
-                    return True
-
-        print("[SHADOW] Кнопка 'Покинуть банду' не найдена")
-        return False
-
     def fight_until_done(self, max_actions=None):
         """Бьёмся до конца данжена"""
         # Определяем лимит действий для этого данжена
@@ -556,25 +927,9 @@ class DungeonRunner:
         actions = 0
         stage = 1
         last_gcd_time = 0  # Глобальный КД
-        skill_cooldowns = {}  # Индивидуальные КД скиллов {pos: last_use_time}
         GCD = 2.0  # Глобальный КД
         ATTACK_CD = 0.6  # Задержка между атаками
         consecutive_no_units = 0  # Счётчик попыток без юнитов
-
-        # Индивидуальные КД скиллов (из профиля или дефолтные)
-        profile_cds = get_skill_cooldowns()
-        if profile_cds:
-            SKILL_CDS = profile_cds
-            print(f"[*] Using profile skill CDs: {SKILL_CDS}")
-        else:
-            # Дефолтные КД (измерено skill_cd_observer.py + 0.5s буфер)
-            SKILL_CDS = {
-                1: 15.5,
-                2: 24.5,
-                3: 39.5,
-                4: 54.5,
-                5: 42.5,
-            }
 
         print(f"\n{'='*50}")
         print(f"COMBAT STARTED - Stage {stage}")
@@ -584,14 +939,20 @@ class DungeonRunner:
         reset_watchdog()
 
         return self._combat_loop(
-            max_actions, actions, stage, last_gcd_time, skill_cooldowns,
-            GCD, ATTACK_CD, consecutive_no_units, SKILL_CDS
+            max_actions, actions, stage, last_gcd_time,
+            GCD, ATTACK_CD, consecutive_no_units
         )
 
     def _combat_loop(self, max_actions, actions, stage, last_gcd_time,
-                     skill_cooldowns, GCD, ATTACK_CD, consecutive_no_units, SKILL_CDS):
+                     GCD, ATTACK_CD, consecutive_no_units):
         """Внутренний цикл боя"""
         while actions < max_actions:
+            # КРИТИЧНО: Отправляем metronome heartbeat - без этого сервер не шлёт лут!
+            self._send_metronome()
+
+            # Отправляем activity report - сервер должен знать что клиент активен
+            self._send_activity_report()
+
             # Проверяем watchdog
             if is_watchdog_triggered():
                 print("[WATCHDOG] Застряли в бою! Выходим...")
@@ -626,10 +987,6 @@ class DungeonRunner:
                     print(f"\n[?] Unknown state after {actions} actions")
                     return "unknown", actions
 
-            # Проверяем Shadow Guard туториал (Голос Джека) — выходим если обнаружен
-            if self.check_shadow_guard_tutorial():
-                return "shadow_guard_exit", actions
-
             # Проверяем Печать Сталкера (в ивенте)
             if self.check_and_use_stalker_seal():
                 continue  # После активации печати продолжаем бой
@@ -642,6 +999,7 @@ class DungeonRunner:
 
             # Пробуем скиллы если GCD прошёл
             now = time.time()
+            skill_used = False
             if (now - last_gcd_time) >= GCD:
                 ready_skills = parser.get_ready_skills()
                 # Получаем HP врага и пороги скиллов
@@ -650,11 +1008,8 @@ class DungeonRunner:
 
                 for skill in ready_skills:
                     pos = skill["pos"]
-                    # Проверяем индивидуальный КД скилла
-                    skill_cd = SKILL_CDS.get(pos, 15.0)  # Дефолт 15 сек
-                    last_use = skill_cooldowns.get(pos, 0)
-                    if (now - last_use) < skill_cd:
-                        continue  # Этот скилл ещё на КД
+                    # КД скилла проверяется динамически в parser.get_ready_skills() из HTML
+                    # Дополнительная проверка статичных КД из конфига больше НЕ нужна
 
                     # Проверяем порог HP для этого скилла
                     if pos in hp_thresholds:
@@ -666,30 +1021,43 @@ class DungeonRunner:
                     if resp and resp.status_code == 200:
                         print(f"[SKILL] Used skill {pos} (enemy HP: {enemy_hp})")
                         actions += 1
-                        skill_cooldowns[pos] = time.time()
                         last_gcd_time = time.time()
                         reset_watchdog()  # Успешное действие
                         consecutive_no_units = 0
-                        # Обновляем страницу
+                        # Обновляем страницу для следующего действия
                         self.client.get(self.combat_url)
+                        # Увеличиваем счётчик атак и собираем лут через refresher каждые 3 атаки
+                        self.attack_count += 1
+                        if self.attack_count % 3 == 0:
+                            self._collect_loot_via_refresher()
                         time.sleep(GCD)
+                        skill_used = True
                         break  # После одного скилла выходим, т.к. GCD
 
+            # После скилла пропускаем атаку - возвращаемся к началу цикла
+            if skill_used:
+                continue
+
             # Атака
-            attack_url = parser.get_attack_url()
-            if attack_url:
-                resp = self._make_ajax_request(attack_url)
+            action_url = parser.get_attack_url()
+
+            if action_url:
+                resp = self._make_ajax_request(action_url)
                 if resp and resp.status_code == 200:
                     actions += 1
                     reset_watchdog()  # Успешное действие
                     consecutive_no_units = 0
                     if actions % 5 == 0:
                         print(f"[ATTACK] #{actions}")
-                    # Обновляем страницу
+                    # Обновляем страницу для следующего действия
                     self.client.get(self.combat_url)
+                    # Увеличиваем счётчик атак и собираем лут через refresher каждые 3 атаки
+                    self.attack_count += 1
+                    if self.attack_count % 3 == 0:
+                        self._collect_loot_via_refresher()
                     time.sleep(ATTACK_CD)
                 else:
-                    print(f"[ERR] Attack failed: {resp.status_code}")
+                    print(f"[ERR] Attack failed")
                     consecutive_no_units += 1
                     if consecutive_no_units >= 40:
                         print("[WATCHDOG] 40 попыток без прогресса!")
@@ -706,6 +1074,11 @@ class DungeonRunner:
 
     def _check_dungeon_state(self):
         """Проверяет состояние после боя"""
+        # Финальный сбор лута через refresher (когда все враги убиты)
+        collected = self._collect_loot_via_refresher()
+        if collected > 0:
+            log_info(f"[LOOT] Собрано в конце боя: {collected} предметов")
+
         html = self.client.current_page
         url = self.client.current_url
         soup = self.client.soup()
@@ -748,6 +1121,7 @@ class DungeonRunner:
                         resp = self.client.get(href)
                         if "/combat" in resp.url:
                             self.combat_url = resp.url
+                            self._save_loot_url_from_combat_page()
                             return "next_stage"
                         # Может потребоваться запустить бой
                         result = self._start_combat()
@@ -773,6 +1147,7 @@ class DungeonRunner:
                     resp = self.client.get(href)
                     if "/combat" in resp.url:
                         self.combat_url = resp.url
+                        self._save_loot_url_from_combat_page()
                         return "next_stage"
                     # Проверяем - может данжен завершён после клика
                     resp_url_lower = resp.url.lower()
@@ -807,6 +1182,7 @@ class DungeonRunner:
                 # Если это уже combat - отлично
                 if "/combat" in resp.url:
                     self.combat_url = resp.url
+                    self._save_loot_url_from_combat_page()
                     return "next_stage"
 
                 # Иначе нужно снова запустить бой (standby/step page)
@@ -874,7 +1250,7 @@ def main():
 
     while True:
         # Получаем список доступных данженов
-        dungeons, api_link_url = runner.get_all_available_dungeons("tab2")
+        dungeons, api_link_url = runner.get_all_available_dungeons()
 
         if not dungeons:
             print("\n" + "=" * 50)

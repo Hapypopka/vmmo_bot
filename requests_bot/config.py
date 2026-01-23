@@ -15,6 +15,7 @@ PROFILES_DIR = os.path.join(SCRIPT_DIR, "profiles")
 # Текущий профиль (устанавливается через set_profile)
 _current_profile = None
 _profile_config = {}
+PROFILE_DIR = None  # Папка текущего профиля
 
 # Пути по умолчанию (переопределяются при загрузке профиля)
 LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
@@ -51,27 +52,108 @@ SKIP_DUNGEONS = [
     # "dng:RestMonastery",  # Монастырь покоя - тест
 ]
 
+# Only these dungeons (whitelist) - if set, ONLY these dungeons will be run
+ONLY_DUNGEONS = []  # Empty = all dungeons allowed
+
 # Protected items - never sell or disassemble
-PROTECTED_ITEMS = [
+# Дефолтные значения (используются если нет файла)
+_DEFAULT_PROTECTED_ITEMS = [
+    # Крафт железа
     "Железо",
     "Железная Руда",
     "Железный Слиток",
+    # Крафт меди/бронзы
+    "Медь",
+    "Медная Руда",
+    "Бронза",
+    # Крафт платины
+    "Платина",
+    # Квестовые/ценные
     "Треснутый Кристалл Тикуана",
     "Печать Сталкера I",
     "Печать Сталкера II",
     "Печать Сталкера III",
-    # Квестовые/ценные предметы
     "Золотой Оберег",
     "Изумительная пылинка",
     # Все ларцы оберегов (частичное совпадение)
     "Оберегов",
+    # Сундуки/ларцы (открываем, не продаём)
+    "Сундук",
+    "Ларец",
+    "Ящик",
+    "Шкатулка",
+    # Экипировка
+    "Шлем Нордов",
+    # Ресурсы ивентов
+    "Ледяной Кристалл",
+    "Уголь Эфирного Древа",
 ]
+
+# Файл с защищёнными предметами (редактируется через ТГ)
+PROTECTED_ITEMS_FILE = os.path.join(SCRIPT_DIR, "protected_items.json")
+
+def _load_protected_items():
+    """Загружает защищённые предметы из файла или возвращает дефолт"""
+    if os.path.exists(PROTECTED_ITEMS_FILE):
+        try:
+            with open(PROTECTED_ITEMS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"[CONFIG] Ошибка загрузки protected_items: {e}")
+    return _DEFAULT_PROTECTED_ITEMS.copy()
+
+# Загружаем при старте
+PROTECTED_ITEMS = _load_protected_items()
+
+
+def add_protected_item(item_name):
+    """
+    Добавляет предмет в список защищённых.
+    Используется при сборе ежедневных наград.
+
+    Args:
+        item_name: Название предмета
+
+    Returns:
+        bool: True если добавлен (или уже был)
+    """
+    global PROTECTED_ITEMS
+
+    # Проверяем, нет ли уже такого (частичное совпадение)
+    item_lower = item_name.lower()
+    for existing in PROTECTED_ITEMS:
+        if existing.lower() in item_lower or item_lower in existing.lower():
+            print(f"[CONFIG] Предмет '{item_name}' уже защищён (как '{existing}')")
+            return True
+
+    # Добавляем
+    PROTECTED_ITEMS.append(item_name)
+
+    # Сохраняем в файл
+    try:
+        with open(PROTECTED_ITEMS_FILE, "w", encoding="utf-8") as f:
+            json.dump(PROTECTED_ITEMS, f, ensure_ascii=False, indent=2)
+        print(f"[CONFIG] Добавлен защищённый предмет: {item_name}")
+        return True
+    except IOError as e:
+        print(f"[CONFIG] Ошибка сохранения protected_items: {e}")
+        return False
+
 
 # HTTP headers
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1",
+    "DNT": "1",
+    "Sec-GPC": "1",
 }
 
 AJAX_HEADERS = {
@@ -86,7 +168,7 @@ def load_settings():
     try:
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except:
+    except (json.JSONDecodeError, FileNotFoundError, IOError):
         return {}
 
 
@@ -105,11 +187,12 @@ def set_profile(profile_name):
     Устанавливает профиль и обновляет все пути.
     Вызывается при старте бота с --profile аргументом.
     """
-    global _current_profile, _profile_config
+    global _current_profile, _profile_config, PROFILE_DIR
     global LOGS_DIR, COOKIES_FILE, STATS_FILE
     global SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS
 
     profile_dir = os.path.join(PROFILES_DIR, profile_name)
+    PROFILE_DIR = profile_dir  # Сохраняем глобально
     config_file = os.path.join(profile_dir, "config.json")
 
     if not os.path.exists(profile_dir):
@@ -125,23 +208,40 @@ def set_profile(profile_name):
     COOKIES_FILE = os.path.join(profile_dir, "cookies.json")
     STATS_FILE = os.path.join(profile_dir, "stats.json")
 
-    print(f"[CONFIG] COOKIES_FILE = {COOKIES_FILE}")
+    try:
+        print(f"[CONFIG] COOKIES_FILE = {COOKIES_FILE}")
+    except UnicodeEncodeError:
+        print(f"[CONFIG] COOKIES_FILE = (path with special chars)")
 
     # Загружаем конфиг профиля
     if os.path.exists(config_file):
         with open(config_file, "r", encoding="utf-8") as f:
             _profile_config = json.load(f)
         print(f"[CONFIG] Loaded profile: {profile_name} ({_profile_config.get('name', 'unnamed')})")
+
+        # Миграция старого формата craft_queue → craft_items
+        migrate_craft_queue_to_items()
     else:
         _profile_config = {}
         print(f"[CONFIG] Profile '{profile_name}' has no config.json, using defaults")
 
     # Обновляем настройки из профиля
+    global SKIP_DUNGEONS, ONLY_DUNGEONS
     if "skip_dungeons" in _profile_config:
-        SKIP_DUNGEONS = _profile_config["skip_dungeons"]
+        SKIP_DUNGEONS = _profile_config["skip_dungeons"].copy()
+    else:
+        SKIP_DUNGEONS = []
+
+    if "only_dungeons" in _profile_config:
+        ONLY_DUNGEONS = _profile_config["only_dungeons"].copy()
+    else:
+        ONLY_DUNGEONS = []
 
     if "dungeon_action_limits" in _profile_config:
         DUNGEON_ACTION_LIMITS.update(_profile_config["dungeon_action_limits"])
+
+    # Загружаем скипнутые данжены из deaths.json
+    _load_skipped_from_deaths()
 
     return _profile_config
 
@@ -161,9 +261,29 @@ def get_profile_username():
     return _profile_config.get("username", _current_profile or "unknown")
 
 
+def is_dungeons_enabled():
+    """Проверяет, включены ли обычные данжены для текущего профиля"""
+    return _profile_config.get("dungeons_enabled", True)
+
+
 def is_event_dungeon_enabled():
-    """Проверяет, включен ли ивент для текущего профиля"""
-    return _profile_config.get("event_dungeon_enabled", True)
+    """Проверяет, включен ли ивент Сталкер для текущего профиля"""
+    return _profile_config.get("event_dungeon_enabled", False)
+
+
+def is_ny_event_dungeon_enabled():
+    """Проверяет, включен ли NY ивент (Логово Демона Мороза) для текущего профиля"""
+    return _profile_config.get("ny_event_dungeon_enabled", False)
+
+
+def is_arena_enabled():
+    """Проверяет, включена ли арена для текущего профиля"""
+    return _profile_config.get("arena_enabled", False)
+
+
+def get_arena_max_fights():
+    """Возвращает максимум боёв на арене за сессию"""
+    return _profile_config.get("arena_max_fights", 50)
 
 
 def is_hell_games_enabled():
@@ -171,9 +291,255 @@ def is_hell_games_enabled():
     return _profile_config.get("hell_games_enabled", True)
 
 
+def is_light_side():
+    """
+    Проверяет, светлый ли персонаж (для Адских Игр).
+    Светлые атакуют dark источники, тёмные атакуют light.
+    По умолчанию False (тёмный).
+    """
+    return _profile_config.get("is_light_side", False)
+
+
 def is_pet_resurrection_enabled():
     """Проверяет, включено ли автовоскрешение питомца для текущего профиля"""
     return _profile_config.get("pet_resurrection_enabled", False)
+
+
+def is_survival_mines_enabled():
+    """Проверяет, включена ли Заброшенная Шахта для текущего профиля"""
+    return _profile_config.get("survival_mines_enabled", False)
+
+
+def is_daily_rewards_enabled():
+    """Проверяет, включен ли автосбор ежедневных наград для текущего профиля"""
+    return _profile_config.get("daily_rewards_enabled", False)
+
+
+def is_iron_craft_enabled():
+    """Проверяет, включен ли крафт железа для текущего профиля"""
+    return _profile_config.get("iron_craft_enabled", False)
+
+
+def get_dungeon_tabs():
+    """
+    Возвращает список вкладок данжей для проверки.
+    По умолчанию ["tab2"] (50+).
+
+    Формат в config.json:
+    "dungeon_tabs": ["tab2", "tab3"]  // 50+ и 30-39
+    """
+    return _profile_config.get("dungeon_tabs", ["tab2"])
+
+
+def get_extra_dungeons():
+    """
+    Возвращает список дополнительных данжей из других вкладок.
+
+    Формат в config.json:
+    "extra_dungeons": [
+        {"tab": "tab3", "id": "dng:ShadowGuard"}
+    ]
+    """
+    return _profile_config.get("extra_dungeons", [])
+
+
+# ============================================
+# Очередь крафта
+# ============================================
+
+# Доступные предметы для крафта
+CRAFTABLE_ITEMS = {
+    "rawOre": "Железная Руда",
+    "iron": "Железо",
+    "ironBar": "Железный Слиток",
+    "rawCopper": "Медная Руда",
+    "copper": "Медь",
+    "copperBar": "Медный Слиток",
+    "bronze": "Бронза",
+    "bronzeBar": "Бронзовый Слиток",
+    "rawPlatinum": "Платиновая Руда",
+    "platinum": "Платина",
+    "platinumBar": "Платиновый Слиток",
+    "thor": "Тор",
+    "thorBar": "Слиток Тора",
+    "twilightSteel": "Сумеречная Сталь",
+    "twilightAnthracite": "Сумеречный Антрацит",
+}
+
+
+def get_craft_items():
+    """
+    Возвращает список предметов для автокрафта.
+
+    Формат в config.json:
+    "craft_items": [
+        {"item": "copper", "batch_size": 5},
+        {"item": "iron", "batch_size": 10}
+    ]
+
+    Returns:
+        list: Список предметов для крафта
+    """
+    return _profile_config.get("craft_items", [])
+
+
+def add_craft_item(item_id, batch_size):
+    """
+    Добавляет предмет в список автокрафта.
+
+    Args:
+        item_id: ID предмета (iron, ironBar, copper, bronze, platinum)
+        batch_size: Размер партии для продажи
+
+    Returns:
+        bool: True если успешно
+    """
+    global _profile_config
+
+    if item_id not in CRAFTABLE_ITEMS:
+        return False
+
+    if "craft_items" not in _profile_config:
+        _profile_config["craft_items"] = []
+
+    _profile_config["craft_items"].append({
+        "item": item_id,
+        "batch_size": int(batch_size)
+    })
+
+    save_profile_config()
+    return True
+
+
+def set_craft_finish_time(finish_timestamp):
+    """
+    Сохраняет время завершения крафта (unix timestamp).
+
+    Args:
+        finish_timestamp: Unix timestamp когда крафт завершится
+    """
+    global _profile_config
+    _profile_config["craft_finish_time"] = finish_timestamp
+    save_profile_config()
+
+
+def get_craft_finish_time():
+    """
+    Возвращает время завершения крафта (unix timestamp).
+
+    Returns:
+        int or None: Unix timestamp или None если крафт не запущен
+    """
+    return _profile_config.get("craft_finish_time")
+
+
+def clear_craft_finish_time():
+    """Очищает сохранённое время завершения крафта"""
+    global _profile_config
+    if "craft_finish_time" in _profile_config:
+        del _profile_config["craft_finish_time"]
+        save_profile_config()
+
+
+def is_craft_ready_soon(threshold_seconds=60):
+    """
+    Проверяет, скоро ли завершится крафт.
+
+    Args:
+        threshold_seconds: За сколько секунд до завершения считать "скоро"
+
+    Returns:
+        bool: True если крафт завершится в течение threshold_seconds
+    """
+    import time
+    finish_time = get_craft_finish_time()
+    if not finish_time:
+        return False
+
+    current_time = int(time.time())
+    time_left = finish_time - current_time
+
+    # Если time_left <= 0, крафт УЖЕ готов (или просрочен)
+    # Если 0 < time_left <= threshold, крафт СКОРО готов
+    return time_left <= threshold_seconds
+
+
+def remove_craft_item(index):
+    """
+    Удаляет предмет из списка автокрафта по индексу.
+
+    Args:
+        index: Индекс предмета в списке
+
+    Returns:
+        bool: True если успешно
+    """
+    global _profile_config
+
+    items = _profile_config.get("craft_items", [])
+    if 0 <= index < len(items):
+        items.pop(index)
+        _profile_config["craft_items"] = items
+        save_profile_config()
+        return True
+    return False
+
+
+def clear_craft_items():
+    """Очищает весь список автокрафта"""
+    global _profile_config
+    _profile_config["craft_items"] = []
+    save_profile_config()
+
+
+def migrate_craft_queue_to_items():
+    """
+    Конвертирует старый craft_queue в новый craft_items.
+    Вызывается автоматически при загрузке конфига.
+    """
+    global _profile_config
+
+    old_queue = _profile_config.get("craft_queue", [])
+
+    # Проверяем что это старый формат (есть поле "done")
+    if old_queue and isinstance(old_queue, list) and len(old_queue) > 0:
+        if "done" in old_queue[0]:
+            # Старый формат - мигрируем
+            new_items = [
+                {"item": task["item"], "batch_size": task["count"]}
+                for task in old_queue
+            ]
+            _profile_config["craft_items"] = new_items
+            del _profile_config["craft_queue"]
+            save_profile_config()
+            print(f"[CONFIG] Мигрирован craft_queue → craft_items ({len(new_items)} предметов)")
+
+
+def save_profile_config():
+    """Сохраняет конфиг текущего профиля в файл"""
+    global _profile_config, _current_profile
+
+    if not _current_profile:
+        return False
+
+    config_file = os.path.join(PROFILES_DIR, _current_profile, "config.json")
+    try:
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(_profile_config, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[CONFIG] Ошибка сохранения: {e}")
+        return False
+
+
+def get_survival_mines_max_wave():
+    """Возвращает максимальную волну для выхода из шахты (по умолчанию 31)"""
+    return _profile_config.get("survival_mines_max_wave", 31)
+
+
+def get_survival_mines_max_level():
+    """Возвращает максимальный уровень для шахты (после него бот останавливается)"""
+    return _profile_config.get("survival_mines_max_level", None)
 
 
 def get_skill_cooldowns():
@@ -207,6 +573,84 @@ def get_credentials():
     if username and password:
         return username, password
     return None, None
+
+
+# ============================================
+# Resource Selling Settings
+# ============================================
+
+# Дефолтные настройки продажи ресурсов
+DEFAULT_RESOURCE_SELL_SETTINGS = {
+    "mineral": {"enabled": False, "stack": 1000, "reserve": 200},   # Минерал
+    "skull": {"enabled": False, "stack": 1000, "reserve": 200},      # Череп
+    "sapphire": {"enabled": False, "stack": 100, "reserve": 10},     # Сапфир
+    "ruby": {"enabled": False, "stack": 100, "reserve": 10},         # Рубин
+}
+
+# Маппинг internal_name -> русское название для аукциона
+RESOURCE_NAMES = {
+    "mineral": "Минерал",
+    "skull": "Череп",
+    "sapphire": "Сапфир",
+    "ruby": "Рубин",
+}
+
+# Маппинг internal_name -> id ресурса на сервере
+RESOURCE_IDS = {
+    "mineral": 3,
+    "skull": 2,
+    "sapphire": 4,
+    "ruby": 5,
+}
+
+
+def is_resource_selling_enabled():
+    """Проверяет, включена ли продажа ресурсов хотя бы для одного типа"""
+    settings = get_resource_sell_settings()
+    return any(s.get("enabled", False) for s in settings.values())
+
+
+def get_resource_sell_settings():
+    """
+    Возвращает настройки продажи ресурсов.
+
+    Формат в config.json:
+    "resource_sell": {
+        "mineral": {"enabled": true, "stack": 1000, "reserve": 200},
+        "skull": {"enabled": true, "stack": 1000, "reserve": 200},
+        "sapphire": {"enabled": false, "stack": 100, "reserve": 10},
+        "ruby": {"enabled": false, "stack": 100, "reserve": 10}
+    }
+
+    Returns:
+        dict: Настройки для каждого ресурса
+    """
+    saved = _profile_config.get("resource_sell", {})
+    result = {}
+
+    for res_key, defaults in DEFAULT_RESOURCE_SELL_SETTINGS.items():
+        res_settings = saved.get(res_key, {})
+        result[res_key] = {
+            "enabled": res_settings.get("enabled", defaults["enabled"]),
+            "stack": res_settings.get("stack", defaults["stack"]),
+            "reserve": res_settings.get("reserve", defaults["reserve"]),
+        }
+
+    return result
+
+
+def get_resource_sell_config(resource_key):
+    """
+    Возвращает настройки продажи для конкретного ресурса.
+
+    Args:
+        resource_key: mineral, skull, sapphire, ruby
+
+    Returns:
+        dict: {"enabled": bool, "stack": int, "reserve": int}
+    """
+    settings = get_resource_sell_settings()
+    return settings.get(resource_key, DEFAULT_RESOURCE_SELL_SETTINGS.get(resource_key, {}))
 
 
 # ============================================
@@ -245,6 +689,21 @@ def load_deaths():
     except Exception as e:
         print(f"[CONFIG] Ошибка загрузки deaths.json: {e}")
     return {}
+
+
+def _load_skipped_from_deaths():
+    """
+    Загружает скипнутые данжены из deaths.json в SKIP_DUNGEONS.
+    Вызывается при загрузке профиля.
+    """
+    global SKIP_DUNGEONS
+    deaths = load_deaths()
+
+    for dungeon_id, data in deaths.items():
+        if data.get("skipped") or data.get("current_difficulty") == "skip":
+            if dungeon_id not in SKIP_DUNGEONS:
+                SKIP_DUNGEONS.append(dungeon_id)
+                print(f"[CONFIG] Скипаем {data.get('name', dungeon_id)} (из deaths.json)")
 
 
 def save_deaths(deaths):
@@ -301,6 +760,13 @@ def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
 
     # Снижаем сложность
     current_diff = deaths[dungeon_id].get("current_difficulty", "brutal")
+
+    # Если уже skip - оставляем skip
+    if current_diff == "skip":
+        print(f"[CONFIG] {dungeon_name}: уже в skip, оставляем")
+        save_deaths(deaths)
+        return "skip", True
+
     try:
         current_idx = DIFFICULTY_LEVELS.index(current_diff)
         if current_idx < len(DIFFICULTY_LEVELS) - 1:
@@ -311,6 +777,7 @@ def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
             print(f"[CONFIG] {dungeon_name}: уже минимальная сложность (normal)")
             new_diff = "normal"
     except ValueError:
+        # Неизвестная сложность - ставим normal
         deaths[dungeon_id]["current_difficulty"] = "normal"
         new_diff = "normal"
 
@@ -322,12 +789,24 @@ def get_dungeon_difficulty(dungeon_id):
     """
     Получает рекомендуемую сложность для данжена.
 
+    Приоритет:
+    1. deaths.json (если там есть запись)
+    2. dungeon_difficulties из профиля (начальная сложность)
+    3. "brutal" по умолчанию
+
     Returns:
         str: 'brutal', 'hero', или 'normal'
     """
+    # Сначала проверяем deaths.json
     deaths = load_deaths()
     if dungeon_id in deaths:
         return deaths[dungeon_id].get("current_difficulty", "brutal")
+
+    # Проверяем настройку профиля для начальной сложности
+    profile_difficulties = _profile_config.get("dungeon_difficulties", {})
+    if dungeon_id in profile_difficulties:
+        return profile_difficulties[dungeon_id]
+
     return "brutal"  # По умолчанию Брутал
 
 

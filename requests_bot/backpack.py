@@ -6,12 +6,16 @@
 
 import re
 import json
+import time
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from requests_bot.config import (
     BASE_URL, AUCTION_BLACKLIST_FILE, PROTECTED_ITEMS, BACKPACK_THRESHOLD
 )
+
+# TTL для чёрного списка аукциона (24 часа)
+BLACKLIST_TTL = 24 * 60 * 60  # 86400 секунд
 
 try:
     from requests_bot.logger import log_debug, log_info, log_warning, log_backpack
@@ -32,27 +36,83 @@ def is_protected_item(item_name):
 
 
 def load_auction_blacklist():
-    """Загружает чёрный список аукциона"""
+    """
+    Загружает чёрный список аукциона.
+    Формат: {"item_name": timestamp, ...}
+    Возвращает список актуальных имён (не старше BLACKLIST_TTL).
+    """
     try:
         with open(AUCTION_BLACKLIST_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
 
+    # Миграция: если старый формат (список), конвертируем
+    if isinstance(data, list):
+        # Старый формат - конвертируем в новый с текущим временем
+        now = time.time()
+        new_data = {item: now for item in data}
+        save_auction_blacklist_raw(new_data)
+        return list(new_data.keys())
+
+    # Новый формат - фильтруем по TTL
+    now = time.time()
+    valid_items = []
+    expired_count = 0
+
+    for item_name, added_time in data.items():
+        if now - added_time < BLACKLIST_TTL:
+            valid_items.append(item_name)
+        else:
+            expired_count += 1
+
+    if expired_count > 0:
+        print(f"[BLACKLIST] Очищено {expired_count} устаревших записей")
+
+    return valid_items
+
+
+def save_auction_blacklist_raw(data):
+    """Сохраняет чёрный список аукциона (raw dict)"""
+    with open(AUCTION_BLACKLIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 def save_auction_blacklist(blacklist):
-    """Сохраняет чёрный список аукциона"""
-    with open(AUCTION_BLACKLIST_FILE, "w", encoding="utf-8") as f:
-        json.dump(blacklist, f, ensure_ascii=False, indent=2)
+    """Сохраняет чёрный список аукциона (для совместимости)"""
+    # Загружаем текущие данные чтобы сохранить timestamps
+    try:
+        with open(AUCTION_BLACKLIST_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                data = {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {}
+
+    # Обновляем только новые записи
+    now = time.time()
+    for item in blacklist:
+        if item not in data:
+            data[item] = now
+
+    save_auction_blacklist_raw(data)
 
 
 def add_to_auction_blacklist(item_name):
-    """Добавляет предмет в чёрный список аукциона"""
-    blacklist = load_auction_blacklist()
-    if item_name not in blacklist:
-        blacklist.append(item_name)
-        save_auction_blacklist(blacklist)
-        print(f"[BLACKLIST] Добавлен: {item_name}")
+    """Добавляет предмет в чёрный список аукциона с timestamp"""
+    try:
+        with open(AUCTION_BLACKLIST_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                # Миграция старого формата
+                data = {item: time.time() for item in data}
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {}
+
+    if item_name not in data:
+        data[item_name] = time.time()
+        save_auction_blacklist_raw(data)
+        print(f"[BLACKLIST] Добавлен: {item_name} (TTL: 24ч)")
 
 
 class BackpackClient:
@@ -183,8 +243,25 @@ class BackpackClient:
                 if match:
                     count = int(match.group(1))
 
-            # Качество (зелёный = iGood)
+            # Качество (зелёный = iGood, легендарный = iLegendary)
             is_green = "iGood" in classes
+            is_legendary = "iLegendary" in classes
+
+            # Сложность предмета (normal/hard/impossible) - из иконки
+            # <img src="/images/icons/item_impossible.png"> = brutal
+            # <img src="/images/icons/item_hard.png"> = heroic
+            # <img src="/images/icons/item_normal.png"> = normal
+            # Иконка может быть внутри ссылки или в item_div
+            difficulty = None
+            difficulty_img = item_div.select_one("img[src*='item_impossible'], img[src*='item_hard'], img[src*='item_normal']")
+            if difficulty_img:
+                src = difficulty_img.get("src", "")
+                if "item_impossible" in src:
+                    difficulty = "brutal"
+                elif "item_hard" in src:
+                    difficulty = "heroic"
+                elif "item_normal" in src:
+                    difficulty = "normal"
 
             # Кнопки действий
             buttons = {}
@@ -208,11 +285,17 @@ class BackpackClient:
             if not buttons and all_btn_texts:
                 log_debug(f"[BACKPACK] '{name[:20]}' btns raw: {all_btn_texts}")
 
+            # DEBUG: логируем сложность для предметов с аукционом
+            if difficulty and "auction" in buttons:
+                log_debug(f"[BACKPACK] '{name[:25]}' difficulty={difficulty}")
+
             items.append({
                 "name": name,
                 "count": count,
                 "is_green": is_green,
-                "is_protected": is_protected_item(name),
+                "is_legendary": is_legendary,
+                "is_protected": is_protected_item(name) or is_legendary,  # Легендарные = защищены
+                "difficulty": difficulty,  # None, "normal", "heroic", "brutal"
                 "buttons": buttons,
             })
 
@@ -312,19 +395,29 @@ class BackpackClient:
         return True
 
     def open_all_bonuses(self):
-        """Открывает все бонусы в рюкзаке"""
+        """Открывает все бонусы и сундуки в рюкзаке"""
         if not self.open_backpack():
             return 0
+
+        # Ключевые слова для открываемых предметов
+        openable_keywords = ["бонус", "сундук", "ларец", "ящик", "шкатулка"]
 
         opened = 0
         for _ in range(50):  # Защита от бесконечного цикла
             items = self.get_items()
-            bonus_items = [i for i in items if "бонус" in i["name"].lower() and "open" in i["buttons"]]
+            # Ищем предметы с кнопкой "open" и подходящим названием
+            openable_items = []
+            for item in items:
+                if "open" not in item["buttons"]:
+                    continue
+                name_lower = item["name"].lower()
+                if any(kw in name_lower for kw in openable_keywords):
+                    openable_items.append(item)
 
-            if not bonus_items:
+            if not openable_items:
                 break
 
-            item = bonus_items[0]
+            item = openable_items[0]
             log_backpack(f"Открываю: {item['name']}")
             if self.open_bonus(item):
                 opened += 1
@@ -492,7 +585,7 @@ class BackpackClient:
 
         return False
 
-    def cleanup(self, max_pages=3):
+    def cleanup(self, max_pages=3, profile: str = "unknown"):
         """
         Полная очистка рюкзака.
 
@@ -503,6 +596,7 @@ class BackpackClient:
 
         Args:
             max_pages: Максимум страниц для обработки
+            profile: имя профиля (для кэша цен аукциона)
 
         Returns:
             dict: Статистика {bonuses, disassembled, dropped, auctioned}
@@ -529,7 +623,7 @@ class BackpackClient:
         # 2. Выставляем на аукцион (аукцион сам обрабатывает все страницы)
         try:
             from requests_bot.auction import AuctionClient
-            auction = AuctionClient(self.client)
+            auction = AuctionClient(self.client, profile=profile)
             auction_stats = auction.sell_all()
             stats["auctioned"] = auction_stats.get("listed", 0)
             stats["disassembled"] += auction_stats.get("disassembled", 0)

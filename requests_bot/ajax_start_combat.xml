@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?><ajax-response><priority-evaluate><![CDATA[(() => {ptxValidatePageById(16);})();]]></priority-evaluate><evaluate><![CDATA[(() => {Wicket.Focus.setFocusOnId('id15b');})();(() => {(() => {
-    if (window.ptxLogsOn) { console.log("Loading content for ", 'https://vmmo.vten.ru/dungeon/combat/dSanctuary?1=normal'); }
-    ptxLocLoad('https://vmmo.vten.ru/dungeon/combat/dSanctuary?1=normal');
-})();})();]]></evaluate></ajax-response>

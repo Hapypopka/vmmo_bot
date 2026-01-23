@@ -21,11 +21,18 @@ class CombatParser:
 
     def _parse_ajax_urls(self):
         """Извлекает все Wicket AJAX URLs из скриптов"""
-        # Паттерн: Wicket.Ajax.ajax({"c":"element_id","u":"url"...})
-        pattern = r'Wicket\.Ajax\.ajax\(\{[^}]*"c":"([^"]+)"[^}]*"u":"([^"]+)"'
-        matches = re.findall(pattern, self.html)
+        # Паттерн 1: Wicket.Ajax.ajax({"c":"element_id","u":"url"...})
+        pattern1 = r'Wicket\.Ajax\.ajax\(\{[^}]*"c":"([^"]+)"[^}]*"u":"([^"]+)"'
+        matches = re.findall(pattern1, self.html)
         for element_id, url in matches:
             self._ajax_urls[element_id] = url
+
+        # Паттерн 2: "c":"element_id","u":"url" (в массивах обработчиков)
+        pattern2 = r'"c":"([^"]+)","u":"([^"]+)"'
+        matches2 = re.findall(pattern2, self.html)
+        for element_id, url in matches2:
+            if element_id not in self._ajax_urls:
+                self._ajax_urls[element_id] = url
 
     def get_attack_url(self):
         """Возвращает URL для кнопки атаки"""
@@ -156,6 +163,36 @@ class CombatParser:
         """Проверяет активен ли бой"""
         return self.get_attack_url() is not None
 
+    def get_loot_take_url(self):
+        """Возвращает базовый URL для сбора лута
+
+        Формат: Ptx.Shadows.Combat.lootTakeUrl = 'URL'
+        """
+        match = re.search(r"lootTakeUrl\s*=\s*['\"]([^'\"]+)['\"]", self.html)
+        return match.group(1) if match else None
+
+    def find_loot_ids(self):
+        """Находит все ID лута в HTML/AJAX ответе
+
+        Ищет двумя способами:
+        1. HTML div: <div id="loot_box_77322" class="combat-loot">
+        2. JS вызов: dropLoot({id: '77322', ...})
+
+        Returns:
+            set: Множество ID лута (строки)
+        """
+        loot_ids = set()
+
+        # Способ 1: HTML лут-боксы
+        html_loot = re.findall(r'id="loot_box_(\d+)"', self.html)
+        loot_ids.update(html_loot)
+
+        # Способ 2: JS dropLoot вызовы
+        js_loot = re.findall(r"dropLoot\s*\(\s*\{[^}]*id:\s*'(\d+)'", self.html)
+        loot_ids.update(js_loot)
+
+        return loot_ids
+
     def check_skill_cooldown(self, skill_pos):
         """Проверяет КД скилла (True = на КД, False = готов)"""
         # Ищем таймер скилла
@@ -187,30 +224,157 @@ class CombatClient:
         self.client = vmmo_client
         self.parser = None
         self.page_id = None
+        self.collected_loot = set()  # Собранные ID лута (чтобы не собирать дважды)
+        self.loot_take_url = None  # Сохраняем URL для сбора лута из начальной страницы
+        self.dungeon_path = None  # Путь данжена для refresher (например "dungeon/combat/dSanctuary")
+        self.difficulty_param = None  # Параметр сложности (например "1=normal")
+        self.attack_count = 0  # Счётчик атак для периодического сбора лута
 
     def load_combat_page(self, url="/basin/combat"):
         """Загружает страницу боя"""
         resp = self.client.get(url)
         self.parser = CombatParser(self.client.current_page, resp.url)
 
+        # Сохраняем loot URL из начальной страницы (он не приходит в AJAX)
+        self.loot_take_url = self.parser.get_loot_take_url()
+
         # Извлекаем page ID из URL
         match = re.search(r'\?(\d+)', resp.url)
         if match:
             self.page_id = match.group(1)
 
+        # Извлекаем путь данжена и параметр сложности для refresher
+        # URL формат: https://vmmo.vten.ru/dungeon/combat/dSanctuary?6&1=normal
+        current_url = resp.url
+        if "/dungeon/combat/" in current_url:
+            # Извлекаем путь: dungeon/combat/dSanctuary
+            path_match = re.search(r'(dungeon/combat/[^?]+)', current_url)
+            if path_match:
+                self.dungeon_path = path_match.group(1)
+
+            # Извлекаем параметр сложности: 1=normal, 1=hard, 1=impossible
+            diff_match = re.search(r'1=(normal|hard|impossible)', current_url)
+            if diff_match:
+                self.difficulty_param = f"1={diff_match.group(1)}"
+
+        # Сбрасываем счётчик атак
+        self.attack_count = 0
+
         return self.parser
 
     def _make_ajax_request(self, url):
         """Выполняет AJAX запрос"""
+        # Определяем base URL из текущего URL
+        base_url = self.client.current_url
+        if "?" in base_url:
+            base_path = base_url.split("?")[0].replace("https://vmmo.vten.ru/", "")
+            base_url_header = f"{base_path}?{self.page_id}" if self.page_id else base_path
+        else:
+            base_url_header = f"basin/combat?{self.page_id}" if self.page_id else ""
+
         headers = {
             "Wicket-Ajax": "true",
-            "Wicket-Ajax-BaseURL": f"basin/combat?{self.page_id}" if self.page_id else "",
+            "Wicket-Ajax-BaseURL": base_url_header,
             "X-Requested-With": "XMLHttpRequest",
             "Accept": "application/xml, text/xml, */*; q=0.01",
             "Referer": self.client.current_url,
         }
         resp = self.client.session.get(url, headers=headers)
+
+        # Обновляем current_page для последующего парсинга
+        if resp.status_code == 200:
+            self.client.current_page = resp.text
+
         return resp
+
+    def collect_loot(self):
+        """Собирает лут из текущего ответа
+
+        Returns:
+            int: Количество собранного лута
+        """
+        if not self.parser:
+            return 0
+
+        loot_ids = self.parser.find_loot_ids()
+
+        # Используем сохранённый loot_url (из начальной страницы)
+        # AJAX ответы не содержат lootTakeUrl
+        loot_url = self.loot_take_url
+        if not loot_url:
+            # Попробуем получить из текущего parser (на случай если это не AJAX)
+            loot_url = self.parser.get_loot_take_url()
+
+        if not loot_ids or not loot_url:
+            return 0
+
+        collected = 0
+        for loot_id in loot_ids:
+            if loot_id not in self.collected_loot:
+                collect_url = loot_url + loot_id
+                self.client.get(collect_url)
+                self.collected_loot.add(loot_id)
+                collected += 1
+                print(f"[LOOT] Собран: {loot_id}")
+
+        return collected
+
+    def collect_loot_via_refresher(self):
+        """Собирает лут через refresher endpoint (основной метод сбора)
+
+        Лут в VMMO приходит через refresher, а не через WebSocket/AJAX атаки.
+        Браузер вызывает refresher каждые 500ms, мы вызываем каждые N атак.
+
+        Returns:
+            int: Количество собранного лута
+        """
+        if not self.page_id or not self.dungeon_path:
+            return 0
+
+        # Формируем URL refresher
+        # Формат: dungeon/combat/dSanctuary?{pageId}-1.IBehaviorListener.0-combatPanel-container-battlefield-refresher&1=normal
+        refresher_url = f"https://vmmo.vten.ru/{self.dungeon_path}?{self.page_id}-1.IBehaviorListener.0-combatPanel-container-battlefield-refresher"
+        if self.difficulty_param:
+            refresher_url += f"&{self.difficulty_param}"
+
+        try:
+            resp = self._make_ajax_request(refresher_url)
+            if resp.status_code != 200:
+                return 0
+
+            response_text = resp.text
+
+            # Ищем lootTakeUrl в ответе refresher (он там есть!)
+            loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", response_text)
+            if loot_url_match:
+                self.loot_take_url = loot_url_match.group(1)
+
+            # Ищем все dropLoot в ответе
+            if "dropLoot" not in response_text:
+                return 0
+
+            # Парсим ID лута
+            loot_ids = re.findall(r"id:\s*'(\d+)'", response_text)
+            if not loot_ids or not self.loot_take_url:
+                return 0
+
+            collected = 0
+            for loot_id in loot_ids:
+                if loot_id not in self.collected_loot:
+                    take_url = self.loot_take_url + loot_id
+                    try:
+                        self.client.get(take_url)
+                        self.collected_loot.add(loot_id)
+                        collected += 1
+                        print(f"[LOOT] Собран: {loot_id}")
+                    except Exception as e:
+                        print(f"[LOOT ERROR] {e}")
+
+            return collected
+
+        except Exception as e:
+            print(f"[REFRESHER ERROR] {e}")
+            return 0
 
     def attack(self):
         """Выполняет атаку"""
@@ -223,8 +387,19 @@ class CombatClient:
 
         resp = self._make_ajax_request(attack_url)
         if resp.status_code == 200:
-            # Перезагружаем страницу для получения обновлённого состояния
-            self.load_combat_page()
+            # Обновляем parser с новым ответом для поиска лута
+            self.parser = CombatParser(self.client.current_page, self.client.current_url)
+
+            # Увеличиваем счётчик атак
+            self.attack_count += 1
+
+            # Собираем лут из AJAX ответа (старый метод - может найти что-то)
+            self.collect_loot()
+
+            # Каждые 3 атаки вызываем refresher для сбора лута (основной метод)
+            if self.attack_count % 3 == 0:
+                self.collect_loot_via_refresher()
+
             return True, "Attack successful"
         return False, f"Attack failed: {resp.status_code}"
 
@@ -243,7 +418,19 @@ class CombatClient:
 
         resp = self._make_ajax_request(skill_urls[skill_pos])
         if resp.status_code == 200:
-            self.load_combat_page()
+            # Обновляем parser
+            self.parser = CombatParser(self.client.current_page, self.client.current_url)
+
+            # Увеличиваем счётчик атак (скилл = атака)
+            self.attack_count += 1
+
+            # Собираем лут из AJAX ответа
+            self.collect_loot()
+
+            # Каждые 3 атаки вызываем refresher
+            if self.attack_count % 3 == 0:
+                self.collect_loot_via_refresher()
+
             return True, f"Skill {skill_pos} used"
         return False, f"Skill failed: {resp.status_code}"
 
@@ -280,6 +467,8 @@ class CombatClient:
 
         while attacks < max_attacks:
             if not self.parser or not self.parser.is_battle_active():
+                # Финальный сбор лута перед выходом
+                self.collect_loot_via_refresher()
                 return "no_battle", attacks
 
             # Используем скилл если доступен
@@ -303,6 +492,8 @@ class CombatClient:
                 print(f"[ERR] {msg}")
                 break
 
+        # Финальный сбор лута
+        self.collect_loot_via_refresher()
         return "max_attacks", attacks
 
 

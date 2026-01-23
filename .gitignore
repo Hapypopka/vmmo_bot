@@ -26,4 +26,15 @@ nul
 
 # HTML dumps
 *.htm
+*.html
 *_files/
+
+# Reference folder (HTML dumps, HAR files, etc)
+_reference/
+
+# Profiles (хранятся только на сервере)
+profiles/
+
+# Cache files
+*_cache.json
+*.lock

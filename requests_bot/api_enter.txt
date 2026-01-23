@@ -1,1 +1,0 @@
-{"status": "redirect", "url": "https://vmmo.vten.ru/dungeon/landing/dSanctuary"}

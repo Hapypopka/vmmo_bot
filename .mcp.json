@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "vmmo-browser": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["mcp_browser/server.py"],
+      "env": {
+        "VMMO_COOKIES_PATH": "${VMMO_COOKIES_PATH:-profiles/char1/cookies.json}",
+        "HEADLESS": "${HEADLESS:-true}"
+      }
+    }
+  }
+}

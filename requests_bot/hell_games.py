@@ -9,30 +9,131 @@ import time
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-from requests_bot.config import BASE_URL, HELL_GAMES_URL
-
-# Скиллы которые пропускаем в Hell Games (например Талисман Доблести)
-HELL_GAMES_SKIP_SKILLS = [5]  # Пропускаем 5-й скилл
-
-# Кулдауны скиллов (измерено + буфер)
-SKILL_CDS = {
-    1: 15.5,
-    2: 24.5,
-    3: 39.5,
-    4: 54.5,
-    5: 42.5,
-}
+from requests_bot.config import BASE_URL, HELL_GAMES_URL, CITY_URL
 
 
 class HellGamesClient:
     """Клиент для Адских Игр"""
 
-    def __init__(self, client):
+    def __init__(self, client, is_light_side=False, profile: str = "unknown"):
+        """
+        Args:
+            client: VMMOClient
+            is_light_side: True если персонаж светлый (враги = dark),
+                          False если тёмный (враги = light)
+            profile: имя профиля (для кэша цен аукциона)
+        """
         self.client = client
-        self.skill_cooldowns = {}  # {pos: last_use_time}
+        self.is_light_side = is_light_side
+        self.profile = profile
         self.last_gcd_time = 0
         self.GCD = 2.0
         self.loot_collected = 0
+        self.collected_loot_ids = set()  # ID собранного лута
+        self.refresher_url = None  # URL для refresher (сбор лута)
+        self.loot_take_url = None  # URL для сбора лута
+        self.attack_count = 0  # Счётчик атак для периодического сбора лута
+
+    def _collect_loot(self):
+        """Собирает лут из текущего ответа"""
+        html = self.client.current_page
+        if not html:
+            return 0
+
+        # Ищем lootTakeUrl
+        loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", html)
+        if not loot_url_match:
+            return 0
+        loot_url = loot_url_match.group(1)
+
+        # Ищем ID лута двумя способами
+        loot_ids = set()
+        loot_ids.update(re.findall(r'id="loot_box_(\d+)"', html))
+        loot_ids.update(re.findall(r"dropLoot\s*\(\s*\{[^}]*id:\s*'(\d+)'", html))
+
+        collected = 0
+        for loot_id in loot_ids:
+            if loot_id not in self.collected_loot_ids:
+                collect_url = loot_url + loot_id
+                self.client.get(collect_url)
+                self.collected_loot_ids.add(loot_id)
+                collected += 1
+                self.loot_collected += 1
+                print(f"[LOOT] Собран: {loot_id}")
+
+        return collected
+
+    def _setup_refresher_url(self):
+        """Формирует URL для refresher из текущей страницы боя"""
+        html = self.client.current_page
+        if not html:
+            return
+
+        # Ищем pageId
+        page_id_match = re.search(r"ptxPageId\s*=\s*(\d+)", html)
+        if not page_id_match:
+            return
+
+        page_id = page_id_match.group(1)
+
+        # Формируем refresher URL для basin/combat
+        # Формат: ?{pageId}-1.IBehaviorListener.0-combatPanel-container-battlefield-refresher
+        # Используем относительный URL (только query string), чтобы urljoin правильно склеил с текущим URL
+        self.refresher_url = f"?{page_id}-1.IBehaviorListener.0-combatPanel-container-battlefield-refresher"
+
+        # Сохраняем lootTakeUrl
+        loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", html)
+        if loot_url_match:
+            self.loot_take_url = loot_url_match.group(1)
+
+        self.attack_count = 0
+
+    def _collect_loot_via_refresher(self):
+        """Собирает лут через refresher endpoint (основной метод сбора)"""
+        if not self.refresher_url:
+            return 0
+
+        try:
+            # Преобразуем относительный URL в абсолютный
+            absolute_url = urljoin(self.client.current_url, self.refresher_url)
+            resp = self.client.session.get(absolute_url, timeout=10)
+            if resp.status_code != 200:
+                return 0
+
+            response_text = resp.text
+
+            # Ищем lootTakeUrl в ответе
+            loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", response_text)
+            if loot_url_match:
+                self.loot_take_url = loot_url_match.group(1)
+
+            # Ищем dropLoot
+            if "dropLoot" not in response_text:
+                return 0
+
+            # Парсим ID лута
+            loot_ids = re.findall(r"id:\s*'(\d+)'", response_text)
+            if not loot_ids or not self.loot_take_url:
+                return 0
+
+            collected = 0
+            for loot_id in loot_ids:
+                if loot_id not in self.collected_loot_ids:
+                    take_url = self.loot_take_url + loot_id
+                    try:
+                        self.client.session.get(take_url, timeout=5)
+                        self.collected_loot_ids.add(loot_id)
+                        collected += 1
+                        self.loot_collected += 1
+                        print(f"[LOOT] Собран: {loot_id}")
+                    except Exception as e:
+                        print(f"[LOOT ERROR] {e}")
+
+            return collected
+
+        except Exception as e:
+            print(f"[REFRESHER ERROR] {e}")
+            return 0
 
     def enter_hell_games(self):
         """Переходит в Адские Игры"""
@@ -48,6 +149,8 @@ class HellGamesClient:
             return False
 
         print("[HELL] Вошли в Адские Игры!")
+        # Настраиваем refresher URL для сбора лута
+        self._setup_refresher_url()
         return True
 
     def _check_death(self):
@@ -72,6 +175,37 @@ class HellGamesClient:
 
         return False
 
+    def _heal_and_repair(self):
+        """
+        Восстанавливает здоровье и ремонтирует снаряжение после смерти.
+        Ищет кнопку ppAction=hr (Heal + Repair) и нажимает её.
+        """
+        soup = self.client.soup()
+        if not soup:
+            return False
+
+        # Ищем кнопку Heal+Repair (ppAction=hr)
+        hr_link = soup.select_one('a.go-btn[href*="ppAction=hr"]')
+        if hr_link:
+            href = hr_link.get("href")
+            if href:
+                print("[HELL] Восстанавливаем здоровье и ремонтируем снаряжение...")
+                self.client.get(href)
+                time.sleep(1)
+                return True
+
+        # Fallback: ищем любую ссылку с ppAction=hr
+        for link in soup.select("a[href*='ppAction=hr']"):
+            href = link.get("href")
+            if href:
+                print("[HELL] Восстанавливаем здоровье и ремонтируем снаряжение...")
+                self.client.get(href)
+                time.sleep(1)
+                return True
+
+        print("[HELL] Кнопка восстановления не найдена")
+        return False
+
     def _parse_ajax_urls(self, html):
         """Извлекает Wicket AJAX URLs"""
         urls = {}
@@ -85,7 +219,6 @@ class HellGamesClient:
         """AJAX запрос"""
         # Защита от javascript: URLs
         if not url or url.startswith("javascript"):
-            print(f"[HELL] DEBUG: Skipping invalid URL: {url}")
             return None
 
         # Делаем URL абсолютным если нужно
@@ -100,24 +233,113 @@ class HellGamesClient:
             "Accept": "application/xml, text/xml, */*; q=0.01",
             "Referer": self.client.current_url,
         }
-        return self.client.session.get(url, headers=headers)
+
+        try:
+            resp = self.client.session.get(url, headers=headers, timeout=10)
+            return resp
+        except Exception as e:
+            print(f"[HELL] Ошибка AJAX запроса: {e}")
+            return None
 
     def get_attack_url(self):
-        """Получает URL атаки"""
-        urls = self._parse_ajax_urls(self.client.current_page)
-        return urls.get("ptx_combat_rich2_attack_link")
+        """Получает URL атаки для Hell Games"""
+        html = self.client.current_page
+        if not html:
+            return None
+
+        # Hell Games использует специальный URL формат
+        # Паттерн: basin/combat?{pageId}-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-attackBlock-attackBlockInner-attackLink
+
+        # Ищем pageId
+        page_id_match = re.search(r"ptxPageId\s*=\s*(\d+)", html)
+        if not page_id_match:
+            print(f"[HELL] Ошибка: ptxPageId не найден!")
+            return None
+
+        page_id = page_id_match.group(1)
+
+        # Формируем URL атаки (относительно ТЕКУЩЕЙ страницы, используем только query string)
+        # Текущий URL: https://vmmo.vten.ru/basin/combat
+        # Нужен: ?{pageId}-1.IBehaviorListener.0-...
+        attack_url = f"?{page_id}-1.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-attackBlock-attackBlockInner-attackLink"
+
+        return attack_url
 
     def get_skill_urls(self):
-        """Получает URLs скиллов"""
-        urls = self._parse_ajax_urls(self.client.current_page)
+        """Получает URLs скиллов для Hell Games"""
+        html = self.client.current_page
+        if not html:
+            return {}
+
+        # Ищем pageId
+        page_id_match = re.search(r"ptxPageId\s*=\s*(\d+)", html)
+        if not page_id_match:
+            return {}
+
+        page_id = page_id_match.group(1)
+
+        # Формируем URLs для скиллов
+        # Реальный паттерн из curl: ?{pageId}-2.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-skills-{N}-skillBlock-skillBlockInner-skillLink
+        # где N = 0..7 (позиции скиллов, 0-indexed)
+        # ВАЖНО: индекс -2, а не -1 (как в атаке)!
+
         skills = {}
-        for element_id, url in urls.items():
-            if "skillBlock" in url and "skillLink" in url:
-                match = re.search(r'skills-(\d+)-skillBlock', url)
-                if match:
-                    skill_pos = int(match.group(1)) + 1
-                    skills[skill_pos] = url
+        for skill_idx in range(8):  # 0-7 (максимум 8 скиллов)
+            skill_pos = skill_idx + 1  # 1-8
+            skill_url = f"?{page_id}-2.IBehaviorListener.0-combatPanel-container-battlefield-controls-controlsInner-skills-{skill_idx}-skillBlock-skillBlockInner-skillLink"
+            skills[skill_pos] = skill_url
+
         return skills
+
+    def get_skills_status(self):
+        """
+        Получает статус всех скиллов: готов ли скилл или на КД.
+        Парсит текущее состояние из HTML (класс _time-lock и time-counter).
+
+        Returns:
+            dict: {pos: {"ready": bool, "remaining_cd": int}}
+        """
+        soup = self.client.soup()
+        if not soup:
+            return {}
+
+        skills_status = {}
+
+        for pos in range(1, 9):  # Проверяем все 8 скиллов (1-8)
+            skill_div = soup.select_one(f".wrap-skill-link._skill-pos-{pos}")
+            if not skill_div:
+                continue
+
+            # Проверяем класс _time-lock (скилл на КД)
+            classes = skill_div.get("class", [])
+            if isinstance(classes, str):
+                classes = classes.split()
+
+            is_on_cd = "_time-lock" in classes
+
+            # Парсим оставшееся время из time-counter
+            remaining_cd = 0
+            if is_on_cd:
+                time_counter = skill_div.select_one(".time-counter")
+                if time_counter and time_counter.text.strip():
+                    try:
+                        # Парсим формат "MM:SS" или "SS"
+                        time_text = time_counter.text.strip()
+                        parts = time_text.split(":")
+                        if len(parts) == 2:  # MM:SS
+                            remaining_cd = int(parts[0]) * 60 + int(parts[1])
+                        elif len(parts) == 1:  # SS
+                            remaining_cd = int(parts[0])
+                    except (ValueError, IndexError):
+                        # Если не удалось распарсить, считаем что на КД
+                        remaining_cd = 999
+
+            skills_status[pos] = {
+                "ready": not is_on_cd,
+                "remaining_cd": remaining_cd
+            }
+
+        return skills_status
 
     def get_sources_info(self):
         """Информация об источниках"""
@@ -133,8 +355,8 @@ class HellGamesClient:
 
             sources.append({
                 "idx": i,
-                "is_light": "_side-light" in classes,  # Вражеский
-                "is_dark": "_side-dark" in classes,    # Наш
+                "is_light": "_side-light" in classes,
+                "is_dark": "_side-dark" in classes,
                 "is_current": "_current" in classes,
                 "is_locked": "_lock" in classes,
             })
@@ -153,21 +375,28 @@ class HellGamesClient:
         return sources
 
     def find_enemy_source(self):
-        """Находит вражеский источник (light) для атаки"""
+        """
+        Находит вражеский источник для атаки.
+        Светлые ищут dark, тёмные ищут light.
+        """
         sources_info = self.get_sources_info()
         source_urls = self.get_source_urls()
 
         for src in sources_info:
             idx = src["idx"]
-            if src["is_light"] and not src["is_current"] and not src["is_locked"]:
+            # Светлые атакуют dark, тёмные атакуют light
+            is_enemy = src["is_dark"] if self.is_light_side else src["is_light"]
+            if is_enemy and not src["is_current"] and not src["is_locked"]:
                 if idx in source_urls:
                     return idx, source_urls[idx]
         return None, None
 
     def all_sources_ours(self):
-        """Проверяет все ли источники наши (dark)"""
+        """Проверяет все ли источники наши"""
         for src in self.get_sources_info():
-            if src["is_light"]:
+            # Светлые: враги = dark, тёмные: враги = light
+            is_enemy = src["is_dark"] if self.is_light_side else src["is_light"]
+            if is_enemy:
                 return False
         return True
 
@@ -209,35 +438,46 @@ class HellGamesClient:
         return None
 
     def use_skill_if_ready(self):
-        """Использует готовый скилл (с учётом КД и исключений)"""
+        """Использует готовый скилл (динамически проверяя готовность из HTML)"""
         now = time.time()
 
         # Проверяем GCD
         if (now - self.last_gcd_time) < self.GCD:
             return False
 
+        # Получаем актуальный статус всех скиллов из HTML
+        skills_status = self.get_skills_status()
+        if not skills_status:
+            return False
+
         skill_urls = self.get_skill_urls()
 
-        for pos in range(1, 6):
-            # Пропускаем исключённые скиллы
-            if pos in HELL_GAMES_SKIP_SKILLS:
+        for pos in range(1, 9):  # Проверяем все 8 скиллов (1-8)
+            if pos not in skill_urls or pos not in skills_status:
                 continue
 
-            if pos not in skill_urls:
-                continue
-
-            # Проверяем индивидуальный КД
-            skill_cd = SKILL_CDS.get(pos, 15.0)
-            last_use = self.skill_cooldowns.get(pos, 0)
-            if (now - last_use) < skill_cd:
+            # Проверяем готовность скилла из HTML (учитывает дебаффы врагов)
+            if not skills_status[pos]["ready"]:
+                remaining = skills_status[pos]["remaining_cd"]
+                if remaining > 0:
+                    print(f"[HELL] Скилл {pos} на КД, осталось {remaining}с")
                 continue
 
             # Скилл готов - используем
-            resp = self._make_ajax_request(skill_urls[pos])
+            # Добавляем timestamp как для атаки
+            import time as time_module
+            timestamp = int(time_module.time() * 1000)
+            full_url = f"{skill_urls[pos]}&_={timestamp}&tmt=19"
+
+            resp = self._make_ajax_request(full_url)
             if resp and resp.status_code == 200:
                 print(f"[HELL] Использован скилл {pos}")
-                self.skill_cooldowns[pos] = now
                 self.last_gcd_time = now
+                # Собираем лут через refresher каждые 3 атаки
+                self.attack_count += 1
+                if self.attack_count % 3 == 0:
+                    self._collect_loot_via_refresher()
+                time.sleep(0.5)  # Задержка после скилла
                 # Обновляем страницу
                 self.client.get(self.client.current_url)
                 return True
@@ -245,16 +485,31 @@ class HellGamesClient:
         return False
 
     def attack(self):
-        """Выполняет атаку"""
-        attack_url = self.get_attack_url()
-        if not attack_url:
+        """Выполняет атаку в Hell Games"""
+        action_url = self.get_attack_url()
+
+        if not action_url:
             return False
 
-        resp = self._make_ajax_request(attack_url)
-        if resp and resp.status_code == 200:
-            # Обновляем страницу
-            self.client.get(self.client.current_url)
-            return True
+        # Добавляем timestamp параметры как в браузере
+        import time as time_module
+        timestamp = int(time_module.time() * 1000)
+        full_url = f"{action_url}&_={timestamp}&tmt=19"
+
+        try:
+            resp = self._make_ajax_request(full_url)
+            if resp and resp.status_code == 200:
+                # Собираем лут через refresher каждые 3 атаки
+                self.attack_count += 1
+                if self.attack_count % 3 == 0:
+                    self._collect_loot_via_refresher()
+                time.sleep(1.0)  # Задержка после атаки
+                # Обновляем страницу
+                self.client.get(self.client.current_url)
+                return True
+        except Exception as e:
+            print(f"[HELL] Ошибка атаки: {e}")
+
         return False
 
     def switch_to_source(self, source_url):
@@ -277,6 +532,15 @@ class HellGamesClient:
                 return True
         return False
 
+    def go_to_city(self):
+        """Выходит в город после Hell Games"""
+        print("[HELL] Выхожу в город...")
+        resp = self.client.get(CITY_URL)
+        if resp and "/city" in resp.url:
+            print("[HELL] В городе!")
+            return True
+        return False
+
     def fight(self, duration_seconds):
         """
         Основной цикл боя в Адских Играх.
@@ -287,40 +551,94 @@ class HellGamesClient:
         3. Когда хранитель убит -> ищем следующий light
         4. Все наши (dark) -> ждём, атакуем без скиллов
         """
-        print(f"[HELL] Начинаем бой на {duration_seconds // 60}м {duration_seconds % 60}с")
+        print(f"[HELL] ===== НАЧАЛО БОЯ: {duration_seconds // 60}м {duration_seconds % 60}с =====")
 
+        # Проверяем и ремонтируем снаряжение перед боем
+        try:
+            print("[HELL] Проверяем снаряжение...")
+            if self.client.repair_equipment():
+                print("[HELL] Снаряжение отремонтировано перед боем")
+            else:
+                print("[HELL] Снаряжение в порядке")
+        except Exception as e:
+            print(f"[HELL] Ошибка проверки ремонта: {e}")
+
+        print("[HELL] Входим в Hell Games...")
         if not self.enter_hell_games():
+            print("[HELL] ===== ОШИБКА ВХОДА =====")
             return False
+
+        print("[HELL] ===== ВХОД УСПЕШЕН, НАЧИНАЕМ ЦИКЛ БОЯ =====")
 
         end_time = time.time() + duration_seconds
         last_log_minute = -1
         keeper_selected = False  # Флаг: выбран ли хранитель как цель
         attacks = 0
 
+        iteration = 0
         while time.time() < end_time:
             try:
+                iteration += 1
                 # Обновляем страницу для актуального состояния
                 self.client.get(self.client.current_url)
 
                 # Проверяем смерть
                 if self._check_death():
-                    print("[HELL] Персонаж погиб! Выходим...")
-                    return False
+                    print("[HELL] Персонаж погиб! Восстанавливаемся...")
+                    if self._heal_and_repair():
+                        print("[HELL] Восстановлены! Продолжаем бой...")
+                        keeper_selected = False
+                        time.sleep(2)
+                        continue
+                    else:
+                        print("[HELL] Не удалось восстановиться, выходим...")
+                        return False
 
-                # Лог времени
+                # Лог времени (раз в минуту)
                 remaining = int(end_time - time.time())
                 current_minute = remaining // 60
                 if current_minute != last_log_minute and remaining > 0:
                     print(f"[HELL] Осталось {current_minute}м {remaining % 60}с")
                     last_log_minute = current_minute
-                    # Debug: показываем состояние раз в минуту
-                    sources = self.get_sources_info()
-                    light_count = sum(1 for s in sources if s["is_light"])
-                    dark_count = sum(1 for s in sources if s["is_dark"])
-                    print(f"[HELL] DEBUG: keeper={self.has_keeper_enemy()}, sources={len(sources)} (light={light_count}, dark={dark_count}), attack_url={self.get_attack_url() is not None}")
+
+                # Проверяем крафт КАЖДУЮ итерацию (вынесено из блока выше)
+                from requests_bot.config import is_craft_ready_soon, is_iron_craft_enabled, get_craft_finish_time
+                import time as time_module
+
+                craft_enabled = is_iron_craft_enabled()
+                craft_ready = is_craft_ready_soon(threshold_seconds=15) if craft_enabled else False
+
+                if craft_enabled and craft_ready:
+                    print("[HELL] Крафт скоро завершится! Выходим в город...")
+                    # Выходим в город
+                    self.client.get(CITY_URL)
+                    time.sleep(2)
+
+                    # Проверяем и забираем/перезапускаем крафт
+                    from requests_bot.craft import CyclicCraftClient
+                    craft = CyclicCraftClient(self.client, profile=self.profile)
+
+                    # Первый вызов: забирает готовый крафт
+                    craft.do_cyclic_craft_step()
+
+                    # Второй вызов (через 5 сек): запускает новый крафт
+                    time.sleep(5)
+                    craft.do_cyclic_craft_step()
+
+                    print("[HELL] Крафт обработан (забран + новый запущен), возвращаемся в Hell Games...")
+                    # Возвращаемся обратно
+                    if self.enter_hell_games():
+                        keeper_selected = False  # Сбрасываем состояние
+                        time.sleep(2)
+                        continue  # Начинаем новую итерацию
+                    else:
+                        print("[HELL] Не удалось вернуться, выходим...")
+                        return False
 
                 # Проверяем хранителя
-                if self.has_keeper_enemy():
+                has_keeper = self.has_keeper_enemy()
+
+                if has_keeper:
                     # Хранитель есть - выбираем его и бьём
                     if not keeper_selected:
                         if self.select_keeper():
@@ -329,11 +647,11 @@ class HellGamesClient:
 
                     # Используем скиллы и атакуем
                     self.use_skill_if_ready()
+
                     if self.attack():
                         attacks += 1
                         if attacks % 10 == 0:
                             print(f"[HELL] Атак: {attacks}")
-                    time.sleep(1.5)
 
                 else:
                     # Хранителя нет - убит или мы в пустом источнике
@@ -341,6 +659,7 @@ class HellGamesClient:
 
                     # Ищем вражеский источник
                     idx, source_url = self.find_enemy_source()
+
                     if source_url:
                         print(f"[HELL] Переходим в вражеский источник {idx}...")
                         self.switch_to_source(source_url)
@@ -354,20 +673,33 @@ class HellGamesClient:
 
                     else:
                         # Есть враги, но заблокированы - ждём
-                        print(f"[HELL] Ждём (враги заблокированы или нет источников)")
                         time.sleep(2)
 
             except Exception as e:
-                print(f"[HELL] Ошибка: {e}")
+                import traceback
+                print(f"[HELL] !!!!! ОШИБКА В ЦИКЛЕ БОЯ: {e} !!!!!")
+                print(f"[HELL] Traceback:\n{traceback.format_exc()}")
                 time.sleep(2)
 
-        print(f"[HELL] Время вышло! Всего атак: {attacks}")
+        print(f"[HELL] ===== ВРЕМЯ ВЫШЛО! Итераций: {iteration}, Атак: {attacks} =====")
+
+        # Выходим в город чтобы можно было крафтить и т.д.
+        self.go_to_city()
+
         return True
 
 
-def fight_in_hell_games(client, duration_seconds):
-    """Удобная функция для вызова из main"""
-    hell = HellGamesClient(client)
+def fight_in_hell_games(client, duration_seconds, is_light_side=False, profile: str = "unknown"):
+    """
+    Удобная функция для вызова из main.
+
+    Args:
+        client: VMMOClient
+        duration_seconds: длительность боя
+        is_light_side: True если персонаж светлый (Happypoq и др.)
+        profile: имя профиля (для кэша цен аукциона)
+    """
+    hell = HellGamesClient(client, is_light_side=is_light_side, profile=profile)
     return hell.fight(duration_seconds)
 
 

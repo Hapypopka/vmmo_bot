@@ -10,6 +10,11 @@ from urllib.parse import urljoin
 
 BASE_URL = "https://vmmo.vten.ru"
 
+# Игнорируемые отправители (сообщения остаются непрочитанными)
+IGNORED_SENDERS = [
+    "Администрация",
+]
+
 
 class MailClient:
     """Клиент для работы с почтой"""
@@ -47,6 +52,7 @@ class MailClient:
     def find_active_messages(self):
         """
         Находит активные (непрочитанные) письма.
+        Игнорирует письма от отправителей из IGNORED_SENDERS.
 
         Returns:
             list: Список словарей с информацией о письмах
@@ -64,13 +70,24 @@ class MailClient:
                 continue
 
             href = link.get("href")
-            if href:
-                # Получаем текст письма
-                text = link.get_text(strip=True)
-                messages.append({
-                    "text": text,
-                    "url": urljoin(BASE_URL, href),
-                })
+            if not href:
+                continue
+
+            # Проверяем отправителя - первый span содержит имя
+            sender_span = link.select_one("span")
+            if sender_span:
+                sender = sender_span.get_text(strip=True)
+                # Пропускаем игнорируемых отправителей
+                if sender in IGNORED_SENDERS:
+                    print(f"[MAIL] Пропускаю письмо от '{sender}'")
+                    continue
+
+            # Получаем текст письма
+            text = link.get_text(strip=True)
+            messages.append({
+                "text": text,
+                "url": urljoin(BASE_URL, href),
+            })
 
         return messages
 
@@ -208,6 +225,7 @@ class MailClient:
     def process_mailbox(self, on_backpack_full=None):
         """
         Обрабатывает все письма в почте.
+        Игнорирует письма от IGNORED_SENDERS.
 
         Args:
             on_backpack_full: Callback при переполнении рюкзака

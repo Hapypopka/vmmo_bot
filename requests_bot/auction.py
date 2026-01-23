@@ -6,6 +6,8 @@
 
 import re
 import time
+import json
+import os
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
@@ -15,22 +17,157 @@ from .backpack import (
     load_auction_blacklist,
     add_to_auction_blacklist,
 )
+from .config import get_craft_items
 
 BASE_URL = "https://vmmo.vten.ru"
 
 # Минимальная цена по умолчанию (в серебре)
 DEFAULT_MIN_PRICE = 5
 
+# Дефолтные цены за штуку когда нет конкурентов (в серебре)
+DEFAULT_PRICES = {
+    # Железная цепочка
+    "Железный Слиток": 200,  # 2 золота
+    "Железо": 40,            # 40 серебра
+    "Железная Руда": 10,     # 10 серебра
+    # Медная/бронзовая цепочка
+    "Бронзовый Слиток": 250, # 2.5 золота
+    "Бронза": 150,           # 1.5 золота
+    "Медный Слиток": 100,    # 1 золото
+    "Медь": 30,              # 30 серебра
+    "Медная Руда": 10,       # 10 серебра
+    # Платиновая цепочка
+    "Платиновый Слиток": 500,  # 5 золота
+    "Платина": 300,          # 3 золота
+    # Торовая цепочка
+    "Слиток Тора": 800,      # 8 золота
+    "Тор": 500,              # 5 золота
+}
+
+# Маппинг item_id из крафта → название предмета
+CRAFT_ITEM_NAMES = {
+    "ironBar": "Железный Слиток",
+    "iron": "Железо",
+    "rawOre": "Железная Руда",
+    "bronzeBar": "Бронзовый Слиток",
+    "bronze": "Бронза",
+    "copperBar": "Медный Слиток",
+    "copper": "Медь",
+    "copperOre": "Медная Руда",
+    "platinumBar": "Платиновый Слиток",
+    "platinum": "Платина",
+    "thorBar": "Слиток Тора",
+    "thor": "Тор",
+}
+
+# ============================================
+# Кэш цен аукциона (чтобы боты не перебивали друг друга)
+# ============================================
+
+PRICE_CACHE_FILE = os.path.join(os.path.dirname(__file__), "..", "profiles", "auction_price_cache.json")
+PRICE_CACHE_TTL = 8 * 60 * 60  # 8 часов в секундах
+
+
+def load_price_cache() -> dict:
+    """Загружает кэш цен из файла"""
+    try:
+        if os.path.exists(PRICE_CACHE_FILE):
+            with open(PRICE_CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[AUCTION] Ошибка чтения кэша цен: {e}")
+    return {}
+
+
+def save_price_cache(cache: dict):
+    """Сохраняет кэш цен в файл"""
+    try:
+        os.makedirs(os.path.dirname(PRICE_CACHE_FILE), exist_ok=True)
+        with open(PRICE_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[AUCTION] Ошибка записи кэша цен: {e}")
+
+
+def get_cached_price(item_name: str) -> int | None:
+    """
+    Получает цену из кэша если она свежая.
+
+    Returns:
+        int: цена за единицу в серебре, или None если кэш устарел/отсутствует
+    """
+    cache = load_price_cache()
+
+    if item_name not in cache:
+        return None
+
+    entry = cache[item_name]
+    age = time.time() - entry.get("timestamp", 0)
+
+    if age > PRICE_CACHE_TTL:
+        print(f"[AUCTION] Кэш для '{item_name}' устарел ({age/3600:.1f}ч)")
+        return None
+
+    price = entry.get("price_per_unit", 0)
+    profile = entry.get("profile", "?")
+    hours_ago = age / 3600
+    print(f"[AUCTION] Цена из кэша: {item_name} = {price}с/шт ({profile}, {hours_ago:.1f}ч назад)")
+
+    return price
+
+
+def set_cached_price(item_name: str, price_per_unit: int, profile: str = "unknown"):
+    """Записывает цену в кэш"""
+    cache = load_price_cache()
+
+    cache[item_name] = {
+        "price_per_unit": price_per_unit,
+        "timestamp": time.time(),
+        "profile": profile
+    }
+
+    save_price_cache(cache)
+    print(f"[AUCTION] Кэш обновлён: {item_name} = {price_per_unit}с/шт")
+
+
+def get_batch_size_for_item(item_name):
+    """
+    Получает batch_size для предмета из конфига крафта.
+
+    Returns:
+        int: batch_size или 1 если не найден (продавать сразу)
+    """
+    craft_items = get_craft_items()
+
+    # Ищем item_id по названию
+    item_id = None
+    for craft_id, craft_name in CRAFT_ITEM_NAMES.items():
+        if craft_name == item_name:
+            item_id = craft_id
+            break
+
+    if not item_id:
+        return 1  # Не крафтовый предмет - продаём сразу
+
+    # Ищем batch_size в конфиге
+    for craft_item in craft_items:
+        if craft_item.get("item") == item_id:
+            return craft_item.get("batch_size", 1)
+
+    return 1  # Не в очереди крафта - продаём сразу
+
 
 class AuctionClient:
     """Клиент для работы с аукционом"""
 
-    def __init__(self, client):
+    def __init__(self, client, profile: str = "unknown"):
         """
         Args:
             client: VMMOClient instance
+            profile: имя профиля (для кэша цен)
         """
         self.client = client
+        self.profile = profile
         self.backpack = BackpackClient(client)
         self.items_listed = 0
         self.items_disassembled = 0
@@ -59,6 +196,12 @@ class AuctionClient:
             if match:
                 return int(match.group(1))
 
+        # Fallback: ищем количество в тексте всего блока
+        full_text = my_item.get_text()
+        match = re.search(r'[xх](\d+)', full_text, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+
         return 1
 
     def get_competitor_min_price(self):
@@ -72,8 +215,17 @@ class AuctionClient:
         if not soup:
             return 0, 0, 0
 
-        # Ищем первый лот конкурента
-        competitor = soup.select_one("div.list-el.first") or soup.select_one("div.list-el")
+        # Ищем лоты конкурентов (у которых есть кнопка-ссылка "выкупить")
+        # Наш собственный лот имеет span.go-btn (не кликабельный), а конкуренты - a.go-btn
+        all_lots = soup.select("div.list-el")
+        competitor = None
+        for lot in all_lots:
+            # Проверяем есть ли кнопка-ссылка (a, не span)
+            buy_btn = lot.select_one("a.go-btn._auction")
+            if buy_btn:
+                competitor = lot
+                break
+
         if not competitor:
             return 0, 0, 0
 
@@ -88,8 +240,6 @@ class AuctionClient:
 
         # Получаем цену выкупа
         buy_btn = competitor.select_one("a.go-btn._auction")
-        if not buy_btn:
-            return 0, 0, 0
 
         gold = 0
         silver = 0
@@ -115,33 +265,67 @@ class AuctionClient:
 
         return gold, silver, count
 
-    def calculate_price(self, my_count):
+    def calculate_price(self, my_count, item_name=None):
         """
         Рассчитывает цену для нашего лота.
+        Сначала проверяет кэш (чтобы боты не перебивали друг друга).
 
         Args:
             my_count: Количество нашего товара
+            item_name: Название предмета (для дефолтной цены и кэша)
 
         Returns:
             tuple: (gold, silver)
         """
+        # 1. Проверяем кэш (если другой бот недавно выставлял этот предмет)
+        if item_name:
+            cached_price = get_cached_price(item_name)
+            if cached_price is not None:
+                # Используем цену из кэша - не перебиваем своего бота
+                our_total = cached_price * my_count
+                gold = our_total // 100
+                silver = our_total % 100
+                return gold, silver
+
+        # 2. Смотрим конкурентов на рынке
         comp_gold, comp_silver, comp_count = self.get_competitor_min_price()
 
         if comp_count == 0 or (comp_gold == 0 and comp_silver == 0):
-            # Конкурентов нет - минимальная цена
-            return 0, DEFAULT_MIN_PRICE
+            # Конкурентов нет - используем дефолтную цену
+            if item_name and item_name in DEFAULT_PRICES:
+                price_per_unit = DEFAULT_PRICES[item_name]
+                our_total = price_per_unit * my_count
+                gold = our_total // 100
+                silver = our_total % 100
+                print(f"[AUCTION] Нет конкурентов, дефолтная цена: {price_per_unit}с/шт")
+                # Записываем в кэш
+                if item_name:
+                    set_cached_price(item_name, price_per_unit, self.profile)
+                return gold, silver
+            else:
+                # Неизвестный предмет - не продаём
+                return None, None
 
         # Цена за единицу в серебре
         total_silver = comp_gold * 100 + comp_silver
         price_per_unit = total_silver // comp_count
 
-        # Наша цена
-        our_total = (price_per_unit * my_count) - 1
+        # Наша цена (на 1 серебро дешевле конкурента)
+        our_price_per_unit = price_per_unit - 1
+        if our_price_per_unit < 1:
+            our_price_per_unit = 1
+
+        our_total = our_price_per_unit * my_count
         if our_total < DEFAULT_MIN_PRICE:
             our_total = DEFAULT_MIN_PRICE
+            our_price_per_unit = max(1, our_total // my_count)
 
         gold = our_total // 100
         silver = our_total % 100
+
+        # 3. Записываем в кэш для других ботов
+        if item_name:
+            set_cached_price(item_name, our_price_per_unit, self.profile)
 
         return gold, silver
 
@@ -255,6 +439,13 @@ class AuctionClient:
                 if "auction" not in item["buttons"]:
                     continue
 
+                # Проверяем batch_size для крафтовых предметов
+                batch_size = get_batch_size_for_item(name)
+                item_count = item.get("count", 1)
+                if item_count < batch_size:
+                    # Не набралась партия - пропускаем
+                    continue
+
                 target = item
                 break
 
@@ -264,25 +455,21 @@ class AuctionClient:
 
             name = target["name"]
             is_green = target["is_green"]
+            difficulty = target.get("difficulty")  # None, "normal", "heroic", "brutal"
+
+            # Предметы со сложностью normal/heroic - разбираем (только brutal продаём)
+            if difficulty and difficulty != "brutal" and "disassemble" in target["buttons"]:
+                print(f"[AUCTION] '{name}' сложность {difficulty} (не brutal) - разбираем")
+                if self.backpack.disassemble_item(target):
+                    stats["disassembled"] += 1
+                continue
 
             # Зелёные предметы с кнопкой разборки - разбираем
             # Зелёные БЕЗ кнопки разборки - выставляем на аукцион
             if is_green and "disassemble" in target["buttons"]:
                 print(f"[AUCTION] '{name}' зелёный с разборкой - разбираем")
-                disassemble_url = target["buttons"]["disassemble"]
-                self.client.get(disassemble_url)
-                # Ищем кнопку подтверждения
-                soup = self.client.soup()
-                for btn in soup.select("a.go-btn"):
-                    text = btn.get_text(strip=True)
-                    if "да" in text.lower() and "точно" in text.lower():
-                        href = btn.get("href")
-                        if href:
-                            confirm_url = href if href.startswith("http") else urljoin(self.client.current_url, href)
-                            self.client.get(confirm_url)
-                            print(f"[AUCTION] Разобрано: {name}")
-                            stats["disassembled"] += 1
-                            break
+                if self.backpack.disassemble_item(target):
+                    stats["disassembled"] += 1
                 continue
 
             # Переходим на страницу аукциона
@@ -297,21 +484,19 @@ class AuctionClient:
             # Рассчитываем цену
             comp_gold, comp_silver, comp_count = self.get_competitor_min_price()
 
+            # Рассчитываем цену (с учётом дефолтных цен для железа)
+            gold, silver = self.calculate_price(my_count, item_name=name)
+
+            if gold is None:
+                # Неизвестный предмет без конкурентов - разбираем и добавляем в blacklist
+                print(f"[AUCTION] Нет конкурентов для '{name}' - разбираем, добавляю в blacklist")
+                add_to_auction_blacklist(name)
+                items_to_disassemble.append(name)
+                continue
+
             if comp_gold > 0 or comp_silver > 0:
-                # Есть конкуренты
-                comp_total = comp_gold * 100 + comp_silver
-                price_per_unit = comp_total // comp_count
-                our_total = (price_per_unit * my_count) - 1
-                our_total = max(DEFAULT_MIN_PRICE, our_total)
-                gold = our_total // 100
-                silver = our_total % 100
-                print(f"[AUCTION] Конкурент: {comp_gold}g {comp_silver}s за x{comp_count} -> {price_per_unit}s/шт")
-                print(f"[AUCTION] Наш товар: x{my_count} -> ставим {gold}g {silver}s")
-            else:
-                # Нет конкурентов
-                gold = 0
-                silver = DEFAULT_MIN_PRICE
-                print(f"[AUCTION] Нет конкурентов - минимальная цена {silver}s")
+                print(f"[AUCTION] Конкурент: {comp_gold}g {comp_silver}s за x{comp_count}")
+            print(f"[AUCTION] Наш товар: x{my_count} -> ставим {gold}g {silver}s")
 
             # Создаём лот
             result = self.try_create_lot(gold, silver)
@@ -322,7 +507,8 @@ class AuctionClient:
                 time.sleep(0.5)
 
             elif result == "low_price":
-                print(f"[AUCTION] Цена слишком низкая - '{name}' для разборки")
+                print(f"[AUCTION] Цена слишком низкая - '{name}' для разборки, добавляю в blacklist")
+                add_to_auction_blacklist(name)
                 items_to_disassemble.append(name)
 
             else:

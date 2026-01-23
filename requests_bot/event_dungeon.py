@@ -1,18 +1,109 @@
 # ============================================
 # VMMO Event Dungeon (requests version)
 # ============================================
-# Ивент "Сталкер Адского Кладбища"
+# Ивенты:
+# - Сталкер Адского Кладбища (HellStalker)
+# - Новогодний: Логово Демона Мороза (NYLairFrost_2026)
 # ============================================
 
+import os
 import re
 import time
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+# Используем логгер бота для записи в лог-файл
+try:
+    from requests_bot.logger import log_debug, log_info, log_error
+except ImportError:
+    # Fallback если запускается отдельно
+    log_debug = log_info = log_error = print
+
+from requests_bot.config import SCRIPT_DIR
+
 BASE_URL = "https://vmmo.vten.ru"
 
-# Кэш КД ивента
+# Кэш КД ивентов
 _event_cooldown_until = 0
+_ny_event_cooldown_until = 0
+
+# КД NY ивента после победы (дефолт 6 часов, но парсится с сервера)
+NY_EVENT_COOLDOWN_DEFAULT = 6 * 60 * 60  # 21600 секунд
+
+# Дефолтный КД при ошибках парсинга (30 минут)
+DEFAULT_FALLBACK_COOLDOWN = 1800
+
+# Конфигурация ивент-данжей
+# difficulty: impossible=Брутал, hard=Героик, normal=Нормал
+EVENT_DUNGEONS = {
+    "NYLairFrost_2026": {
+        "name": "Логово Демона Мороза",
+        "id": "dng:NYLairFrost_2026",
+        "difficulty": "impossible",  # Брутал
+        "url": "/dungeon/lobby/NYLairFrost_2026?1=impossible",
+    },
+    "SurtCaves": {
+        "name": "Пещеры Сурта",
+        "id": "dng:SurtCaves",
+        "difficulty": "normal",  # Нормал
+        "url": "/dungeon/lobby/SurtCaves?1=normal",
+    },
+    "DarknessComing": {
+        "name": "Предвестник Тьмы",
+        "id": "dng:DarknessComing",
+        "difficulty": "impossible",  # Брутал
+        "url": "/dungeon/lobby/DarknessComing?1=impossible",
+    },
+    "NYIceCastle_2026": {
+        "name": "Ледяная Цитадель",
+        "id": "dng:NYIceCastle_2026",
+        "difficulty": "impossible",  # Брутал
+        "url": "/dungeon/lobby/NYIceCastle_2026?1=impossible",
+    },
+}
+
+# Кэш КД для каждого данжена
+_event_cooldowns = {}
+
+
+def set_ny_event_cooldown(client=None, seconds=None):
+    """
+    Устанавливает КД NY ивента (вызывать после победы).
+    Если передан client - парсит реальное КД со страницы /dungeons.
+    Иначе использует seconds или дефолт.
+    """
+    global _ny_event_cooldown_until
+
+    # Пробуем получить реальное КД с сервера
+    if client is not None and seconds is None:
+        try:
+            log_debug("[NY-EVENT] Парсим реальное КД с /dungeons...")
+            client.get("/dungeons")
+            html = client.current_page
+
+            # Ищем блок с NYLairFrost_2026 и класс _cd
+            dungeon_pattern = re.search(
+                r'<div class="map-item-c map-item _dungeons([^"]*)"[^>]*>.*?title="dng:NYLairFrost_2026"',
+                html, re.DOTALL
+            )
+
+            if dungeon_pattern and "_cd" in dungeon_pattern.group(1):
+                block = dungeon_pattern.group(0)
+                time_match = re.search(r'<span class="map-item-name">([^<]+)</span>', block)
+                if time_match:
+                    cd_text = time_match.group(1).strip()
+                    seconds = parse_cooldown_to_seconds(cd_text)
+                    log_info(f"[NY-EVENT] Реальное КД с сервера: {cd_text} ({seconds}s)")
+        except Exception as e:
+            log_error(f"[NY-EVENT] Ошибка парсинга КД: {e}")
+
+    # Если не получили - используем дефолт
+    if seconds is None:
+        seconds = NY_EVENT_COOLDOWN_DEFAULT
+        log_debug(f"[NY-EVENT] Используем дефолтное КД: {seconds // 3600}ч")
+
+    _ny_event_cooldown_until = time.time() + seconds
+    log_info(f"[NY-EVENT] КД установлен: {seconds // 3600}ч {(seconds % 3600) // 60}м")
 
 
 def parse_cooldown_to_seconds(cd_text):
@@ -181,6 +272,13 @@ class EventDungeonClient:
             print(f"[EVENT] Ивент на КД (кэш), осталось ~{remaining // 60}м")
             return "on_cooldown", remaining
 
+        # Проверяем и ремонтируем снаряжение перед входом
+        try:
+            if self.client.repair_equipment():
+                print("[EVENT] Снаряжение отремонтировано перед ивентом")
+        except Exception as e:
+            print(f"[EVENT] Ошибка проверки ремонта: {e}")
+
         # 1. Проверяем доступность ивента
         available, event_url = self.check_event_available()
         if not available:
@@ -235,6 +333,538 @@ class EventDungeonClient:
 
         print(f"[EVENT] Неожиданный URL: {self.client.current_url}")
         return "error", 0
+
+
+class NYEventDungeonClient:
+    """Клиент для новогоднего ивента - Логово Демона Мороза"""
+
+    DUNGEON_ID = "dng:NYLairFrost_2026"
+    # Сложности в URL: impossible=Брутал, hard=Героик, normal=Нормал
+    LANDING_URL = "/dungeon/lobby/NYLairFrost_2026?1=impossible"
+
+    def __init__(self, client):
+        self.client = client
+        self.cooldown_until = 0
+
+    def check_dungeon_cooldown(self):
+        """
+        Проверяет КД данжена через страницу /dungeons.
+        Ивенты на вкладке tier-event.
+        Возвращает (on_cooldown: bool, cd_seconds: int)
+        """
+        global _ny_event_cooldown_until
+
+        log_debug("[NY-EVENT] check_dungeon_cooldown() вызван")
+
+        # Проверяем кэш
+        now = time.time()
+        if now < _ny_event_cooldown_until:
+            remaining = int(_ny_event_cooldown_until - now)
+            log_debug(f"[NY-EVENT] Логово Демона Мороза на КД (кэш): {remaining // 60}м")
+            return True, remaining
+
+        # Загружаем страницу данжей
+        log_debug("[NY-EVENT] Загружаю /dungeons...")
+        self.client.get("/dungeons")
+        html = self.client.current_page
+        log_debug(f"[NY-EVENT] Получено {len(html)} байт HTML")
+
+        # Ищем блок с NYLairFrost_2026
+        # Формат: <div class="map-item-c map-item _dungeons _cd">...<div title="dng:NYLairFrost_2026"
+        # Если есть класс _cd - значит на КД
+        # Время в <span class="map-item-name">2ч 07м</span>
+
+        # Проверяем есть ли данжен на странице
+        if 'title="dng:NYLairFrost_2026"' not in html:
+            log_debug("[NY-EVENT] Данжен NYLairFrost_2026 не найден на странице /dungeons")
+            # Это нормально - ивент может быть недоступен. Пробуем идти напрямую
+            return False, 0
+
+        log_debug("[NY-EVENT] Данжен NYLairFrost_2026 найден на странице")
+
+        # Ищем блок с этим данженом и проверяем _cd
+        # Паттерн: от map-item-c до title="dng:NYLairFrost_2026"
+        dungeon_pattern = re.search(
+            r'<div class="map-item-c map-item _dungeons([^"]*)"[^>]*>.*?title="dng:NYLairFrost_2026"',
+            html, re.DOTALL
+        )
+
+        if dungeon_pattern:
+            classes = dungeon_pattern.group(1)
+            log_debug(f"[NY-EVENT] Классы блока: '{classes}'")
+            if "_cd" in classes:
+                # На КД - ищем время
+                block = dungeon_pattern.group(0)
+                time_match = re.search(r'<span class="map-item-name">([^<]+)</span>', block)
+                if time_match:
+                    cd_text = time_match.group(1).strip()
+                    cd_seconds = parse_cooldown_to_seconds(cd_text)
+                    log_debug(f"[NY-EVENT] Логово Демона Мороза на КД: {cd_text}")
+                    _ny_event_cooldown_until = now + cd_seconds
+                    return True, cd_seconds
+                else:
+                    # КД есть, но время не найдено - ставим 30 мин
+                    log_debug("[NY-EVENT] Логово Демона Мороза на КД (время неизвестно)")
+                    _ny_event_cooldown_until = now + DEFAULT_FALLBACK_COOLDOWN
+                    return True, DEFAULT_FALLBACK_COOLDOWN
+        else:
+            log_debug("[NY-EVENT] Regex не нашёл блок с данженом")
+
+        log_info("[NY-EVENT] Логово Демона Мороза готово!")
+        return False, 0
+
+    def enter_dungeon(self):
+        """
+        Входит в Логово Демона Мороза.
+        Возвращает: "entered", "on_cooldown", "error"
+        """
+        global _ny_event_cooldown_until
+
+        log_debug("[NY-EVENT] enter_dungeon() вызван")
+
+        # Проверяем КД
+        try:
+            on_cd, cd_sec = self.check_dungeon_cooldown()
+            if on_cd:
+                return "on_cooldown", cd_sec
+        except Exception as e:
+            log_error(f"[NY-EVENT] Ошибка в check_dungeon_cooldown: {e}")
+            import traceback
+            traceback.print_exc()
+            return "error", 0
+
+        # Проверяем и ремонтируем снаряжение
+        try:
+            if self.client.repair_equipment():
+                log_debug("[NY-EVENT] Снаряжение отремонтировано")
+        except Exception as e:
+            log_error(f"[NY-EVENT] Ошибка ремонта: {e}")
+
+        # Переходим в lobby напрямую (КД проверяется по ответу)
+        log_info("[NY-EVENT] Захожу в Логово Демона Мороза...")
+        resp = self.client.get(self.LANDING_URL)
+        current_url = self.client.current_url
+        log_debug(f"[NY-EVENT] URL после перехода: {current_url}")
+
+        # Проверяем на КД - если редирект на /city или /dungeons
+        if "/city" in current_url or "/dungeons" in current_url:
+            # Проверяем HTML на сообщение о КД
+            html = self.client.current_page
+            if "cooldown" in html.lower() or "перезарядк" in html.lower() or "недоступ" in html.lower():
+                log_debug("[NY-EVENT] Данжен на КД (по редиректу)")
+                _ny_event_cooldown_until = time.time() + DEFAULT_FALLBACK_COOLDOWN
+                return "on_cooldown", DEFAULT_FALLBACK_COOLDOWN
+            log_debug(f"[NY-EVENT] Редирект на {current_url}, возможно КД")
+            return "on_cooldown", DEFAULT_FALLBACK_COOLDOWN
+
+        # Если попали на landing - нужно обработать награды и войти
+        if "/landing/" in current_url:
+            log_debug("[NY-EVENT] Попали на landing page...")
+            soup = self.client.soup()
+
+            # Собираем все кнопки для логирования
+            all_btns = {}
+            for btn in soup.select("a.go-btn"):
+                text = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if text and href:
+                    all_btns[text] = href
+                log_debug(f"[NY-EVENT] Кнопка: '{text}' -> {href[:50] if href else 'None'}...")
+
+            # Сначала забираем награду если есть
+            if "Забрать" in all_btns:
+                href = all_btns["Забрать"]
+                if href and not href.startswith("javascript"):
+                    log_debug("[NY-EVENT] Забираю награду...")
+                    self.client.get(urljoin(current_url, href))
+                    time.sleep(1)
+                    # Обновляем страницу
+                    soup = self.client.soup()
+                    current_url = self.client.current_url
+
+            # Открываем сундук если есть (кнопка начинается с "Открыть")
+            for text, href in all_btns.items():
+                if text.startswith("Открыть") and href and not href.startswith("javascript"):
+                    log_debug(f"[NY-EVENT] Открываю сундук: {text}...")
+                    self.client.get(urljoin(current_url, href))
+                    time.sleep(1)
+                    break
+
+            # Ищем кнопку "Войти", "Создать группу" или "Повторить"
+            enter_btn = None
+            soup = self.client.soup()  # Обновляем после возможных действий
+            for btn in soup.select("a.go-btn"):
+                text = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if text in ["Войти", "Создать группу", "Повторить"] and href and not href.startswith("javascript"):
+                    enter_btn = urljoin(self.client.current_url, href)
+                    log_debug(f"[NY-EVENT] Нашли кнопку: '{text}'")
+                    break
+
+            if not enter_btn:
+                # Пробуем через Wicket
+                match = re.search(r'"u":"([^"]*(?:enterLink|createPartyLink|repeatLink)[^"]*)"', self.client.current_page)
+                if match:
+                    enter_btn = match.group(1)
+
+            if enter_btn:
+                log_debug(f"[NY-EVENT] Нажимаю кнопку входа на landing: {enter_btn[:60]}...")
+                self.client.get(enter_btn)
+                time.sleep(1)
+                current_url = self.client.current_url
+                log_debug(f"[NY-EVENT] URL после нажатия: {current_url}")
+            else:
+                log_error("[NY-EVENT] Кнопка входа на landing не найдена")
+                return "error", 0
+
+        if "/lobby/" not in current_url and "/standby/" not in current_url:
+            log_error(f"[NY-EVENT] Не удалось зайти в lobby: {current_url}")
+            return "error", 0
+
+        log_debug(f"[NY-EVENT] В lobby! URL: {current_url}")
+
+        # Ищем кнопку входа в lobby
+        soup = self.client.soup()
+        enter_url = None
+
+        # Логируем все кнопки go-btn для отладки
+        go_btns = soup.select("a.go-btn")
+        log_debug(f"[NY-EVENT] Найдено {len(go_btns)} кнопок go-btn")
+        for btn in go_btns:
+            text = btn.get_text(strip=True)
+            href = btn.get("href", "")[:60] if btn.get("href") else "None"
+            log_debug(f"[NY-EVENT] go-btn: '{text}' -> {href}")
+
+        # Ищем кнопку "Войти" или "Начать бой" по тексту
+        for btn in go_btns:
+            text = btn.get_text(strip=True)
+            href = btn.get("href", "")
+            if text in ["Войти", "Начать бой!", "Начать бой"] and href and not href.startswith("javascript"):
+                enter_url = urljoin(self.client.current_url, href)
+                log_debug(f"[NY-EVENT] Нашли кнопку по тексту: '{text}'")
+                break
+
+        # Если не нашли по тексту - ищем ILinkListener
+        if not enter_url:
+            for link in soup.select("a"):
+                href = link.get("href", "")
+                if "ILinkListener" in href and ("enterLink" in href or "createPartyOrEnterLink" in href or "linkStartCombat" in href):
+                    enter_url = urljoin(self.client.current_url, href)
+                    log_debug(f"[NY-EVENT] Нашли ILinkListener: {href[:60]}")
+                    break
+
+        if not enter_url:
+            # Пробуем через Wicket AJAX
+            match = re.search(r'"u":"([^"]*(?:enterLink|createPartyOrEnterLink|linkStartCombat)[^"]*)"', self.client.current_page)
+            if match:
+                enter_url = match.group(1)
+                log_debug(f"[NY-EVENT] Нашли Wicket AJAX: {enter_url[:60]}")
+
+        if not enter_url:
+            log_error("[NY-EVENT] Кнопка входа не найдена в lobby")
+            # Сохраним HTML для отладки
+            log_debug(f"[NY-EVENT] HTML length: {len(self.client.current_page)}")
+            return "error", 0
+
+        log_debug("[NY-EVENT] Вхожу в данжен...")
+        self.client.get(enter_url)
+        time.sleep(1)
+
+        # Проверяем lobby/standby
+        if "/lobby/" in self.client.current_url or "/standby/" in self.client.current_url:
+            # Ищем кнопку "Начать бой"
+            match = re.search(r'"u":"([^"]*linkStartCombat[^"]*)"', self.client.current_page)
+            if match:
+                log_debug("[NY-EVENT] Начинаю бой...")
+                self.client.get(match.group(1))
+                time.sleep(1)
+
+        # Проверяем что в бою
+        if "/combat" in self.client.current_url:
+            log_info("[NY-EVENT] Успешно вошли в бой!")
+            return "entered", 0
+
+        log_error(f"[NY-EVENT] Неожиданный URL: {self.client.current_url}")
+        return "error", 0
+
+
+def try_ny_event_dungeon(client):
+    """
+    Пробует войти в новогодний данжен Логово Демона Мороза.
+    Возвращает: "entered", "on_cooldown", "error"
+    """
+    log_debug("[NY-EVENT] try_ny_event_dungeon() вызван")
+    try:
+        ny_client = NYEventDungeonClient(client)
+        return ny_client.enter_dungeon()
+    except Exception as e:
+        log_error(f"[NY-EVENT] Критическая ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+        return "error", 0
+
+
+class GenericEventDungeonClient:
+    """Универсальный клиент для ивент-данжей"""
+
+    def __init__(self, client, dungeon_key):
+        """
+        Args:
+            client: VMMOClient
+            dungeon_key: Ключ из EVENT_DUNGEONS (например "SurtCaves")
+        """
+        self.client = client
+        self.dungeon_key = dungeon_key
+        self.config = EVENT_DUNGEONS.get(dungeon_key)
+        if not self.config:
+            raise ValueError(f"Unknown dungeon: {dungeon_key}")
+
+        self.dungeon_id = self.config["id"]
+        self.dungeon_name = self.config["name"]
+        self.landing_url = self.config["url"]
+
+    def check_cooldown(self):
+        """
+        Проверяет КД данжена.
+        Возвращает (on_cooldown: bool, cd_seconds: int)
+        """
+        global _event_cooldowns
+
+        log_debug(f"[EVENT] Проверяю КД для {self.dungeon_name}...")
+
+        # Проверяем кэш
+        now = time.time()
+        cached_until = _event_cooldowns.get(self.dungeon_key, 0)
+        if now < cached_until:
+            remaining = int(cached_until - now)
+            log_debug(f"[EVENT] {self.dungeon_name} на КД (кэш): {remaining // 60}м")
+            return True, remaining
+
+        # Загружаем страницу данжей (ивент-вкладка загружается автоматически через JS,
+        # но в HTML все данжены должны быть)
+        self.client.get("/dungeons")
+        html = self.client.current_page
+
+        # Ищем блок с нашим данженом
+        if f'title="{self.dungeon_id}"' not in html:
+            log_debug(f"[EVENT] Данжен {self.dungeon_id} не найден на странице, считаем на КД")
+            return True, 300  # Вернём 5 минут КД по умолчанию
+
+        # Ищем блок с классом _cd
+        pattern = rf'<div class="map-item-c map-item _dungeons([^"]*)"[^>]*>.*?title="{self.dungeon_id}"'
+        dungeon_match = re.search(pattern, html, re.DOTALL)
+
+        if dungeon_match and "_cd" in dungeon_match.group(1):
+            # На КД - ищем время
+            block = dungeon_match.group(0)
+            time_match = re.search(r'<span class="map-item-name">([^<]+)</span>', block)
+            if time_match:
+                cd_text = time_match.group(1).strip()
+                cd_seconds = parse_cooldown_to_seconds(cd_text)
+                log_debug(f"[EVENT] {self.dungeon_name} на КД: {cd_text}")
+                _event_cooldowns[self.dungeon_key] = now + cd_seconds
+                return True, cd_seconds
+            else:
+                log_debug(f"[EVENT] {self.dungeon_name} на КД (время неизвестно)")
+                _event_cooldowns[self.dungeon_key] = now + DEFAULT_FALLBACK_COOLDOWN
+                return True, DEFAULT_FALLBACK_COOLDOWN
+
+        log_info(f"[EVENT] {self.dungeon_name} готов!")
+        return False, 0
+
+    def enter_dungeon(self):
+        """
+        Входит в данжен.
+        Возвращает: ("entered", 0), ("on_cooldown", seconds), ("error", 0)
+        """
+        global _event_cooldowns
+
+        log_debug(f"[EVENT] Вход в {self.dungeon_name}...")
+
+        # Проверяем КД
+        on_cd, cd_sec = self.check_cooldown()
+        if on_cd:
+            return "on_cooldown", cd_sec
+
+        # Ремонтируем снаряжение
+        try:
+            if self.client.repair_equipment():
+                log_debug(f"[EVENT] Снаряжение отремонтировано")
+        except Exception as e:
+            log_debug(f"[EVENT] Ошибка ремонта: {e}")
+
+        # Переходим в lobby
+        log_info(f"[EVENT] Захожу в {self.dungeon_name}...")
+        self.client.get(self.landing_url)
+        current_url = self.client.current_url
+        log_debug(f"[EVENT] URL: {current_url}")
+
+        # Редирект на город = КД
+        if "/city" in current_url or "/dungeons" in current_url:
+            log_debug(f"[EVENT] Редирект - возможно КД")
+            _event_cooldowns[self.dungeon_key] = time.time() + DEFAULT_FALLBACK_COOLDOWN
+            return "on_cooldown", DEFAULT_FALLBACK_COOLDOWN
+
+        # Обработка landing page
+        if "/landing/" in current_url:
+            log_debug(f"[EVENT] На landing page...")
+            soup = self.client.soup()
+
+            # Собираем награды если есть
+            for btn in soup.select("a.go-btn"):
+                text = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if text == "Забрать" and href and not href.startswith("javascript"):
+                    log_debug(f"[EVENT] Забираю награду...")
+                    self.client.get(urljoin(current_url, href))
+                    time.sleep(1)
+                    soup = self.client.soup()
+                    break
+
+            # Открываем сундук если есть
+            for btn in soup.select("a.go-btn"):
+                text = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if text.startswith("Открыть") and href and not href.startswith("javascript"):
+                    log_debug(f"[EVENT] Открываю: {text}")
+                    self.client.get(urljoin(self.client.current_url, href))
+                    time.sleep(1)
+                    break
+
+            # Ищем кнопку входа
+            enter_btn = None
+            soup = self.client.soup()
+            for btn in soup.select("a.go-btn"):
+                text = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if text in ["Войти", "Создать группу", "Повторить"] and href and not href.startswith("javascript"):
+                    enter_btn = urljoin(self.client.current_url, href)
+                    log_debug(f"[EVENT] Кнопка: '{text}'")
+                    break
+
+            if not enter_btn:
+                match = re.search(r'"u":"([^"]*(?:enterLink|createPartyLink|repeatLink)[^"]*)"', self.client.current_page)
+                if match:
+                    enter_btn = match.group(1)
+
+            if enter_btn:
+                self.client.get(enter_btn)
+                time.sleep(1)
+                current_url = self.client.current_url
+            else:
+                log_error(f"[EVENT] Кнопка входа не найдена на landing")
+                return "error", 0
+
+        # Проверяем что в lobby
+        if "/lobby/" not in current_url and "/standby/" not in current_url:
+            log_error(f"[EVENT] Не в lobby: {current_url}")
+            return "error", 0
+
+        # Ищем кнопку входа в lobby
+        soup = self.client.soup()
+        enter_url = None
+
+        for btn in soup.select("a.go-btn"):
+            text = btn.get_text(strip=True)
+            href = btn.get("href", "")
+            if text in ["Войти", "Начать бой!", "Начать бой"] and href and not href.startswith("javascript"):
+                enter_url = urljoin(self.client.current_url, href)
+                break
+
+        if not enter_url:
+            for link in soup.select("a"):
+                href = link.get("href", "")
+                if "ILinkListener" in href and ("enterLink" in href or "createPartyOrEnterLink" in href or "linkStartCombat" in href):
+                    enter_url = urljoin(self.client.current_url, href)
+                    break
+
+        if not enter_url:
+            match = re.search(r'"u":"([^"]*(?:enterLink|createPartyOrEnterLink|linkStartCombat)[^"]*)"', self.client.current_page)
+            if match:
+                enter_url = match.group(1)
+
+        if not enter_url:
+            log_error(f"[EVENT] Кнопка входа не найдена в lobby")
+            return "error", 0
+
+        self.client.get(enter_url)
+        time.sleep(1)
+
+        # Начинаем бой если нужно
+        if "/lobby/" in self.client.current_url or "/standby/" in self.client.current_url:
+            match = re.search(r'"u":"([^"]*linkStartCombat[^"]*)"', self.client.current_page)
+            if match:
+                log_debug(f"[EVENT] Начинаю бой...")
+                self.client.get(match.group(1))
+                time.sleep(1)
+
+        if "/combat" in self.client.current_url:
+            log_info(f"[EVENT] Вошли в {self.dungeon_name}!")
+            return "entered", 0
+
+        log_error(f"[EVENT] Неожиданный URL: {self.client.current_url}")
+        return "error", 0
+
+
+def set_event_cooldown(dungeon_key, client=None, seconds=None):
+    """
+    Устанавливает КД для ивент-данжена после победы.
+    Парсит реальное КД с сервера если передан client.
+    """
+    global _event_cooldowns
+
+    config = EVENT_DUNGEONS.get(dungeon_key)
+    if not config:
+        return
+
+    dungeon_id = config["id"]
+    dungeon_name = config["name"]
+
+    # Парсим реальное КД
+    if client is not None and seconds is None:
+        try:
+            log_debug(f"[EVENT] Парсим КД для {dungeon_name}...")
+            client.get("/dungeons")
+            html = client.current_page
+
+            pattern = rf'<div class="map-item-c map-item _dungeons([^"]*)"[^>]*>.*?title="{dungeon_id}"'
+            match = re.search(pattern, html, re.DOTALL)
+
+            if match and "_cd" in match.group(1):
+                block = match.group(0)
+                time_match = re.search(r'<span class="map-item-name">([^<]+)</span>', block)
+                if time_match:
+                    cd_text = time_match.group(1).strip()
+                    seconds = parse_cooldown_to_seconds(cd_text)
+                    log_info(f"[EVENT] {dungeon_name} КД: {cd_text}")
+        except Exception as e:
+            log_error(f"[EVENT] Ошибка парсинга КД: {e}")
+
+    if seconds is None:
+        seconds = NY_EVENT_COOLDOWN_DEFAULT
+
+    _event_cooldowns[dungeon_key] = time.time() + seconds
+    log_info(f"[EVENT] {dungeon_name} КД установлен: {seconds // 3600}ч {(seconds % 3600) // 60}м")
+
+
+def try_event_dungeon_generic(client, dungeon_key):
+    """
+    Пробует войти в указанный ивент-данжен.
+    Returns: ("entered", 0), ("on_cooldown", seconds), ("error", 0)
+    """
+    try:
+        dungeon_client = GenericEventDungeonClient(client, dungeon_key)
+        return dungeon_client.enter_dungeon()
+    except Exception as e:
+        log_error(f"[EVENT] Ошибка {dungeon_key}: {e}")
+        import traceback
+        traceback.print_exc()
+        return "error", 0
+
+
+def get_available_event_dungeons():
+    """Возвращает список ключей доступных ивент-данжей"""
+    return list(EVENT_DUNGEONS.keys())
 
 
 class EquipmentClient:
