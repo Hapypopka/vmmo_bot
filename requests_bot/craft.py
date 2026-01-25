@@ -1231,12 +1231,50 @@ class CyclicCraftClient(IronCraftClient):
 
     def __init__(self, client, backpack_client=None, profile: str = "unknown"):
         super().__init__(client, backpack_client, profile=profile)
+        self._leftovers_checked = False  # Флаг проверки остатков при старте
+
+    def _check_inventory_leftovers(self):
+        """
+        Проверяет есть ли в инвентаре остатки от предыдущего крафта.
+        Если да - возвращает recipe_id для докрафтивания.
+
+        Returns:
+            tuple: (recipe_id, current_count, batch_size) или (None, 0, 0)
+        """
+        try:
+            from requests_bot.craft_prices import load_craft_locks, get_optimal_batch_size
+
+            locks = load_craft_locks()
+            if self.profile not in locks:
+                return None, 0, 0
+
+            lock_info = locks[self.profile]
+            current_recipe = lock_info.get("recipe_id")
+            if not current_recipe:
+                return None, 0, 0
+
+            # Проверяем сколько уже есть в инвентаре
+            inv = self.get_mining_inventory()
+            current_count = inv.get(current_recipe, 0)
+
+            if current_count > 0:
+                batch_size = get_optimal_batch_size(current_recipe)
+                item_name = ITEM_NAMES.get(current_recipe, current_recipe)
+                print(f"[CRAFT] Найдены остатки от прошлой сессии: {item_name} x{current_count}/{batch_size}")
+                return current_recipe, current_count, batch_size
+
+            return None, 0, 0
+
+        except Exception as e:
+            print(f"[CRAFT] Ошибка проверки остатков: {e}")
+            return None, 0, 0
 
     def do_cyclic_craft_step(self):
         """
         Выполняет один шаг бесконечного цикла крафта.
 
         Логика:
+        0. При первом запуске проверяет остатки от прошлой сессии
         1. Проверяет инвентарь - если накоплено >= batch_size → продаёт
         2. Проверяет статус крафта - если готов → забирает
         3. Если крафт в процессе → ждёт
@@ -1254,6 +1292,24 @@ class CyclicCraftClient(IronCraftClient):
         if not items:
             print("[CRAFT] Список автокрафта пуст")
             return False, 0
+
+        # 0. При первом вызове - проверяем остатки от предыдущей сессии
+        if not self._leftovers_checked:
+            self._leftovers_checked = True
+            leftover_recipe, leftover_count, leftover_batch = self._check_inventory_leftovers()
+
+            if leftover_recipe and leftover_count > 0:
+                item_name = ITEM_NAMES.get(leftover_recipe, leftover_recipe)
+
+                if leftover_count >= leftover_batch:
+                    # Достаточно - продаём сразу
+                    print(f"[CRAFT] Остатки готовы к продаже: {item_name} x{leftover_count}")
+                    self._sell_item_batch(leftover_recipe)
+                    return True, 5
+                else:
+                    # Нужно докрафтить до batch_size
+                    print(f"[CRAFT] Докрафтиваю остатки: {item_name} {leftover_count}/{leftover_batch}")
+                    # Продолжаем с этим же рецептом (лок уже есть)
 
         # 1. Определяем лучший крафт и его оптимальный batch_size
         best_item_id = self._get_best_craft_item()
@@ -1283,7 +1339,7 @@ class CyclicCraftClient(IronCraftClient):
             self._sell_item_batch(best_item_id)
             return True, 5  # Проверить снова через 5 сек
 
-        # 2. Проверка статуса крафта
+        # 3. Проверка статуса крафта
         status = self.get_craft_status()
 
         if status["ready"]:
@@ -1305,7 +1361,7 @@ class CyclicCraftClient(IronCraftClient):
             # Это позволяет быстрее забрать готовый крафт
             return True, 30
 
-        # 3. Запустить новый крафт
+        # 4. Запустить новый крафт
         # Определяем самый выгодный крафт из кэша цен (или используем fallback)
         item_id = self._get_best_craft_item()
         recipe = self._get_recipe_for_item(item_id)

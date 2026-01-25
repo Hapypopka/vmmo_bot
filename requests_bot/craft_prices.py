@@ -22,29 +22,51 @@ CACHE_TTL = 14400  # 4 часа в секундах
 # Путь к файлу локов крафта (распределение между ботами)
 CRAFT_LOCKS_FILE = os.path.join(SCRIPT_DIR, "shared_craft_locks.json")
 CRAFT_LOCKS_LOCKFILE = os.path.join(SCRIPT_DIR, "shared_craft_locks.lock")
+CACHE_UPDATE_LOCKFILE = os.path.join(SCRIPT_DIR, "shared_cache_update.lock")
 LOCK_TTL = 7200  # 2 часа - лок протухает если бот не обновил
 
 # Комиссия аукциона (5%)
 AUCTION_FEE = 0.05
 
-# File lock для атомарных операций с локами
-import fcntl
+# File lock для атомарных операций с локами (кроссплатформенный)
+import sys
 
-class FileLock:
-    """Простой file lock для синхронизации между процессами"""
-    def __init__(self, lockfile):
-        self.lockfile = lockfile
-        self.fd = None
+if sys.platform == 'win32':
+    import msvcrt
 
-    def __enter__(self):
-        self.fd = open(self.lockfile, 'w')
-        fcntl.flock(self.fd, fcntl.LOCK_EX)
-        return self
+    class FileLock:
+        """Кроссплатформенный file lock для Windows"""
+        def __init__(self, lockfile):
+            self.lockfile = lockfile
+            self.fd = None
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        fcntl.flock(self.fd, fcntl.LOCK_UN)
-        self.fd.close()
-        return False
+        def __enter__(self):
+            self.fd = open(self.lockfile, 'w')
+            msvcrt.locking(self.fd.fileno(), msvcrt.LK_LOCK, 1)
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            msvcrt.locking(self.fd.fileno(), msvcrt.LK_UNLCK, 1)
+            self.fd.close()
+            return False
+else:
+    import fcntl
+
+    class FileLock:
+        """Простой file lock для синхронизации между процессами (Linux/Mac)"""
+        def __init__(self, lockfile):
+            self.lockfile = lockfile
+            self.fd = None
+
+        def __enter__(self):
+            self.fd = open(self.lockfile, 'w')
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+            self.fd.close()
+            return False
 
 # Все профитные рецепты для автовыбора
 # Исключены: copperOre (убыточная), twilightSteel/twilightAnthracite (требуют сапфиры/рубины)
@@ -174,6 +196,83 @@ def get_sorted_recipes_by_profit():
     return recipe_profits
 
 
+def get_profitable_recipes():
+    """
+    Возвращает рецепты с профитом >= 10% от среднего (но >= 0).
+    Fallback: топ-3 если ничего не прошло фильтр.
+
+    Returns:
+        list: [(recipe_id, profit_per_hour), ...] отсортированный по убыванию профита
+    """
+    sorted_recipes = get_sorted_recipes_by_profit()
+
+    # Считаем средний профит среди положительных
+    profits = [p for _, p in sorted_recipes if p > 0]
+    if not profits:
+        # Все убыточные - берём топ-3 (наименее убыточные)
+        print("[CRAFT_QUOTAS] Все рецепты убыточные, берём топ-3")
+        return sorted_recipes[:3]
+
+    avg_profit = sum(profits) / len(profits)
+    threshold = max(avg_profit * 0.1, 0)  # 10% от среднего, но не меньше 0
+
+    profitable = [(r, p) for r, p in sorted_recipes if p >= threshold]
+
+    if not profitable:
+        # Ничего не прошло порог - берём топ-3
+        print(f"[CRAFT_QUOTAS] Нет рецептов с профитом >= {threshold:.1f}з/ч, берём топ-3")
+        return sorted_recipes[:3]
+
+    print(f"[CRAFT_QUOTAS] Порог: {threshold:.1f}з/ч (10% от avg={avg_profit:.1f}), прошло: {len(profitable)} рецептов")
+    return profitable
+
+
+def calculate_quotas(profitable_recipes, total_bots=21, max_per_recipe=5):
+    """
+    Распределяет ботов по рецептам с учётом весов.
+
+    Веса по позиции: 1-й=5, 2-й=4, 3-й=4, 4-й=3, 5-й=3, 6-й=2, остальные=1
+
+    Args:
+        profitable_recipes: list of (recipe_id, profit) отсортированный по убыванию
+        total_bots: общее количество ботов
+        max_per_recipe: максимум ботов на один рецепт
+
+    Returns:
+        dict: {recipe_id: quota, ...}
+    """
+    weights = [5, 4, 4, 3, 3, 2, 1, 1, 1, 1, 1]  # макс 11 рецептов
+
+    quotas = {}
+    remaining = total_bots
+
+    for i, (recipe_id, profit) in enumerate(profitable_recipes):
+        weight = weights[i] if i < len(weights) else 1
+        quota = min(weight, max_per_recipe, remaining)
+        quotas[recipe_id] = quota
+        remaining -= quota
+        if remaining <= 0:
+            break
+
+    # Если остались боты - добавляем к топовым
+    if remaining > 0:
+        for recipe_id in quotas:
+            add = min(remaining, max_per_recipe - quotas[recipe_id])
+            if add > 0:
+                quotas[recipe_id] += add
+                remaining -= add
+            if remaining <= 0:
+                break
+
+    # Если ВСЁ ЕЩЁ остались боты - разрешаем превышение для топового рецепта
+    if remaining > 0 and quotas:
+        top_recipe = list(quotas.keys())[0]
+        quotas[top_recipe] += remaining
+        print(f"[CRAFT_QUOTAS] Превышение квоты для {top_recipe}: +{remaining} ботов")
+
+    return quotas
+
+
 def acquire_craft_lock(profile):
     """
     Берёт лок на крафт для профиля (с file lock для атомарности).
@@ -182,9 +281,10 @@ def acquire_craft_lock(profile):
 
     Логика:
     1. Если у профиля есть активный лок - продлеваем
-    2. Считаем сколько ботов на каждом рецепте (без протухших)
-    3. Находим минимальное кол-во
-    4. Среди рецептов с минимумом берём самый выгодный
+    2. Получаем профитные рецепты и квоты
+    3. Считаем сколько ботов на каждом рецепте (без протухших)
+    4. Берём рецепт где quota > текущих ботов
+    5. Если все квоты заполнены - берём топовый (с превышением)
 
     Args:
         profile: имя профиля (char1, char2, ...)
@@ -207,6 +307,17 @@ def acquire_craft_lock(profile):
                     save_craft_locks(locks)
                     return recipe_id
 
+            # Считаем активных ботов
+            active_bots = 0
+            for p, lock_info in locks.items():
+                timestamp = lock_info.get("timestamp", 0)
+                if now - timestamp <= LOCK_TTL:
+                    active_bots += 1
+
+            # Получаем профитные рецепты и рассчитываем квоты
+            profitable = get_profitable_recipes()
+            quotas = calculate_quotas(profitable, total_bots=max(active_bots + 1, 21))
+
             # Считаем ботов на каждом рецепте (внутри лока!)
             bot_counts = {recipe: 0 for recipe in FINAL_RECIPES}
             for p, lock_info in locks.items():
@@ -218,20 +329,25 @@ def acquire_craft_lock(profile):
                     continue  # Протух - не считаем
                 bot_counts[recipe_id] = bot_counts.get(recipe_id, 0) + 1
 
-            # Получаем рецепты отсортированные по профиту
-            sorted_recipes = get_sorted_recipes_by_profit()
-
-            # Находим минимальное кол-во ботов
-            min_count = min(bot_counts.values()) if bot_counts else 0
-
-            # Среди рецептов с минимумом ботов берём самый выгодный
-            for recipe_id, profit in sorted_recipes:
-                if bot_counts.get(recipe_id, 0) == min_count:
-                    # Берём этот рецепт
+            # Ищем рецепт где quota > текущих ботов (в порядке профитности)
+            for recipe_id, profit in profitable:
+                quota = quotas.get(recipe_id, 0)
+                current = bot_counts.get(recipe_id, 0)
+                if current < quota:
                     locks[profile] = {"recipe_id": recipe_id, "timestamp": now}
                     save_craft_locks(locks)
-                    print(f"[CRAFT_LOCKS] {profile}: взял {recipe_id} (ботов: {min_count}, профит: {profit:.1f}з/ч)")
+                    print(f"[CRAFT_LOCKS] {profile}: взял {recipe_id} (ботов: {current}/{quota}, профит: {profit:.1f}з/ч)")
                     return recipe_id
+
+            # Все квоты заполнены - берём топовый рецепт с превышением
+            if profitable:
+                recipe_id = profitable[0][0]
+                profit = profitable[0][1]
+                current = bot_counts.get(recipe_id, 0)
+                locks[profile] = {"recipe_id": recipe_id, "timestamp": now}
+                save_craft_locks(locks)
+                print(f"[CRAFT_LOCKS] {profile}: все квоты заполнены, превышаю на {recipe_id} (ботов: {current}+1, профит: {profit:.1f}з/ч)")
+                return recipe_id
 
             # Fallback - первый из списка
             recipe_id = FINAL_RECIPES[0]
@@ -614,6 +730,7 @@ def get_optimal_batch_size(recipe_id):
 def refresh_craft_prices_cache(client):
     """
     Обновляет кэш цен крафта через HTTP запросы к аукциону.
+    Использует file lock чтобы только один бот обновлял кэш.
 
     Вызывается ботом когда кэш устарел.
 
@@ -621,19 +738,79 @@ def refresh_craft_prices_cache(client):
         client: VMMOClient instance
 
     Returns:
-        bool: True если успешно обновлено
+        bool: True если успешно обновлено (или кэш уже свежий)
     """
     try:
-        print("[CRAFT_PRICES] Обновляю кэш цен с аукциона...")
-        checker = CraftPriceChecker(client, use_cache=False)
-        prices = checker.get_all_craft_prices()
+        # Используем FileLock с таймаутом через попытки
+        lock_acquired = False
+        fd = None
 
-        if prices and len(prices) > 0:
-            print(f"[CRAFT_PRICES] Кэш обновлён: {len(prices)} цен")
-            return True
+        if sys.platform == 'win32':
+            import msvcrt
+            fd = open(CACHE_UPDATE_LOCKFILE, 'w')
+            try:
+                msvcrt.locking(fd.fileno(), msvcrt.LK_NBLCK, 1)
+                lock_acquired = True
+            except (IOError, OSError):
+                fd.close()
+                fd = None
         else:
-            print("[CRAFT_PRICES] Не удалось получить цены")
-            return False
+            import fcntl
+            fd = open(CACHE_UPDATE_LOCKFILE, 'w')
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_acquired = True
+            except (IOError, OSError):
+                fd.close()
+                fd = None
+
+        if not lock_acquired:
+            # Лок занят другим ботом - проверяем свежесть кэша
+            print("[CRAFT_PRICES] Другой бот обновляет кэш, проверяю свежесть...")
+
+            # Ждём до 30 секунд пока кэш обновится
+            for _ in range(6):
+                time.sleep(5)
+                if not is_cache_expired():
+                    print("[CRAFT_PRICES] Кэш обновлён другим ботом")
+                    return True
+
+            print("[CRAFT_PRICES] Кэш всё ещё устарел, пробую сам...")
+            # Берём блокирующий лок
+            fd = open(CACHE_UPDATE_LOCKFILE, 'w')
+            if sys.platform == 'win32':
+                import msvcrt
+                msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_EX)
+
+        try:
+            # Ещё раз проверяем - может уже обновили
+            if not is_cache_expired():
+                print("[CRAFT_PRICES] Кэш уже свежий")
+                return True
+
+            print("[CRAFT_PRICES] Обновляю кэш цен с аукциона...")
+            checker = CraftPriceChecker(client, use_cache=False)
+            prices = checker.get_all_craft_prices()
+
+            if prices and len(prices) > 0:
+                print(f"[CRAFT_PRICES] Кэш обновлён: {len(prices)} цен")
+                return True
+            else:
+                print("[CRAFT_PRICES] Не удалось получить цены")
+                return False
+        finally:
+            if fd:
+                if sys.platform == 'win32':
+                    import msvcrt
+                    msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                fd.close()
+
     except Exception as e:
         print(f"[CRAFT_PRICES] Ошибка обновления кэша: {e}")
         return False
