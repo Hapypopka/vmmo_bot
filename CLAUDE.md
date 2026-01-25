@@ -347,27 +347,36 @@ MCP сервер для управления браузером через Claud
 
 VPN работает на порту **8443** (не 443, т.к. 443 занят nginx для HTTPS).
 
-### VPN пользователи (перенесены с немецкого сервера):
-| ID | Имя | Порт | Протокол |
-|----|-----|------|----------|
-| 1 | Ильмир | 36645 | vless |
-| 2 | Фаиз | 49641 | vless |
-| 3 | Гузель | 11819 | vless |
-| 4 | Ильгам | 53888 | vless |
-| 5 | Гульнур | 34175 | vless |
-| 7 | Зульфия | 35124 | vless |
-| 8 | Reality-VPN | 8443 | vless |
+### VPN пользователи (все на порту 8443):
+| Имя | UUID | subId |
+|-----|------|-------|
+| Faiz (main) | 4678b413-dde6-4a9f-b57c-e154633f0f6f | reality123 |
+| Ильмир | 15c47bf3-ea1d-418b-afa0-fc8eea553276 | ilmir456 |
+| Faiz-2 | f4a2fda4-6763-4c7e-a560-ca60a96a3bb5 | faiz789 |
+| Зульфия | 7d7b4c50-11fc-4df1-92d2-c24b8ca0a0a6 | lgfdsox2c1gl0s5j |
+| Фаиз | e1c5fb07-f05f-4edf-a5fc-ab3812f77631 | veh6hfbsafmgupfj |
+| Ильгам | 84ec4d41-a4b8-40e8-851f-d242c86dc207 | zox9snw9u8lve2dw |
+| ПК Ильгам | d241b4cc-5001-4919-a267-50e1ac1adb85 | hk8gfmtqpggmv6mz |
 
 ### Ссылка для подключения (Hiddify/v2rayNG):
-**ВАЖНО:** IP изменился на 45.131.187.128! Нужно обновить ссылки в клиентах.
+Формат ссылки (подставить нужный UUID):
 ```
-vless://4678b413-dde6-4a9f-b57c-e154633f0f6f@45.131.187.128:8443?type=tcp&security=reality&pbk=78Men0MPTAojbX2S7SL2n9OmUh3HPuj35uRmaH_kTFw&fp=chrome&sni=www.microsoft.com&sid=fc0f1ebc97ae1e55&spx=%2F&flow=xtls-rprx-vision#Reality-Faiz
+vless://UUID@45.131.187.128:8443?type=tcp&security=reality&pbk=78Men0MPTAojbX2S7SL2n9OmUh3HPuj35uRmaH_kTFw&fp=chrome&sni=www.microsoft.com&sid=fc0f1ebc97ae1e55&spx=%2F&flow=xtls-rprx-vision#ИМЯ
 ```
 
 ### Управление x-ui:
 ```bash
 systemctl restart x-ui   # перезапуск
 systemctl status x-ui    # статус
+```
+
+### Watchdog (автопроверка каждые 5 мин):
+Скрипт `/usr/local/bin/check-xray.sh` проверяет что порт 8443 слушается и перезапускает x-ui если нет.
+Логи: `/var/log/xray-watchdog.log`
+
+```bash
+# Проверить лог watchdog
+cat /var/log/xray-watchdog.log
 ```
 
 ### Если нужно изменить порт VPN:

@@ -227,16 +227,59 @@ def get_profitable_recipes():
     return profitable
 
 
-def calculate_quotas(profitable_recipes, total_bots=21, max_per_recipe=5):
+def get_craft_time_hours(recipe_id):
     """
-    Распределяет ботов по рецептам с учётом весов.
+    Возвращает полное время крафта цепочки в часах.
+
+    Args:
+        recipe_id: ID рецепта
+
+    Returns:
+        float: время в часах
+    """
+    reqs = _get_full_requirements_static(recipe_id)
+    return reqs["total_time"] / 3600
+
+
+def get_max_bots_for_recipe(recipe_id):
+    """
+    Определяет максимум ботов для рецепта на основе времени крафта.
+
+    Логика:
+    - >= 4 часов (платиновый слиток ~13ч) → max 2 бота
+    - >= 2 часов (бронзовый/торовый слиток) → max 3 бота
+    - < 2 часов (быстрые крафты) → max 5 ботов
+
+    Args:
+        recipe_id: ID рецепта
+
+    Returns:
+        int: максимум ботов
+    """
+    hours = get_craft_time_hours(recipe_id)
+
+    if hours >= 4:
+        return 2  # Очень долгие крафты - только 1-2 бота
+    elif hours >= 2:
+        return 3  # Долгие крафты - до 3 ботов
+    else:
+        return 5  # Быстрые крафты - до 5 ботов
+
+
+def calculate_quotas(profitable_recipes, total_bots=21):
+    """
+    Распределяет ботов по рецептам с учётом весов И времени крафта.
 
     Веса по позиции: 1-й=5, 2-й=4, 3-й=4, 4-й=3, 5-й=3, 6-й=2, остальные=1
+
+    Лимиты по времени крафта:
+    - >= 4 часов → max 2 бота (платиновый слиток)
+    - >= 2 часов → max 3 бота (бронзовый/торовый слиток)
+    - < 2 часов → max 5 ботов
 
     Args:
         profitable_recipes: list of (recipe_id, profit) отсортированный по убыванию
         total_bots: общее количество ботов
-        max_per_recipe: максимум ботов на один рецепт
 
     Returns:
         dict: {recipe_id: quota, ...}
@@ -248,27 +291,48 @@ def calculate_quotas(profitable_recipes, total_bots=21, max_per_recipe=5):
 
     for i, (recipe_id, profit) in enumerate(profitable_recipes):
         weight = weights[i] if i < len(weights) else 1
-        quota = min(weight, max_per_recipe, remaining)
+        max_for_this = get_max_bots_for_recipe(recipe_id)
+        quota = min(weight, max_for_this, remaining)
         quotas[recipe_id] = quota
         remaining -= quota
+
+        hours = get_craft_time_hours(recipe_id)
+        if hours >= 2:
+            print(f"[CRAFT_QUOTAS] {recipe_id}: {hours:.1f}ч → лимит {max_for_this} ботов")
+
         if remaining <= 0:
             break
 
-    # Если остались боты - добавляем к топовым
+    # Если остались боты - добавляем к рецептам где ещё есть место до лимита
     if remaining > 0:
         for recipe_id in quotas:
-            add = min(remaining, max_per_recipe - quotas[recipe_id])
+            max_for_this = get_max_bots_for_recipe(recipe_id)
+            add = min(remaining, max_for_this - quotas[recipe_id])
             if add > 0:
                 quotas[recipe_id] += add
                 remaining -= add
             if remaining <= 0:
                 break
 
-    # Если ВСЁ ЕЩЁ остались боты - разрешаем превышение для топового рецепта
-    if remaining > 0 and quotas:
-        top_recipe = list(quotas.keys())[0]
-        quotas[top_recipe] += remaining
-        print(f"[CRAFT_QUOTAS] Превышение квоты для {top_recipe}: +{remaining} ботов")
+    # Если ВСЁ ЕЩЁ остались боты - распределяем равномерно по ВСЕМ рецептам
+    # КРОМЕ platinumBar (слишком долгий - 13ч)
+    if remaining > 0:
+        # Добавляем все рецепты в quotas (если ещё нет)
+        for recipe_id in FINAL_RECIPES:
+            if recipe_id not in quotas:
+                quotas[recipe_id] = 0
+
+        while remaining > 0:
+            # Находим рецепт с минимумом ботов (кроме platinumBar)
+            eligible = {r: q for r, q in quotas.items() if r != "platinumBar"}
+            if not eligible:
+                eligible = quotas
+
+            min_recipe = min(eligible.keys(), key=lambda r: quotas[r])
+            quotas[min_recipe] += 1
+            remaining -= 1
+
+        print(f"[CRAFT_QUOTAS] Равномерно распределены лишние боты")
 
     return quotas
 
