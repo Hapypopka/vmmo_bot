@@ -333,7 +333,9 @@
             config.resource_sell[resource] = {enabled: false, stack: 1000, reserve: 200};
         }
         config.resource_sell[resource].enabled = !config.resource_sell[resource].enabled;
-        await apiCall(`/api/config/${profile}`, 'POST', config);
+        const result = await apiCall(`/api/config/${profile}`, 'POST', config);
+        const state = config.resource_sell[resource].enabled ? 'ВКЛ' : 'ВЫКЛ';
+        showToast(`Продажа ${resource}: ${state}`, result.success ? 'success' : 'error');
     }
 
     async function saveResourceSell(profile, resource) {
@@ -344,7 +346,8 @@
         }
         config.resource_sell[resource].stack = parseInt(document.getElementById(`sell_${resource}_stack`).value) || 1000;
         config.resource_sell[resource].reserve = parseInt(document.getElementById(`sell_${resource}_reserve`).value) || 200;
-        await apiCall(`/api/config/${profile}`, 'POST', config);
+        const result = await apiCall(`/api/config/${profile}`, 'POST', config);
+        showToast('Настройки сохранены', result.success ? 'success' : 'error');
     }
 
     async function toggleDungeon(profile, dungeonId) {
@@ -354,8 +357,10 @@
         const idx = config.only_dungeons.indexOf(dungeonId);
         if (idx > -1) {
             config.only_dungeons.splice(idx, 1);
+            showToast('Данжен убран', 'success');
         } else {
             config.only_dungeons.push(dungeonId);
+            showToast('Данжен добавлен', 'success');
         }
         await apiCall(`/api/config/${profile}`, 'POST', config);
     }
@@ -367,18 +372,20 @@
 
         const result = await apiCall(`/api/craft_items/${profile}/add`, 'POST', {item, batch_size});
         if (result.success) {
-            location.reload();
+            showToast('Предмет добавлен', 'success');
+            setTimeout(() => location.reload(), 500);
         } else {
-            alert('Ошибка: ' + (result.error || 'неизвестная'));
+            showToast('Ошибка: ' + (result.error || 'неизвестная'), 'error');
         }
     }
 
     async function removeCraftItem(profile, index) {
         const result = await apiCall(`/api/craft_items/${profile}/remove`, 'POST', {index});
         if (result.success) {
-            location.reload();
+            showToast('Предмет удалён', 'success');
+            setTimeout(() => location.reload(), 500);
         } else {
-            alert('Ошибка: ' + (result.error || 'неизвестная'));
+            showToast('Ошибка: ' + (result.error || 'неизвестная'), 'error');
         }
     }
 
@@ -387,9 +394,10 @@
 
         const result = await apiCall(`/api/craft_items/${profile}/clear`, 'POST', {});
         if (result.success) {
-            location.reload();
+            showToast('Список очищен', 'success');
+            setTimeout(() => location.reload(), 500);
         } else {
-            alert('Ошибка: ' + (result.error || 'неизвестная'));
+            showToast('Ошибка: ' + (result.error || 'неизвестная'), 'error');
         }
     }
 
@@ -410,13 +418,15 @@
         if (cd3 > 0) config.skill_cooldowns['3'] = cd3;
         else delete config.skill_cooldowns['3'];
 
-        await apiCall(`/api/config/${profile}`, 'POST', config);
+        const result = await apiCall(`/api/config/${profile}`, 'POST', config);
+        showToast('Кулдауны сохранены', result.success ? 'success' : 'error');
     }
 
     async function saveValue(profile, key, value) {
         const config = await apiCall(`/api/config/${profile}`);
         config[key] = parseInt(value) || value;
-        await apiCall(`/api/config/${profile}`, 'POST', config);
+        const result = await apiCall(`/api/config/${profile}`, 'POST', config);
+        showToast('Сохранено', result.success ? 'success' : 'error');
     }
 
     async function saveValueOrNull(profile, key, value) {
@@ -426,7 +436,8 @@
         } else {
             delete config[key];
         }
-        await apiCall(`/api/config/${profile}`, 'POST', config);
+        const result = await apiCall(`/api/config/${profile}`, 'POST', config);
+        showToast('Сохранено', result.success ? 'success' : 'error');
     }
 
     async function saveHpThresholds(profile) {
@@ -446,7 +457,8 @@
         if (hp3 > 0) config.skill_hp_thresholds['3'] = hp3;
         else delete config.skill_hp_thresholds['3'];
 
-        await apiCall(`/api/config/${profile}`, 'POST', config);
+        const result = await apiCall(`/api/config/${profile}`, 'POST', config);
+        showToast('HP пороги сохранены', result.success ? 'success' : 'error');
     }
 
     async function saveRawConfig(profile) {
@@ -454,13 +466,13 @@
             const json = JSON.parse(document.getElementById('json_config').value);
             const result = await apiCall(`/api/config/${profile}`, 'POST', json);
             if (result.success) {
-                alert('Конфиг сохранён!');
-                location.reload();
+                showToast('Конфиг сохранён!', 'success');
+                setTimeout(() => location.reload(), 500);
             } else {
-                alert('Ошибка: ' + result.error);
+                showToast('Ошибка: ' + result.error, 'error');
             }
         } catch (e) {
-            alert('Ошибка парсинга JSON: ' + e.message);
+            showToast('Ошибка JSON: ' + e.message, 'error');
         }
     }
 </script>

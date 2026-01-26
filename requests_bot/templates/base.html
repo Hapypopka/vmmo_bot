@@ -1595,7 +1595,22 @@
 
         async function toggleSetting(profile, setting) {
             const result = await apiCall(`/api/config/${profile}/toggle/${setting}`, 'POST');
-            if (!result.success) {
+            if (result.success) {
+                const settingNames = {
+                    'dungeons_enabled': 'Данжены',
+                    'arena_enabled': 'Арена',
+                    'hell_games_enabled': 'Адские игры',
+                    'event_dungeon_enabled': 'Ивент данжены',
+                    'ny_event_dungeon_enabled': 'НГ ивенты',
+                    'survival_mines_enabled': 'Шахта',
+                    'iron_craft_enabled': 'Крафт',
+                    'auto_select_craft': 'Автовыбор крафта',
+                    'daily_rewards_enabled': 'Ежедневки'
+                };
+                const name = settingNames[setting] || setting;
+                const state = result.value ? 'ВКЛ' : 'ВЫКЛ';
+                showToast(`${name}: ${state}`, 'success');
+            } else {
                 showToast('Ошибка сохранения', 'error');
             }
         }
