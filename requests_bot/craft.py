@@ -1232,6 +1232,7 @@ class CyclicCraftClient(IronCraftClient):
     def __init__(self, client, backpack_client=None, profile: str = "unknown"):
         super().__init__(client, backpack_client, profile=profile)
         self._leftovers_checked = False  # Флаг проверки остатков при старте
+        self._selected_recipe = None  # Рецепт выбирается ОДИН РАЗ при старте
 
     def _check_inventory_leftovers(self):
         """
@@ -1379,17 +1380,16 @@ class CyclicCraftClient(IronCraftClient):
         """
         Определяет лучший предмет для крафта с учётом распределения между ботами.
 
-        Логика:
-        1. Если автовыбор отключён - используем конфиг
-        2. Если кэш цен устарел - обновляем
-        3. Берём лок через acquire_craft_lock():
-           - Считает сколько ботов на каждом рецепте
-           - Берёт рецепт с минимумом ботов
-           - Если равны - берёт самый выгодный
+        ВАЖНО: Рецепт выбирается ОДИН РАЗ при старте и кэшируется на всю сессию!
+        Это убирает постоянные пересчёты квот и файловые операции.
 
         Returns:
             str: item_id для крафта
         """
+        # Если рецепт уже выбран - возвращаем его без пересчётов
+        if self._selected_recipe:
+            return self._selected_recipe
+
         from requests_bot.config import get_craft_items, get_setting
 
         # Проверяем включён ли автовыбор
@@ -1399,15 +1399,19 @@ class CyclicCraftClient(IronCraftClient):
             # Автовыбор отключён - используем первый из списка
             items = get_craft_items()
             if items:
-                return items[0]["item"]
-            return "ironBar"  # fallback
+                self._selected_recipe = items[0]["item"]
+                item_name = ITEM_NAMES.get(self._selected_recipe, self._selected_recipe)
+                print(f"[CRAFT] Выбран рецепт (ручной): {item_name}")
+                return self._selected_recipe
+            self._selected_recipe = "ironBar"
+            return self._selected_recipe
 
         try:
             from requests_bot.craft_prices import (
                 is_cache_expired, refresh_craft_prices_cache, acquire_craft_lock
             )
 
-            # Если кэш устарел - обновляем
+            # Обновляем кэш ТОЛЬКО при первом выборе
             if is_cache_expired():
                 print("[CRAFT] Кэш цен устарел, обновляю...")
                 refresh_craft_prices_cache(self.client)
@@ -1416,8 +1420,10 @@ class CyclicCraftClient(IronCraftClient):
             best_item = acquire_craft_lock(self.profile)
 
             if best_item:
+                self._selected_recipe = best_item
                 item_name = ITEM_NAMES.get(best_item, best_item)
-                return best_item
+                print(f"[CRAFT] Выбран рецепт (авто): {item_name} - крафтим всю сессию")
+                return self._selected_recipe
 
         except Exception as e:
             print(f"[CRAFT] Ошибка автовыбора: {e}")
@@ -1427,12 +1433,13 @@ class CyclicCraftClient(IronCraftClient):
         # Fallback - первый из списка конфига
         items = get_craft_items()
         if items:
-            item_id = items[0]["item"]
-            item_name = ITEM_NAMES.get(item_id, item_id)
+            self._selected_recipe = items[0]["item"]
+            item_name = ITEM_NAMES.get(self._selected_recipe, self._selected_recipe)
             print(f"[CRAFT] Fallback: {item_name} (первый из списка)")
-            return item_id
+            return self._selected_recipe
 
-        return "ironBar"  # последний fallback
+        self._selected_recipe = "ironBar"
+        return self._selected_recipe
 
     def _sell_item_batch(self, item_id):
         """

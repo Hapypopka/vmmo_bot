@@ -92,6 +92,7 @@ class VMMOBot:
         self.event_client = None
         self.equip_client = None
         self.pet_client = None
+        self.craft_client = None  # Создаётся один раз, хранит выбранный рецепт
 
         # Статистика (файловая)
         self.bot_stats = None
@@ -127,6 +128,11 @@ class VMMOBot:
         self.event_client = EventDungeonClient(self.client)
         self.equip_client = EquipmentClient(self.client)
         self.pet_client = PetClient(self.client)
+
+        # Крафт клиент создаётся ОДИН РАЗ - хранит выбранный рецепт всю сессию
+        if is_iron_craft_enabled():
+            from requests_bot.craft import CyclicCraftClient
+            self.craft_client = CyclicCraftClient(self.client, profile=get_profile_name())
 
     def login(self):
         """Авторизация"""
@@ -364,11 +370,8 @@ class VMMOBot:
         """
         Выполняет один шаг бесконечного цикла крафта.
 
-        Использует craft_items - список предметов для постоянного крафта.
-        Логика:
-        1. Проверяет инвентарь - если накоплено >= batch_size → продаёт
-        2. Проверяет статус крафта - если готов → забирает
-        3. Если крафт не идёт → запускает новый крафт
+        Использует self.craft_client который создаётся ОДИН РАЗ при старте.
+        Рецепт выбирается при первом вызове и крафтится всю сессию.
 
         Returns:
             tuple: (crafting_active, wait_time) - крафт активен и сколько ждать
@@ -376,17 +379,18 @@ class VMMOBot:
         if not is_iron_craft_enabled():
             return False, 0
 
+        if not self.craft_client:
+            log_debug("[CRAFT] Крафт клиент не инициализирован")
+            return False, 0
+
         try:
             from requests_bot.config import get_craft_items
-            from requests_bot.craft import CyclicCraftClient
-
             items = get_craft_items()
             if not items:
                 log_debug("[CRAFT] Список автокрафта пуст")
                 return False, 0
 
-            craft = CyclicCraftClient(self.client, profile=get_profile_name())
-            return craft.do_cyclic_craft_step()
+            return self.craft_client.do_cyclic_craft_step()
 
         except Exception as e:
             log_error(f"[CRAFT] Ошибка: {e}")
