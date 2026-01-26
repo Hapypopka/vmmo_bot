@@ -186,6 +186,12 @@ class VMMOBot:
             # Iron craft отключен - используем простую проверку repeat
             return self.try_restart_craft()
 
+        # Быстрая проверка - если крафт ещё идёт, не делаем HTTP запросы
+        from requests_bot.config import get_craft_finish_time
+        finish_time = get_craft_finish_time()
+        if finish_time and time.time() < finish_time:
+            return False  # Крафт ещё идёт, рано проверять
+
         try:
             # Вызываем в цикле пока возвращает wait_time <= 5 (был забор или продажа)
             # Это нужно чтобы после забора сразу запустился новый крафт
