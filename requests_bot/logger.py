@@ -17,37 +17,46 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 # Глобальный логгер
 _logger = None
 _log_file = None
+_profile_name = None
 
 
 def init_logger(name="vmmo_bot"):
     """
     Инициализирует логгер с выводом в файл и консоль.
+    Включает имя профиля в логи для идентификации.
     Возвращает логгер.
     """
-    global _logger, _log_file
+    global _logger, _log_file, _profile_name
 
     if _logger is not None:
         return _logger
+
+    # Получаем имя профиля
+    try:
+        from requests_bot.config import get_profile_name
+        _profile_name = get_profile_name() or "default"
+    except:
+        _profile_name = "default"
 
     # Создаём логгер
     _logger = logging.getLogger(name)
     _logger.setLevel(logging.DEBUG)
 
-    # Формат: [время] [уровень] сообщение
-    formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] %(message)s',
+    # Формат для консоли: [время] [профиль] [уровень] сообщение
+    console_formatter = logging.Formatter(
+        f'[%(asctime)s] [{_profile_name}] [%(levelname)s] %(message)s',
         datefmt='%H:%M:%S'
     )
 
-    # Детальный формат для файла
+    # Детальный формат для файла с профилем
     file_formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] %(message)s',
+        f'[%(asctime)s] [{_profile_name}] [%(levelname)s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Файл лога с датой и временем
+    # Файл лога с профилем и датой
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    _log_file = os.path.join(LOGS_DIR, f"bot_{timestamp}.log")
+    _log_file = os.path.join(LOGS_DIR, f"bot_{_profile_name}_{timestamp}.log")
 
     # Handler для файла (DEBUG и выше)
     file_handler = logging.FileHandler(_log_file, encoding='utf-8')
@@ -57,10 +66,17 @@ def init_logger(name="vmmo_bot"):
     # Handler для консоли (INFO и выше)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(console_formatter)
 
     _logger.addHandler(file_handler)
     _logger.addHandler(console_handler)
+
+    # Live лог - всегда последняя сессия профиля (для быстрого доступа)
+    live_log = os.path.join(LOGS_DIR, f"bot_{_profile_name}_live.log")
+    live_handler = logging.FileHandler(live_log, mode='w', encoding='utf-8')
+    live_handler.setLevel(logging.INFO)
+    live_handler.setFormatter(file_formatter)
+    _logger.addHandler(live_handler)
 
     _logger.info(f"=== Лог сессии: {_log_file} ===")
 
