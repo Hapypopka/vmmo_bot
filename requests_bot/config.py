@@ -65,9 +65,15 @@ _DEFAULT_PROTECTED_ITEMS = [
     # Крафт меди/бронзы
     "Медь",
     "Медная Руда",
+    "Медный Слиток",
     "Бронза",
+    "Бронзовый Слиток",
     # Крафт платины
     "Платина",
+    "Платиновый Слиток",
+    # Крафт тора
+    "Тор",
+    "Слиток Тора",
     # Квестовые/ценные
     "Треснутый Кристалл Тикуана",
     "Печать Сталкера I",
@@ -312,7 +318,7 @@ def is_survival_mines_enabled():
 
 def is_daily_rewards_enabled():
     """Проверяет, включен ли автосбор ежедневных наград для текущего профиля"""
-    return _profile_config.get("daily_rewards_enabled", False)
+    return _profile_config.get("daily_rewards_enabled", True)  # По умолчанию ВКЛ
 
 
 def is_iron_craft_enabled():
