@@ -199,16 +199,9 @@ class VMMOBot:
             return False  # Крафт ещё идёт, рано проверять
 
         try:
-            # Вызываем в цикле пока возвращает wait_time <= 5 (был забор или продажа)
-            # Это нужно чтобы после забора сразу запустился новый крафт
-            crafted = False
-            for _ in range(3):  # Максимум 3 итерации чтобы не зациклиться
-                is_active, wait_time = self.do_craft_step()
-                if is_active:
-                    crafted = True
-                if wait_time > 5:
-                    break  # Крафт запущен или в процессе - выходим
-            return crafted
+            # Один вызов - забирает готовый и/или запускает новый
+            is_active, wait_time = self.do_craft_step()
+            return is_active
         except Exception as e:
             log_error(f"[CRAFT] Ошибка в check_craft: {e}")
             return False

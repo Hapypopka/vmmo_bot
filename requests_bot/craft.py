@@ -1352,9 +1352,9 @@ class CyclicCraftClient(IronCraftClient):
                 # Очищаем время завершения крафта после забора
                 from requests_bot.config import clear_craft_finish_time
                 clear_craft_finish_time()
-            return True, 5  # Сразу проверить инвентарь
+            # НЕ возвращаемся - идём дальше запускать новый крафт
 
-        if status["in_progress"]:
+        elif status["in_progress"]:
             # Ждать завершения
             craft_type = status.get("type")
 
