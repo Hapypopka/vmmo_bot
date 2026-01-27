@@ -78,7 +78,7 @@ def set_ny_event_cooldown(client=None, seconds=None):
     if client is not None and seconds is None:
         try:
             log_debug("[NY-EVENT] Парсим реальное КД с /dungeons...")
-            client.get("/dungeons")
+            client.get("/dungeons?section=tab1")
             html = client.current_page
 
             # Ищем блок с NYLairFrost_2026 и класс _cd
@@ -363,9 +363,9 @@ class NYEventDungeonClient:
             log_debug(f"[NY-EVENT] Логово Демона Мороза на КД (кэш): {remaining // 60}м")
             return True, remaining
 
-        # Загружаем страницу данжей
-        log_debug("[NY-EVENT] Загружаю /dungeons...")
-        self.client.get("/dungeons")
+        # Загружаем страницу данжей с вкладкой "События"
+        log_debug("[NY-EVENT] Загружаю /dungeons?section=tab1...")
+        self.client.get("/dungeons?section=tab1")
         html = self.client.current_page
         log_debug(f"[NY-EVENT] Получено {len(html)} байт HTML")
 
@@ -640,9 +640,9 @@ class GenericEventDungeonClient:
             log_debug(f"[EVENT] {self.dungeon_name} на КД (кэш): {remaining // 60}м")
             return True, remaining
 
-        # Загружаем страницу данжей (ивент-вкладка загружается автоматически через JS,
-        # но в HTML все данжены должны быть)
-        self.client.get("/dungeons")
+        # Загружаем страницу данжей с вкладкой "События" (section=tab1)
+        # Без этого параметра ивент-данжены не загружаются в HTML!
+        self.client.get("/dungeons?section=tab1")
         html = self.client.current_page
 
         # Ищем блок с нашим данженом
@@ -824,7 +824,7 @@ def set_event_cooldown(dungeon_key, client=None, seconds=None):
     if client is not None and seconds is None:
         try:
             log_debug(f"[EVENT] Парсим КД для {dungeon_name}...")
-            client.get("/dungeons")
+            client.get("/dungeons?section=tab1")
             html = client.current_page
 
             pattern = rf'<div class="map-item-c map-item _dungeons([^"]*)"[^>]*>.*?title="{dungeon_id}"'
