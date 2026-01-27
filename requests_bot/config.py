@@ -39,8 +39,9 @@ NO_PROGRESS_LIMIT = 240  # Атак без прогресса
 # Backpack
 BACKPACK_THRESHOLD = 18  # Порог для очистки рюкзака
 
-# Craft locks
+# Craft locks and cache
 CRAFT_LOCK_TTL = 7200  # 2 часа - лок крафта протухает если бот не обновил
+CRAFT_CACHE_TTL = 14400  # 4 часа - кэш цен аукциона
 
 # Dungeon action limits (Brutal difficulty = longer fights)
 DUNGEON_ACTION_LIMITS = {
