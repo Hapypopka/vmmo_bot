@@ -1305,6 +1305,9 @@ class CyclicCraftClient(IronCraftClient):
             print("[CRAFT] Список автокрафта пуст")
             return False, 0
 
+        # Проверяем - не застряли ли в банде (блокирует крафт)
+        self._check_and_leave_party()
+
         # 0. При первом вызове - проверяем остатки от предыдущей сессии
         if not self._leftovers_checked:
             self._leftovers_checked = True
@@ -1457,6 +1460,35 @@ class CyclicCraftClient(IronCraftClient):
 
         self._selected_recipe = "ironBar"
         return self._selected_recipe
+
+    def _check_and_leave_party(self):
+        """
+        Проверяет наличие кнопки "Покинуть банду" на текущей странице и нажимает её.
+        Вызывается в начале проверки крафта для профилактики.
+        """
+        html = self.client.current_page
+        if not html:
+            return False
+
+        # Ищем кнопку "Покинуть банду" с ppAction=leaveParty
+        leave_match = re.search(
+            r'href=["\']([^"\']*ppAction=leaveParty[^"\']*)["\']',
+            html
+        )
+
+        if leave_match:
+            leave_url = leave_match.group(1).replace("&amp;", "&")
+            print("[CRAFT] Обнаружена банда, выхожу перед проверкой крафта...")
+            try:
+                self.client.get(leave_url)
+                time.sleep(0.5)
+                print("[CRAFT] Вышел из банды")
+                return True
+            except Exception as e:
+                print(f"[CRAFT] Ошибка выхода из банды: {e}")
+                return False
+
+        return False
 
     def _try_leave_party_and_retry(self, recipe):
         """
