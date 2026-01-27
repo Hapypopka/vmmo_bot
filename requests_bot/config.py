@@ -39,6 +39,9 @@ NO_PROGRESS_LIMIT = 240  # Атак без прогресса
 # Backpack
 BACKPACK_THRESHOLD = 18  # Порог для очистки рюкзака
 
+# Craft locks
+CRAFT_LOCK_TTL = 7200  # 2 часа - лок крафта протухает если бот не обновил
+
 # Dungeon action limits (Brutal difficulty = longer fights)
 DUNGEON_ACTION_LIMITS = {
     "dng:ShadowGuard": 500,
