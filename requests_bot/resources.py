@@ -113,6 +113,30 @@ def parse_resources(html):
     return resources if resources else None
 
 
+def reset_session_time():
+    """
+    Сбрасывает start_time текущей сессии на текущее время.
+    Используется при старте бота, даже если не удалось распарсить ресурсы.
+    """
+    data = _load_resources_data()
+    now = datetime.now().isoformat()
+
+    if data.get("current_session"):
+        data["current_session"]["start_time"] = now
+        data["current_session"]["last_update"] = now
+    else:
+        # Создаём пустую сессию
+        data["current_session"] = {
+            "start_time": now,
+            "last_update": now,
+            "start": {},
+            "current": {},
+        }
+
+    _save_resources_data(data)
+    print(f"[RESOURCES] Сессия сброшена: {now}")
+
+
 def start_session(resources):
     """
     Начинает новую сессию.

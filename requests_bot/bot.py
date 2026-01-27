@@ -49,7 +49,7 @@ from requests_bot.logger import (
 from requests_bot.resource_history import (
     start_bot_session, end_bot_session, save_snapshot, should_save_snapshot
 )
-from requests_bot.resources import parse_resources, start_session, update_resources
+from requests_bot.resources import parse_resources, start_session, update_resources, reset_session_time
 
 # Telegram уведомления (опционально)
 try:
@@ -173,6 +173,9 @@ class VMMOBot:
 
     def _init_resources_session(self):
         """Инициализирует сессию трекинга ресурсов"""
+        # ВСЕГДА сбрасываем время при старте бота
+        reset_session_time()
+
         try:
             self.backpack_client.open_backpack()
             resources = parse_resources(self.client.current_page)
@@ -190,8 +193,10 @@ class VMMOBot:
                     )
                     log_info(f"[RESOURCES] Изменения вне бота: {changes_str}")
                     telegram_notify(f"📊 [{get_profile_username()}] Изменения вне бота:\n{changes_str}")
+            else:
+                log_warning(f"[RESOURCES] Не удалось распарсить ресурсы! URL: {self.client.current_url}")
         except Exception as e:
-            log_debug(f"Ошибка инициализации ресурсов: {e}")
+            log_warning(f"[RESOURCES] Ошибка инициализации: {e}")
 
     def try_restart_craft(self):
         """Проверяет готовность крафта и перезапускает если готов"""
