@@ -65,24 +65,6 @@
     </div>
 </div>
 
-<div class="grid grid-2">
-    <!-- Сессии бота -->
-    <div class="card">
-        <h3 class="card-title">Сессии бота</h3>
-        <div id="sessionsList" class="sessions-list">
-            <div class="text-muted text-center">Загрузка...</div>
-        </div>
-    </div>
-
-    <!-- Изменения вне бота -->
-    <div class="card">
-        <h3 class="card-title">Изменения вне бота</h3>
-        <div id="offlineList" class="offline-list">
-            <div class="text-muted text-center">Загрузка...</div>
-        </div>
-    </div>
-</div>
-
 <!-- Итоги -->
 <div class="card mt-2">
     <h3 class="card-title">Итоги за период</h3>
@@ -244,68 +226,6 @@
         position: relative;
         height: 400px;
         width: 100%;
-    }
-
-    .sessions-list, .offline-list {
-        max-height: 400px;
-        overflow-y: auto;
-    }
-
-    .session-item, .offline-item {
-        padding: 0.8rem;
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .session-item:last-child, .offline-item:last-child {
-        border-bottom: none;
-    }
-
-    .session-time {
-        font-size: 0.85rem;
-        color: var(--text-muted);
-        margin-bottom: 0.3rem;
-    }
-
-    .session-profile {
-        font-weight: 600;
-        color: var(--accent);
-    }
-
-    .session-duration {
-        font-size: 0.9rem;
-        font-weight: 600;
-    }
-
-    .session-changes, .offline-changes {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-    }
-
-    .change-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.2rem 0.6rem;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-
-    .change-badge.positive {
-        background: rgba(34, 197, 94, 0.2);
-        color: var(--success);
-    }
-
-    .change-badge.negative {
-        background: rgba(239, 68, 68, 0.2);
-        color: var(--danger);
-    }
-
-    .change-badge img {
-        width: 14px;
-        height: 14px;
     }
 
     .summary-grid {
@@ -477,18 +397,6 @@
                 updateChart();
             }
 
-            // Load sessions
-            const sessionsResp = await apiCall(`/api/stats/sessions/${profile}`);
-            if (sessionsResp.success) {
-                renderSessions(sessionsResp.sessions);
-            }
-
-            // Load offline changes
-            const offlineResp = await apiCall(`/api/stats/offline/${profile}`);
-            if (offlineResp.success) {
-                renderOffline(offlineResp.changes);
-            }
-
             // Load summary
             const summaryResp = await apiCall(`/api/stats/summary/${profile}?period=${period}`);
             if (summaryResp.success) {
@@ -605,88 +513,6 @@
                 }
             }
         });
-    }
-
-    function renderSessions(sessions) {
-        const container = document.getElementById('sessionsList');
-
-        if (!sessions || sessions.length === 0) {
-            container.innerHTML = '<div class="text-muted text-center" style="padding: 2rem;">Нет данных о сессиях.<br>Данные появятся после запуска ботов.</div>';
-            return;
-        }
-
-        container.innerHTML = sessions.map(s => {
-            const startDate = new Date(s.start_time);
-            const endDate = s.end_time ? new Date(s.end_time) : null;
-            const duration = s.duration_hours ? `${s.duration_hours.toFixed(1)} ч` : 'В процессе';
-
-            let changesHtml = '';
-            if (s.earned && Object.keys(s.earned).length > 0) {
-                changesHtml = '<div class="session-changes">';
-                for (const [resource, value] of Object.entries(s.earned)) {
-                    if (value !== 0) {
-                        const cls = value > 0 ? 'positive' : 'negative';
-                        const icon = resourceIcons[resource] || 'money_gold.png';
-                        changesHtml += `
-                            <span class="change-badge ${cls}">
-                                <img src="/static/icons/${icon}">
-                                ${value > 0 ? '+' : ''}${value.toLocaleString()}
-                            </span>
-                        `;
-                    }
-                }
-                changesHtml += '</div>';
-            }
-
-            return `
-                <div class="session-item">
-                    <div class="session-time">
-                        <span class="session-profile">${s.profile || 'unknown'}</span> •
-                        ${startDate.toLocaleString('ru-RU')}
-                    </div>
-                    <div class="session-duration">Длительность: ${duration}</div>
-                    ${changesHtml}
-                </div>
-            `;
-        }).join('');
-    }
-
-    function renderOffline(changes) {
-        const container = document.getElementById('offlineList');
-
-        if (!changes || changes.length === 0) {
-            container.innerHTML = '<div class="text-muted text-center" style="padding: 2rem;">Нет изменений вне бота.<br>Здесь будут показаны изменения ресурсов, произошедшие когда бот был выключен.</div>';
-            return;
-        }
-
-        container.innerHTML = changes.map(c => {
-            const date = new Date(c.detected_at);
-
-            let changesHtml = '<div class="offline-changes">';
-            for (const [resource, value] of Object.entries(c.changes)) {
-                if (value !== 0) {
-                    const cls = value > 0 ? 'positive' : 'negative';
-                    const icon = resourceIcons[resource] || 'money_gold.png';
-                    changesHtml += `
-                        <span class="change-badge ${cls}">
-                            <img src="/static/icons/${icon}">
-                            ${value > 0 ? '+' : ''}${value.toLocaleString()}
-                        </span>
-                    `;
-                }
-            }
-            changesHtml += '</div>';
-
-            return `
-                <div class="offline-item">
-                    <div class="session-time">
-                        <span class="session-profile">${c.profile || 'unknown'}</span> •
-                        ${date.toLocaleString('ru-RU')}
-                    </div>
-                    ${changesHtml}
-                </div>
-            `;
-        }).join('');
     }
 
     function renderSummary(summary) {
