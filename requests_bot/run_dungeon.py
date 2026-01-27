@@ -1144,6 +1144,19 @@ class DungeonRunner:
                 btn_text = btn.get_text(strip=True)
                 if btn_text in ["В город", "Выйти", "Покинуть"]:
                     return "completed"
+                # Кнопка "Продолжить" (не "Продолжить бой"!) - нажимаем и проверяем
+                # Появляется в данженах типа "Владения Барона"
+                if btn_text == "Продолжить":
+                    href = btn.get("href", "")
+                    if href and not href.startswith("javascript"):
+                        print("[*] Found 'Продолжить' button, clicking...")
+                        try:
+                            self.client.get(href)
+                            time.sleep(0.5)
+                            print("[OK] Clicked 'Продолжить'")
+                            return "completed"
+                        except Exception as e:
+                            print(f"[ERR] Error clicking 'Продолжить': {e}")
 
         # Проверяем landing page - значит данжен завершён
         if "/landing" in url:
