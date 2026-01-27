@@ -8,6 +8,16 @@
         "VMMO_COOKIES_PATH": "${VMMO_COOKIES_PATH:-profiles/char1/cookies.json}",
         "HEADLESS": "${HEADLESS:-true}"
       }
+    },
+    "vmmo-ssh": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["mcp_ssh/server.py"],
+      "env": {
+        "VMMO_SSH_HOST": "45.131.187.128",
+        "VMMO_SSH_USER": "root",
+        "VMMO_SSH_KEY": "${HOME}/.ssh/id_ed25519_vmmo"
+      }
     }
   }
 }
