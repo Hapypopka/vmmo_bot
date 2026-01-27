@@ -278,13 +278,13 @@ async def list_tools():
         ),
         Tool(
             name="browser_load_profile",
-            description="Загрузить куки другого профиля (char1, char2, etc)",
+            description="Загрузить куки другого профиля (char1-char22)",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "profile": {
                         "type": "string",
-                        "description": "Имя профиля (char1, char2, char3, char4, char5, char6)"
+                        "description": "Имя профиля (char1, char2, ..., char21, char22)"
                     }
                 },
                 "required": ["profile"]
