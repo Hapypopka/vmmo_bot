@@ -157,7 +157,11 @@ class VMMOBot:
         except Exception as e:
             log_debug(f"Ошибка проверки ремонта: {e}")
 
-        # ПЕРВЫМ ДЕЛОМ - проверяем крафт!
+        # Инициализируем сессию ресурсов ПЕРЕД крафтом
+        # (иначе check_craft уходит на другую страницу и parse_resources не работает)
+        self._init_resources_session()
+
+        # Теперь проверяем крафт
         log_info("[CRAFT] Проверяю крафт сразу после логина...")
         self.check_craft()
 
@@ -166,6 +170,28 @@ class VMMOBot:
         print_stats()  # Показываем накопленную статистику
 
         return True
+
+    def _init_resources_session(self):
+        """Инициализирует сессию трекинга ресурсов"""
+        try:
+            self.backpack_client.open_backpack()
+            resources = parse_resources(self.client.current_page)
+            if resources:
+                start_session(resources)
+                log_info(f"[RESOURCES] Старт сессии: {resources}")
+
+                # Сохраняем в историю и проверяем offline изменения
+                session_id, offline_changes = start_bot_session(resources)
+                self._history_session_id = session_id
+
+                if offline_changes:
+                    changes_str = ", ".join(
+                        f"{k}: {v:+d}" for k, v in offline_changes['changes'].items()
+                    )
+                    log_info(f"[RESOURCES] Изменения вне бота: {changes_str}")
+                    telegram_notify(f"📊 [{get_profile_username()}] Изменения вне бота:\n{changes_str}")
+        except Exception as e:
+            log_debug(f"Ошибка инициализации ресурсов: {e}")
 
     def try_restart_craft(self):
         """Проверяет готовность крафта и перезапускает если готов"""
@@ -859,26 +885,7 @@ class VMMOBot:
         if not self.login():
             return
 
-        # Инициализируем сессию ресурсов
-        try:
-            self.backpack_client.open_backpack()
-            resources = parse_resources(self.client.current_page)
-            if resources:
-                start_session(resources)
-                log_info(f"[RESOURCES] Старт сессии: {resources}")
-
-                # Сохраняем в историю и проверяем offline изменения
-                session_id, offline_changes = start_bot_session(resources)
-                self._history_session_id = session_id
-
-                if offline_changes:
-                    changes_str = ", ".join(
-                        f"{k}: {v:+d}" for k, v in offline_changes['changes'].items()
-                    )
-                    log_info(f"[RESOURCES] Изменения вне бота: {changes_str}")
-                    telegram_notify(f"📊 [{get_profile_username()}] Изменения вне бота:\n{changes_str}")
-        except Exception as e:
-            log_debug(f"Ошибка инициализации ресурсов: {e}")
+        # Ресурсы уже инициализированы в login() -> _init_resources_session()
 
         # Арена - только в начале сессии, один раз
         self.try_arena()
