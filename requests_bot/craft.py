@@ -1385,6 +1385,12 @@ class CyclicCraftClient(IronCraftClient):
             return True, wait_time
         else:
             print(f"[CRAFT] Ошибка запуска крафта для {item_id}")
+            # Проверяем - может мы застряли в банде?
+            if self._try_leave_party_and_retry(recipe):
+                wait_time = RECIPES[recipe]["craft_time"]
+                item_name = ITEM_NAMES.get(item_id, item_id)
+                print(f"[CRAFT] Запуск крафта после выхода из банды: {item_name}")
+                return True, wait_time
             return False, 60  # Повтор через минуту
 
     def _get_best_craft_item(self):
@@ -1451,6 +1457,48 @@ class CyclicCraftClient(IronCraftClient):
 
         self._selected_recipe = "ironBar"
         return self._selected_recipe
+
+    def _try_leave_party_and_retry(self, recipe):
+        """
+        Проверяет, не застряли ли мы в банде, и пытается выйти.
+        Некоторые данжены (напр. Владения Барона) оставляют игрока в банде.
+
+        Args:
+            recipe: ID рецепта для повторного запуска
+
+        Returns:
+            bool: True если удалось выйти и запустить крафт
+        """
+        print("[CRAFT] Проверяю, не застряли ли в банде...")
+
+        # Переходим на любую страницу где может быть кнопка
+        self.client.get("/city")
+        time.sleep(0.3)
+
+        html = self.client.current_page
+        if not html:
+            return False
+
+        # Ищем кнопку "Покинуть банду" с ppAction=leaveParty
+        leave_match = re.search(
+            r'href=["\']([^"\']*ppAction=leaveParty[^"\']*)["\']',
+            html
+        )
+
+        if leave_match:
+            leave_url = leave_match.group(1).replace("&amp;", "&")
+            print("[CRAFT] Найдена кнопка 'Покинуть банду', выхожу...")
+            try:
+                self.client.get(leave_url)
+                time.sleep(0.5)
+                print("[CRAFT] Вышел из банды, пробую запустить крафт...")
+                # Пробуем запустить крафт снова
+                return self.start_craft(recipe)
+            except Exception as e:
+                print(f"[CRAFT] Ошибка выхода из банды: {e}")
+                return False
+
+        return False
 
     def _sell_item_batch(self, item_id):
         """

@@ -467,45 +467,46 @@ class DungeonRunner:
         print("[ERR] Could not resurrect")
         return False
 
-    def leave_party_if_needed(self):
+    def click_continue_if_needed(self):
         """
-        Проверяет наличие кнопки "Покинуть банду" и нажимает её.
-        Некоторые данжены (напр. Владения Барона) оставляют игрока в банде после завершения.
-        Это блокирует крафт и другие действия.
+        Проверяет наличие кнопки "Продолжить" на странице завершения данжена.
+        Некоторые данжены (напр. Владения Барона) показывают эту кнопку после победы.
+        Без нажатия на неё персонаж остаётся в банде.
         """
         html = self.client.current_page
         if not html:
             return False
 
-        # Ищем кнопку "Покинуть банду" с ppAction=leaveParty
-        leave_party_match = re.search(
-            r'href=["\']([^"\']*ppAction=leaveParty[^"\']*)["\']',
-            html
-        )
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "html.parser")
 
-        if leave_party_match:
-            leave_url = leave_party_match.group(1).replace("&amp;", "&")
-            print("[*] Найдена кнопка 'Покинуть банду', выходим...")
-            try:
-                self.client.get(leave_url)
-                time.sleep(0.5)
-                print("[OK] Вышли из банды")
-                return True
-            except Exception as e:
-                print(f"[ERR] Ошибка выхода из банды: {e}")
-                return False
+        # Ищем кнопку "Продолжить" (не "Продолжить бой"!)
+        for btn in soup.select("a.go-btn"):
+            btn_text = btn.get_text(strip=True)
+            if btn_text == "Продолжить":
+                href = btn.get("href", "")
+                if href:
+                    print("[*] Найдена кнопка 'Продолжить', нажимаю...")
+                    try:
+                        self.client.get(href)
+                        time.sleep(0.5)
+                        print("[OK] Нажата кнопка 'Продолжить'")
+                        return True
+                    except Exception as e:
+                        print(f"[ERR] Ошибка нажатия 'Продолжить': {e}")
+                        return False
 
         return False
 
     def ensure_out_of_dungeon(self):
         """
-        Гарантирует выход из данжена/банды.
+        Гарантирует выход из данжена.
         Вызывается после завершения данжена для надёжности.
         """
-        # Сначала пробуем выйти из банды
-        self.leave_party_if_needed()
+        # Проверяем кнопку "Продолжить" на странице завершения
+        self.click_continue_if_needed()
 
-        # Затем переходим в город для гарантии
+        # Переходим в город для гарантии
         try:
             self.client.get("/city")
             time.sleep(0.3)
