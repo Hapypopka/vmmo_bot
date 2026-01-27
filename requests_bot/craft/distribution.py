@@ -142,7 +142,14 @@ def refresh_craft_lock(profile, recipe_id):
             locks = load_craft_locks()
             now = time.time()
 
-            locks[profile] = {"recipe_id": recipe_id, "timestamp": now, "current": 0, "batch": 5}
+            # Получаем оптимальный batch_size для этого рецепта
+            try:
+                from requests_bot.craft_prices import get_optimal_batch_size
+                batch = get_optimal_batch_size(recipe_id)
+            except Exception:
+                batch = 5  # fallback
+
+            locks[profile] = {"recipe_id": recipe_id, "timestamp": now, "current": 0, "batch": batch}
             save_craft_locks(locks)
             print(f"[CRAFT_LOCKS] {profile}: обновил лок на {recipe_id}")
     except Exception as e:

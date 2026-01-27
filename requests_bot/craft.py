@@ -1018,7 +1018,9 @@ class IronCraftClient:
                 batch_sizes[item_id] = batch_size
 
             # Минимальные размеры стаков для ВСЕХ крафтовых предметов
-            # Приоритет: min_auction_stack из UI > batch_size из автокрафта > дефолт 5
+            # Приоритет: min_auction_stack из UI > batch_size из автокрафта > get_optimal_batch_size
+            from requests_bot.craft_prices import get_optimal_batch_size
+
             MIN_STACK_SIZES = {}
             for item_id, item_name in ITEM_NAMES.items():
                 # Сначала проверяем UI настройку min_auction_stack
@@ -1028,16 +1030,25 @@ class IronCraftClient:
                 # Потом batch_size из автокрафта
                 elif item_id in batch_sizes:
                     MIN_STACK_SIZES[item_name] = batch_sizes[item_id]
-                # Дефолт 5 для всех крафтовых предметов
+                # Используем get_optimal_batch_size как дефолт (учитывает время крафта)
                 else:
-                    MIN_STACK_SIZES[item_name] = 5
+                    MIN_STACK_SIZES[item_name] = get_optimal_batch_size(item_id)
 
             # Проходим пока есть предметы с кнопкой аукциона
             for _ in range(50):  # защита от бесконечного цикла
                 if not backpack.open_backpack():
+                    print("[CRAFT] Не удалось открыть рюкзак!")
                     break
 
                 items = backpack.get_items()
+
+                # DEBUG: показываем что видим в рюкзаке
+                craft_items_found = [i for i in items if i["name"] in sell_items]
+                if craft_items_found:
+                    for ci in craft_items_found:
+                        has_auction = "auction" in ci["buttons"]
+                        min_stack = MIN_STACK_SIZES.get(ci["name"], 1)
+                        print(f"[CRAFT-DEBUG] {ci['name']} x{ci['count']}, auction={has_auction}, min_stack={min_stack}, buttons={list(ci['buttons'].keys())}")
 
                 # Ищем предмет с кнопкой аукциона (кроме пропущенных)
                 target = None

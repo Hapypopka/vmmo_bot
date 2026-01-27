@@ -430,7 +430,7 @@ def refresh_craft_lock(profile, recipe_id):
     Обновляет timestamp лока (вызывать при продаже партии).
     Использует file lock для атомарности.
 
-    Структура: {profile: {"recipe_id": "ironBar", "timestamp": 123, "current": 0, "batch": 5}, ...}
+    Структура: {profile: {"recipe_id": "ironBar", "timestamp": 123, "current": 0, "batch": N}, ...}
 
     Args:
         profile: имя профиля
@@ -441,8 +441,11 @@ def refresh_craft_lock(profile, recipe_id):
             locks = load_craft_locks()
             now = time.time()
 
+            # Получаем оптимальный batch_size для этого рецепта (учитывает время крафта)
+            batch = get_optimal_batch_size(recipe_id)
+
             # Обновляем/создаём лок для профиля (сбрасываем прогресс после продажи)
-            locks[profile] = {"recipe_id": recipe_id, "timestamp": now, "current": 0, "batch": 5}
+            locks[profile] = {"recipe_id": recipe_id, "timestamp": now, "current": 0, "batch": batch}
             save_craft_locks(locks)
             print(f"[CRAFT_LOCKS] {profile}: обновил лок на {recipe_id}")
     except Exception as e:
