@@ -12,7 +12,8 @@ from urllib.parse import urljoin
 
 from requests_bot.config import (
     BASE_URL, HELL_GAMES_URL, CITY_URL,
-    is_craft_ready_soon, is_iron_craft_enabled
+    is_craft_ready_soon, is_iron_craft_enabled,
+    GCD, LOOT_COLLECT_INTERVAL
 )
 from requests_bot.craft import CyclicCraftClient
 
@@ -32,7 +33,6 @@ class HellGamesClient:
         self.is_light_side = is_light_side
         self.profile = profile
         self.last_gcd_time = 0
-        self.GCD = 2.0
         self.loot_collected = 0
         self.collected_loot_ids = set()  # ID собранного лута
         self.refresher_url = None  # URL для refresher (сбор лута)
@@ -447,7 +447,7 @@ class HellGamesClient:
         now = time.time()
 
         # Проверяем GCD
-        if (now - self.last_gcd_time) < self.GCD:
+        if (now - self.last_gcd_time) < GCD:
             return False
 
         # Получаем актуальный статус всех скиллов из HTML
@@ -474,7 +474,7 @@ class HellGamesClient:
                 self.last_gcd_time = now
                 # Собираем лут через refresher каждые 3 атаки
                 self.attack_count += 1
-                if self.attack_count % 3 == 0:
+                if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                     self._collect_loot_via_refresher()
                 time.sleep(0.5)  # Задержка после скилла
                 # Обновляем страницу
@@ -499,7 +499,7 @@ class HellGamesClient:
             if resp and resp.status_code == 200:
                 # Собираем лут через refresher каждые 3 атаки
                 self.attack_count += 1
-                if self.attack_count % 3 == 0:
+                if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                     self._collect_loot_via_refresher()
                 time.sleep(1.0)  # Задержка после атаки
                 # Обновляем страницу

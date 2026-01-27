@@ -37,7 +37,12 @@ WATCHDOG_CYCLE_THRESHOLD = 5  # Срабатываний подряд = hard res
 NO_PROGRESS_LIMIT = 240  # Атак без прогресса
 
 # Backpack
-BACKPACK_THRESHOLD = 18  # Порог для очистки рюкзака
+BACKPACK_THRESHOLD = 18  # Порог для очистки рюкзака (из 28 слотов)
+
+# Combat
+LOOT_COLLECT_INTERVAL = 3  # Собирать лут каждые N атак (через refresher)
+GCD = 2.0  # Global Cooldown между скиллами (секунды)
+ATTACK_CD = 0.6  # Cooldown между автоатаками (секунды)
 
 # Craft locks and cache
 CRAFT_LOCK_TTL = 7200  # 2 часа - лок крафта протухает если бот не обновил

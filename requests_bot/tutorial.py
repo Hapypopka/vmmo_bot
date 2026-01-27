@@ -14,6 +14,8 @@ import time
 import requests
 from bs4 import BeautifulSoup
 
+from requests_bot.config import GCD, ATTACK_CD, LOOT_COLLECT_INTERVAL
+
 
 # Дефолтный URL (используется если клиент не передан)
 # ВАЖНО: Для туториала нового персонажа используем m.vten.ru т.к.
@@ -669,8 +671,7 @@ class TutorialRunner:
         # Боевой цикл
         max_attacks = 50
         attacks = 0
-        ATTACK_CD = 0.6
-        SKILL_CD = 2.0  # GCD после скилла
+        # GCD, ATTACK_CD, LOOT_COLLECT_INTERVAL из config.py
 
         # Базовые заголовки для AJAX
         base_path = combat_url.split("?")[0].replace(self.base_url, "").lstrip("/")
@@ -712,7 +713,7 @@ class TutorialRunner:
                     if skill_resp.status_code == 200:
                         skill_used = True
                         print(f"[TUTORIAL] Скилл использован!")
-                        time.sleep(SKILL_CD)
+                        time.sleep(GCD)
                         # Перезагружаем страницу
                         page_resp = self.session.get(combat_url, headers={
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -755,7 +756,7 @@ class TutorialRunner:
                 time.sleep(ATTACK_CD)
 
                 # Собираем лут каждые 3 атаки
-                if attacks % 3 == 0:
+                if attacks % LOOT_COLLECT_INTERVAL == 0:
                     self._collect_loot(refresher_url, loot_take_url, collected_loot)
 
                 # Перезагружаем страницу для получения актуального HTML

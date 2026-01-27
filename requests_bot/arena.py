@@ -19,11 +19,13 @@ from typing import Optional, Tuple
 
 try:
     from requests_bot.logger import log_info, log_debug, log_warning, log_error
+    from requests_bot.config import LOOT_COLLECT_INTERVAL
 except ImportError:
     def log_info(msg): print(f"[INFO] {msg}")
     def log_debug(msg): print(f"[DEBUG] {msg}")
     def log_warning(msg): print(f"[WARN] {msg}")
     def log_error(msg): print(f"[ERROR] {msg}")
+    LOOT_COLLECT_INTERVAL = 3
 
 
 # Минимум боёв оставляем (не тратим все)
@@ -560,7 +562,7 @@ class ArenaClient:
 
             # Сбор лута каждые 3 атаки
             self.attack_count += 1
-            if self.attack_count % 3 == 0:
+            if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                 self._collect_loot_via_refresher()
 
             # Логируем прогресс каждые 10 действий

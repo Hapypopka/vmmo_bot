@@ -7,6 +7,7 @@
 import re
 import time
 from bs4 import BeautifulSoup
+from requests_bot.config import LOOT_COLLECT_INTERVAL
 
 
 class CombatParser:
@@ -397,7 +398,7 @@ class CombatClient:
             self.collect_loot()
 
             # Каждые 3 атаки вызываем refresher для сбора лута (основной метод)
-            if self.attack_count % 3 == 0:
+            if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                 self.collect_loot_via_refresher()
 
             return True, "Attack successful"
@@ -428,7 +429,7 @@ class CombatClient:
             self.collect_loot()
 
             # Каждые 3 атаки вызываем refresher
-            if self.attack_count % 3 == 0:
+            if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                 self.collect_loot_via_refresher()
 
             return True, f"Skill {skill_pos} used"

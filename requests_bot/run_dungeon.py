@@ -17,7 +17,8 @@ from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_w
 from requests_bot.config import (
     BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR,
     get_skill_cooldowns, get_dungeon_difficulty, get_skill_hp_threshold,
-    load_deaths, get_extra_dungeons
+    load_deaths, get_extra_dungeons,
+    GCD, ATTACK_CD, LOOT_COLLECT_INTERVAL
 )
 from requests_bot import config as config_module  # Для доступа к ONLY_DUNGEONS
 from requests_bot.logger import log_info, log_debug, log_error
@@ -968,10 +969,8 @@ class DungeonRunner:
 
         actions = 0
         stage = 1
-        last_gcd_time = 0  # Глобальный КД
-        GCD = 2.0  # Глобальный КД
-        ATTACK_CD = 0.6  # Задержка между атаками
-        consecutive_no_units = 0  # Счётчик попыток без юнитов
+        last_gcd_time = 0
+        consecutive_no_units = 0
 
         print(f"\n{'='*50}")
         print(f"COMBAT STARTED - Stage {stage}")
@@ -981,13 +980,11 @@ class DungeonRunner:
         reset_watchdog()
 
         return self._combat_loop(
-            max_actions, actions, stage, last_gcd_time,
-            GCD, ATTACK_CD, consecutive_no_units
+            max_actions, actions, stage, last_gcd_time, consecutive_no_units
         )
 
-    def _combat_loop(self, max_actions, actions, stage, last_gcd_time,
-                     GCD, ATTACK_CD, consecutive_no_units):
-        """Внутренний цикл боя"""
+    def _combat_loop(self, max_actions, actions, stage, last_gcd_time, consecutive_no_units):
+        """Внутренний цикл боя (GCD, ATTACK_CD, LOOT_COLLECT_INTERVAL из config)"""
         while actions < max_actions:
             # КРИТИЧНО: Отправляем metronome heartbeat - без этого сервер не шлёт лут!
             self._send_metronome()
@@ -1072,7 +1069,7 @@ class DungeonRunner:
                         self.client.get(self.combat_url)
                         # Увеличиваем счётчик атак и собираем лут через refresher каждые 3 атаки
                         self.attack_count += 1
-                        if self.attack_count % 3 == 0:
+                        if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                             self._collect_loot_via_refresher()
                         time.sleep(GCD)
                         skill_used = True
@@ -1097,7 +1094,7 @@ class DungeonRunner:
                     self.client.get(self.combat_url)
                     # Увеличиваем счётчик атак и собираем лут через refresher каждые 3 атаки
                     self.attack_count += 1
-                    if self.attack_count % 3 == 0:
+                    if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                         self._collect_loot_via_refresher()
                     time.sleep(ATTACK_CD)
                 else:

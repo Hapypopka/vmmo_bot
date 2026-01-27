@@ -9,7 +9,7 @@ import time
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-from requests_bot.config import BASE_URL, get_skill_cooldowns
+from requests_bot.config import BASE_URL, get_skill_cooldowns, GCD, LOOT_COLLECT_INTERVAL
 
 # URLs
 SURVIVALS_URL = f"{BASE_URL}/survivals"
@@ -28,7 +28,6 @@ class SurvivalMinesClient:
         self.client = client
         self.skill_cooldowns = {}  # {pos: last_use_time}
         self.last_gcd_time = 0
-        self.GCD = 2.0
 
         # Для сбора лута через refresher
         self.refresher_url = None
@@ -340,7 +339,7 @@ class SurvivalMinesClient:
         now = time.time()
 
         # GCD
-        if (now - self.last_gcd_time) < self.GCD:
+        if (now - self.last_gcd_time) < GCD:
             return False
 
         # Дефолтные КД если не заданы
@@ -459,7 +458,7 @@ class SurvivalMinesClient:
 
                     # Сбор лута каждые 3 атаки
                     self.attack_count += 1
-                    if self.attack_count % 3 == 0:
+                    if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                         self._collect_loot_via_refresher()
 
                     if attacks % 50 == 0:
