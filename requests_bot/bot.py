@@ -622,7 +622,14 @@ class VMMOBot:
                             log_info(f"Крафт запущен, идём в Hell Games на {min_cd_now // 60}м...")
                             self.stats["hell_games_time"] += min_cd_now
                             try:
-                                fight_in_hell_games(self.client, min_cd_now, is_light_side=is_light_side(), profile=get_profile_name())
+                                result = fight_in_hell_games(self.client, min_cd_now, is_light_side=is_light_side(), profile=get_profile_name())
+                                if not result:
+                                    # Умерли и не смогли восстановиться в Hell Games
+                                    log_info("Hell Games вернули False, воскрешаемся...")
+                                    self.dungeon_runner.resurrect()
+                                    self.check_and_resurrect_pet()
+                                    if self.client.repair_equipment():
+                                        log_info("Снаряжение отремонтировано после Hell Games")
                             except Exception as e:
                                 log_error(f"Ошибка Hell Games: {e}")
                                 self.stats["errors"] += 1
@@ -643,7 +650,14 @@ class VMMOBot:
                 log_info(f"Все данжены на КД. Hell Games на {min_cd // 60}м...")
                 self.stats["hell_games_time"] += min_cd
                 try:
-                    fight_in_hell_games(self.client, min_cd, is_light_side=is_light_side(), profile=get_profile_name())
+                    result = fight_in_hell_games(self.client, min_cd, is_light_side=is_light_side(), profile=get_profile_name())
+                    if not result:
+                        # Умерли и не смогли восстановиться в Hell Games
+                        log_info("Hell Games вернули False, воскрешаемся...")
+                        self.dungeon_runner.resurrect()
+                        self.check_and_resurrect_pet()
+                        if self.client.repair_equipment():
+                            log_info("Снаряжение отремонтировано после Hell Games")
                 except Exception as e:
                     log_error(f"Ошибка Hell Games: {e}")
                     self.stats["errors"] += 1
