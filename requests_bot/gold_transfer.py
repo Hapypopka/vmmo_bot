@@ -760,7 +760,7 @@ class GoldTransfer:
                     with open(config_path, "r", encoding="utf-8") as f:
                         config = json.load(f)
                     char_name = config.get("username", config.get("login", profile))
-                except:
+                except Exception:
                     pass
 
             try:

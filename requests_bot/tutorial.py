@@ -936,7 +936,7 @@ class TutorialRunner:
                         self.session.get(take_url, timeout=5)
                         collected.add(loot_id)
                         count += 1
-                    except:
+                    except Exception:
                         pass
 
             if count > 0:

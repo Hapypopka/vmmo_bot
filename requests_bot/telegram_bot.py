@@ -51,7 +51,7 @@ def reload_profiles():
                     with open(config_path, "r", encoding="utf-8") as f:
                         config = json.load(f)
                     PROFILE_NAMES[folder] = config.get("username", folder)
-                except:
+                except Exception:
                     PROFILE_NAMES[folder] = folder
 
     # Обновляем обратный маппинг
@@ -117,7 +117,7 @@ def get_bot_status(profile: str) -> str:
         if result.returncode == 0 and result.stdout.strip():
             pid = result.stdout.strip().split()[0]
             return f"🟡 Работает (PID: {pid}, не через ТГ)"
-    except:
+    except Exception:
         pass
 
     return "⚪ Не запущен"
@@ -169,7 +169,7 @@ def stop_bot(profile: str) -> tuple[bool, str]:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 stopped = True
-            except:
+            except Exception:
                 pass
         del bot_processes[profile]
 
@@ -182,14 +182,14 @@ def stop_bot(profile: str) -> tuple[bool, str]:
         )
         if result.returncode == 0:
             stopped = True
-    except:
+    except Exception:
         pass
 
     # Удаляем lock-файл если остался
     lock_file = os.path.join(PROFILES_DIR, profile, ".lock")
     try:
         os.remove(lock_file)
-    except:
+    except Exception:
         pass
 
     if stopped:
@@ -229,7 +229,7 @@ def get_web_panel_status() -> str:
         if result2.returncode == 0 and result2.stdout.strip():
             pid = result2.stdout.strip().split()[0]
             return f"🟢 Работает (PID: {pid})"
-    except:
+    except Exception:
         pass
     return "🔴 Остановлена"
 
@@ -352,7 +352,7 @@ def get_all_stats_compact() -> str:
                 start_time = datetime.fromisoformat(session.get("start_time", ""))
                 duration = datetime.now() - start_time
                 hours = duration.total_seconds() / 3600
-            except:
+            except Exception:
                 hours = 0
 
             all_data.append({
@@ -361,7 +361,7 @@ def get_all_stats_compact() -> str:
                 "current": current_res,
                 "earned": earned,
             })
-        except:
+        except Exception:
             continue
 
     if not all_data:
@@ -491,7 +491,7 @@ def get_stats(profile: str) -> str:
                 duration = datetime.now() - start_time
                 hours = duration.total_seconds() / 3600
                 lines.append(f"\n🔸 Текущая сессия ({hours:.1f}ч):")
-            except:
+            except Exception:
                 lines.append(f"\n🔸 Текущая сессия:")
 
             if earned:
@@ -550,7 +550,7 @@ def get_last_activity(profile: str) -> str:
                     return f"{name}: ⚪ Остановлен ({time_str} назад: {activity})"
 
                 return f"{name}: {activity} ({time_str})"
-            except:
+            except Exception:
                 pass
 
         return f"{name}: {activity}"
@@ -1053,7 +1053,7 @@ def save_user_settings(profile: str, settings: dict) -> bool:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=4, ensure_ascii=False)
         return True
-    except:
+    except Exception:
         return False
 
 def toggle_setting(profile: str, setting: str) -> tuple:
@@ -1300,7 +1300,7 @@ def load_deaths(profile: str) -> dict:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return {}
 
@@ -1312,7 +1312,7 @@ def save_deaths(profile: str, deaths: dict) -> bool:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(deaths, f, ensure_ascii=False, indent=2)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -1897,7 +1897,7 @@ def load_protected_items() -> list:
         try:
             with open(PROTECTED_ITEMS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return DEFAULT_PROTECTED_ITEMS.copy()
 
@@ -1908,7 +1908,7 @@ def save_protected_items(items: list) -> bool:
         with open(PROTECTED_ITEMS_FILE, "w", encoding="utf-8") as f:
             json.dump(items, f, ensure_ascii=False, indent=2)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -2056,7 +2056,7 @@ async def handle_new_user_input(update: Update, user_id: int, text: str):
             state["step"] = "skill_cd"
             await update.message.reply_text(f"Введите кулдаун скилла 1 (например 15):")
             return True
-        except:
+        except Exception:
             await update.message.reply_text("❌ Введите число!")
             return True
 
@@ -2097,7 +2097,7 @@ async def handle_new_user_input(update: Update, user_id: int, text: str):
                 else:
                     await update.message.reply_text("❌ Ошибка создания профиля", reply_markup=get_main_keyboard())
                 return True
-        except:
+        except Exception:
             await update.message.reply_text("❌ Введите число!")
             return True
 
@@ -2724,7 +2724,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 delta = int(delta_str)
-            except:
+            except Exception:
                 delta = 0
 
             if adjust_craft_target(profile, resource, delta):

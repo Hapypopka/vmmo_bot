@@ -781,7 +781,7 @@ class DungeonRunner:
                         log_debug(f"[LOOT] Metronome OK (dls={self.metronome_count})")
                     else:
                         log_debug(f"[LOOT] Metronome response: {data}")
-                except:
+                except Exception:
                     log_debug(f"[LOOT] Metronome sent (non-JSON response)")
         except Exception as e:
             log_debug(f"[LOOT] Metronome failed: {e}")

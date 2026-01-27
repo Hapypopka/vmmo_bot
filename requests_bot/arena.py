@@ -163,10 +163,7 @@ class ArenaClient:
         if match:
             return int(match.group(1))
 
-        # Сохраним HTML для дебага
-        with open("arena_debug.html", "w", encoding="utf-8") as f:
-            f.write(html)
-        log_warning("[ARENA] Не удалось найти количество боёв, сохранил arena_debug.html")
+        log_warning("[ARENA] Не удалось найти количество боёв")
         return 0
 
     def get_queue_button(self, html: str, arena_type: str = "arena1r2") -> Optional[str]:
@@ -190,10 +187,7 @@ class ArenaClient:
                 url = self.base_url + url
             return url.replace("&amp;", "&")
 
-        # Сохраним для дебага если не нашли
-        with open("arena_queue_debug.html", "w", encoding="utf-8") as f:
-            f.write(html)
-        log_debug(f"[ARENA] Кнопка {arena_type} не найдена, сохранил arena_queue_debug.html")
+        log_debug(f"[ARENA] Кнопка {arena_type} не найдена")
 
         # Диагностика: проверяем есть ли кнопки вообще
         if f'arena={arena_type}' not in html:
@@ -615,10 +609,6 @@ class ArenaClient:
             "rating_change": 0.0,
             "points": 0,
         }
-
-        # Сохраняем для дебага
-        with open("arena_result_debug.html", "w", encoding="utf-8") as f:
-            f.write(html)
 
         # Победа - ищем "Победитель" или положительный рейтинг
         if "Победитель" in html:

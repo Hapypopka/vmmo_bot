@@ -332,7 +332,7 @@ def get_bot_status(profile):
             # Процесс не существует, удаляем lock
             try:
                 os.remove(lock_file)
-            except:
+            except Exception:
                 pass
 
     return "stopped"
@@ -389,11 +389,11 @@ def stop_bot(profile):
                 pid = int(f.read().strip())
             os.kill(pid, signal.SIGTERM)
             stopped = True
-        except:
+        except Exception:
             pass
         try:
             os.remove(lock_file)
-        except:
+        except Exception:
             pass
 
     if stopped:
@@ -437,9 +437,9 @@ def get_bot_activity(profile):
                 time_ago = f"{hours}ч"
 
             return {"activity": activity, "time_ago": time_ago}
-        except:
+        except Exception:
             return {"activity": activity, "time_ago": ""}
-    except:
+    except Exception:
         return {"activity": "Работает", "time_ago": ""}
 
 
@@ -482,7 +482,7 @@ def get_all_stats():
             try:
                 start_time = datetime.fromisoformat(session_data.get("start_time", ""))
                 data["hours"] = (datetime.now() - start_time).total_seconds() / 3600
-            except:
+            except Exception:
                 pass
 
         stats.append(data)
@@ -552,7 +552,7 @@ def get_logs(profile, lines=100):
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             all_lines = f.readlines()
             return "".join(all_lines[-lines:])
-    except:
+    except Exception:
         return "Ошибка чтения логов"
 
 
@@ -587,7 +587,7 @@ def load_protected_items():
         try:
             with open(PROTECTED_ITEMS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return DEFAULT_PROTECTED_ITEMS.copy()
 
@@ -598,7 +598,7 @@ def save_protected_items(items):
         with open(PROTECTED_ITEMS_FILE, "w", encoding="utf-8") as f:
             json.dump(items, f, ensure_ascii=False, indent=2)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -877,7 +877,7 @@ def reload_profiles():
                 with open(config_path, "r", encoding="utf-8") as f:
                     config = json.load(f)
                 PROFILE_NAMES[folder] = config.get("username", folder)
-            except:
+            except Exception:
                 PROFILE_NAMES[folder] = folder
 
 
@@ -1648,7 +1648,7 @@ def api_debug_command():
                     activity = status_data.get("activity", "неизвестно")
                     updated = status_data.get("updated", "")
                     lines.append(f"{name}: {activity} ({updated})")
-                except:
+                except Exception:
                     lines.append(f"{name}: ошибка чтения статуса")
             else:
                 lines.append(f"{name}: нет данных")
@@ -1685,7 +1685,7 @@ def api_debug_command():
                     lines.append(f"=== {name} ===")
                     lines.extend(errors[-10:])  # Последние 10 ошибок
                     lines.append("")
-            except:
+            except Exception:
                 pass
 
         if not found_errors:
@@ -1704,7 +1704,7 @@ def api_debug_command():
                     with open(lock_file, "r") as f:
                         content = f.read().strip()
                     lines.append(f"{name}: PID {content}")
-                except:
+                except Exception:
                     lines.append(f"{name}: lock существует, но не читается")
             else:
                 lines.append(f"{name}: не запущен")
@@ -1726,7 +1726,7 @@ def api_debug_command():
                     mtime = os.path.getmtime(lock_file)
                     mtime_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
                     lines.append(f"{name}: {content} (создан: {mtime_str})")
-                except:
+                except Exception:
                     lines.append(f"{name}: lock существует, ошибка чтения")
 
         if not found_locks:
@@ -1779,7 +1779,7 @@ def api_debug_errors(profile):
                 for line in f:
                     if any(kw in line.upper() for kw in ["ERROR", "EXCEPTION", "TRACEBACK"]):
                         errors.append(f"[{log_file}] {line.strip()}")
-        except:
+        except Exception:
             pass
 
     return jsonify({"success": True, "name": name, "errors": errors[-50:]})  # Последние 50
@@ -1816,7 +1816,7 @@ def api_debug_diagnose():
                 activity = status_data.get("activity", "")
                 if activity:
                     context_parts.append(f"   └ {activity}")
-            except:
+            except Exception:
                 pass
 
     # Логи (конкретного профиля или всех)
@@ -1843,7 +1843,7 @@ def api_debug_diagnose():
                                 err_line = f"[{name}] {line.strip()}"
                                 errors_found.append(err_line)
                                 context_parts.append(err_line)
-                except:
+                except Exception:
                     pass
 
     if not errors_found:
@@ -1972,7 +1972,7 @@ def load_craft_prices_cache():
         try:
             with open(CRAFT_PRICES_CACHE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return None
 
@@ -2004,7 +2004,7 @@ def api_get_craft_prices_cached():
                 time_str = f"{int(hours)} ч назад"
             else:
                 time_str = ts.strftime("%d.%m %H:%M")
-        except:
+        except Exception:
             time_str = "неизвестно"
 
         return jsonify({
@@ -2103,7 +2103,7 @@ def api_stats_chart(profile):
         try:
             dt = datetime.fromisoformat(ts_str.replace('+03:00', '').replace('Z', ''))
             return dt.replace(second=0, microsecond=0).isoformat() + '+03:00'
-        except:
+        except Exception:
             return ts_str
 
     def add_timezone(ts_str):
@@ -2144,7 +2144,7 @@ def api_stats_chart(profile):
                 # Берём последний снэпшот за день для каждого профиля
                 if profile not in daily_data[date_key] or dt > datetime.fromisoformat(daily_data[date_key][profile]['timestamp'].replace('+03:00', '')):
                     daily_data[date_key][profile] = snap
-            except:
+            except Exception:
                 continue
 
         if not daily_data:
@@ -2227,7 +2227,7 @@ def api_stats_chart(profile):
                     current['last'] = {'dt': dt, 'resources': snap['resources']}
                 elif dt > current['last']['dt']:
                     current['last'] = {'dt': dt, 'resources': snap['resources']}
-            except:
+            except Exception:
                 continue
 
         if not daily_snapshots:

@@ -35,7 +35,7 @@ def init_logger(name="vmmo_bot"):
     try:
         from requests_bot.config import get_profile_name
         _profile_name = get_profile_name() or "default"
-    except:
+    except Exception:
         _profile_name = "default"
 
     # Создаём логгер

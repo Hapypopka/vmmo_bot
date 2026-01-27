@@ -16,6 +16,7 @@ from requests_bot.config import (
     GCD, LOOT_COLLECT_INTERVAL
 )
 from requests_bot.craft import CyclicCraftClient
+from requests_bot.parsers import parse_ajax_urls
 
 
 class HellGamesClient:
@@ -212,13 +213,8 @@ class HellGamesClient:
         return False
 
     def _parse_ajax_urls(self, html):
-        """Извлекает Wicket AJAX URLs"""
-        urls = {}
-        pattern = r'Wicket\.Ajax\.ajax\(\{[^}]*"c":"([^"]+)"[^}]*"u":"([^"]+)"'
-        matches = re.findall(pattern, html)
-        for element_id, url in matches:
-            urls[element_id] = url
-        return urls
+        """Извлекает Wicket AJAX URLs (используя централизованный парсер)"""
+        return parse_ajax_urls(html)
 
     def _make_ajax_request(self, url):
         """AJAX запрос"""

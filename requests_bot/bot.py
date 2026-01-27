@@ -73,7 +73,7 @@ def set_activity(activity: str):
         }
         with open(status_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
-    except:
+    except Exception:
         pass  # Не критично
 
 
@@ -795,7 +795,7 @@ class VMMOBot:
                 # Пробуем восстановиться
                 try:
                     self.client.get("/dungeons?52")
-                except:
+                except Exception:
                     pass
 
             time.sleep(2)
@@ -878,7 +878,7 @@ class VMMOBot:
                     try:
                         self.client.get("/dungeons?52")
                         reset_watchdog()
-                    except:
+                    except Exception:
                         pass
 
                 if max_cycles and cycle >= max_cycles:
@@ -955,7 +955,7 @@ def main():
     def cleanup():
         try:
             os.remove(lock_file)
-        except:
+        except Exception:
             pass
     atexit.register(cleanup)
 

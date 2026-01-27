@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from requests_bot.config import BASE_URL, get_skill_cooldowns, GCD, LOOT_COLLECT_INTERVAL
+from requests_bot.parsers import parse_ajax_urls
 
 # URLs
 SURVIVALS_URL = f"{BASE_URL}/survivals"
@@ -269,20 +270,15 @@ class SurvivalMinesClient:
                 f.write(self.client.current_page or "")
             print(f"[MINES] DEBUG: saved to {debug_path}")
             print(f"[MINES] DEBUG: current URL = {self.client.current_url}")
-        except:
+        except Exception:
             pass
 
         print("[MINES] Кнопка 'Начать бой!' не найдена")
         return False
 
     def _parse_ajax_urls(self, html):
-        """Извлекает Wicket AJAX URLs"""
-        urls = {}
-        pattern = r'Wicket\.Ajax\.ajax\(\{[^}]*"c":"([^"]+)"[^}]*"u":"([^"]+)"'
-        matches = re.findall(pattern, html)
-        for element_id, url in matches:
-            urls[element_id] = url
-        return urls
+        """Извлекает Wicket AJAX URLs (используя централизованный парсер)"""
+        return parse_ajax_urls(html)
 
     def _make_ajax_request(self, url):
         """AJAX запрос"""
@@ -526,7 +522,7 @@ class SurvivalMinesClient:
                 telegram_notify = lambda msg: None
             username = get_profile_username()
             telegram_notify(f"⛏️ [{username}] Вошёл в Заброшенную Шахту (до волны {max_wave})")
-        except:
+        except Exception:
             pass
 
         # 4. Бьёмся до нужной волны
@@ -541,7 +537,7 @@ class SurvivalMinesClient:
                 telegram_notify(f"✅ [{username}] Шахта завершена (волна {max_wave})")
             elif result == "died":
                 telegram_notify(f"💀 [{username}] Погиб в шахте!")
-        except:
+        except Exception:
             pass
 
         if result == "completed":

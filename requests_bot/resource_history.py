@@ -227,7 +227,7 @@ def should_save_snapshot(profile: str = None) -> bool:
     try:
         last_time = datetime.fromisoformat(last['timestamp'])
         return (datetime.now() - last_time).total_seconds() >= HISTORY_INTERVAL
-    except:
+    except Exception:
         return True
 
 
@@ -465,7 +465,7 @@ def get_sessions(limit: int = 10, profile: str = None) -> List[Dict]:
                 start = datetime.fromisoformat(row['start_time'])
                 end = datetime.fromisoformat(row['end_time'])
                 duration_hours = round((end - start).total_seconds() / 3600, 1)
-            except:
+            except Exception:
                 duration_hours = 0
 
             result.append({
@@ -579,7 +579,7 @@ def get_chart_data(resource: str, period: str = 'day', profile: str = None) -> D
 
             labels.append(label)
             values.append(snapshot['resources'].get(rus_name, 0))
-        except:
+        except Exception:
             continue
 
     return {
@@ -649,7 +649,7 @@ def get_all_chart_data(period: str = 'day', profile: str = None) -> Dict:
 
             for eng, rus in eng_to_rus.items():
                 datasets[eng].append(snapshot['resources'].get(rus, 0))
-        except:
+        except Exception:
             continue
 
     return {

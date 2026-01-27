@@ -222,7 +222,7 @@ def _calc_duration_hours(start_time_str, end_time_str):
         end = datetime.fromisoformat(end_time_str)
         delta = end - start
         return round(delta.total_seconds() / 3600, 1)
-    except:
+    except Exception:
         return 0
 
 
