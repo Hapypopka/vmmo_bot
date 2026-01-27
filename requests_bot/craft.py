@@ -1044,6 +1044,7 @@ class CyclicCraftClient(IronCraftClient):
         super().__init__(client, backpack_client, profile=profile)
         self._leftovers_checked = False  # Флаг проверки остатков при старте
         self._selected_recipe = None  # Рецепт выбирается ОДИН РАЗ при старте
+        self._craft_items_hash = None  # Хэш craft_items для обнаружения изменений
 
     def _check_inventory_leftovers(self):
         """
@@ -1203,27 +1204,43 @@ class CyclicCraftClient(IronCraftClient):
         ВАЖНО: Рецепт выбирается ОДИН РАЗ при старте и кэшируется на всю сессию!
         Это убирает постоянные пересчёты квот и файловые операции.
 
+        Если craft_items изменился (через веб-панель или Telegram), рецепт пересчитывается.
+
         Returns:
             str: item_id для крафта
         """
+        from requests_bot.config import get_craft_items, get_craft_items_from_disk, get_setting
+
+        # Вычисляем хэш текущего craft_items для обнаружения изменений
+        # Читаем С ДИСКА чтобы обнаружить изменения через веб-панель
+        items_from_disk = get_craft_items_from_disk()
+        current_hash = str(items_from_disk)  # Простой хэш через строковое представление
+        items = items_from_disk if items_from_disk else get_craft_items()
+
+        # Если craft_items изменился - сбрасываем кэш рецепта
+        if self._craft_items_hash and current_hash != self._craft_items_hash:
+            old_recipe = self._selected_recipe
+            self._selected_recipe = None
+            item_name = ITEM_NAMES.get(old_recipe, old_recipe) if old_recipe else "none"
+            print(f"[CRAFT] Обнаружено изменение craft_items! Сбрасываем рецепт ({item_name})")
+
         # Если рецепт уже выбран - возвращаем его без пересчётов
         if self._selected_recipe:
             return self._selected_recipe
-
-        from requests_bot.config import get_craft_items, get_setting
 
         # Проверяем включён ли автовыбор
         auto_select = get_setting("auto_select_craft", True)
 
         if not auto_select:
             # Автовыбор отключён - используем первый из списка
-            items = get_craft_items()
             if items:
                 self._selected_recipe = items[0]["item"]
+                self._craft_items_hash = current_hash
                 item_name = ITEM_NAMES.get(self._selected_recipe, self._selected_recipe)
                 print(f"[CRAFT] Выбран рецепт (ручной): {item_name}")
                 return self._selected_recipe
             self._selected_recipe = "ironBar"
+            self._craft_items_hash = current_hash
             return self._selected_recipe
 
         try:
@@ -1241,6 +1258,7 @@ class CyclicCraftClient(IronCraftClient):
 
             if best_item:
                 self._selected_recipe = best_item
+                self._craft_items_hash = current_hash
                 item_name = ITEM_NAMES.get(best_item, best_item)
                 print(f"[CRAFT] Выбран рецепт (авто): {item_name} - крафтим всю сессию")
                 return self._selected_recipe
@@ -1251,14 +1269,15 @@ class CyclicCraftClient(IronCraftClient):
             traceback.print_exc()
 
         # Fallback - первый из списка конфига
-        items = get_craft_items()
         if items:
             self._selected_recipe = items[0]["item"]
+            self._craft_items_hash = current_hash
             item_name = ITEM_NAMES.get(self._selected_recipe, self._selected_recipe)
             print(f"[CRAFT] Fallback: {item_name} (первый из списка)")
             return self._selected_recipe
 
         self._selected_recipe = "ironBar"
+        self._craft_items_hash = current_hash
         return self._selected_recipe
 
     def _check_and_leave_party(self):

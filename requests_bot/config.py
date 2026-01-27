@@ -398,6 +398,27 @@ def get_craft_items():
     return _profile_config.get("craft_items", [])
 
 
+def get_craft_items_from_disk():
+    """
+    Читает craft_items напрямую с диска (не из памяти).
+    Используется для обнаружения изменений конфига через веб-панель.
+
+    Returns:
+        list: Список предметов для крафта
+    """
+    global _current_profile
+    if not _current_profile:
+        return []
+
+    config_file = os.path.join(PROFILES_DIR, _current_profile, "config.json")
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            return config.get("craft_items", [])
+    except Exception:
+        return []
+
+
 def add_craft_item(item_id, batch_size):
     """
     Добавляет предмет в список автокрафта.
