@@ -625,14 +625,15 @@ class GenericEventDungeonClient:
 
     def check_cooldown(self):
         """
-        Проверяет КД данжена.
+        Проверяет КД данжена (только кэш).
+        Реальная проверка происходит при попытке входа.
         Возвращает (on_cooldown: bool, cd_seconds: int)
         """
         global _event_cooldowns
 
         log_debug(f"[EVENT] Проверяю КД для {self.dungeon_name}...")
 
-        # Проверяем кэш
+        # Проверяем только кэш - страница /dungeons рендерится JS и недоступна через requests
         now = time.time()
         cached_until = _event_cooldowns.get(self.dungeon_key, 0)
         if now < cached_until:
@@ -640,48 +641,21 @@ class GenericEventDungeonClient:
             log_debug(f"[EVENT] {self.dungeon_name} на КД (кэш): {remaining // 60}м")
             return True, remaining
 
-        # Загружаем страницу данжей с вкладкой "События" (section=tab1)
-        # Без этого параметра ивент-данжены не загружаются в HTML!
-        self.client.get("/dungeons?section=tab1")
-        html = self.client.current_page
-
-        # Ищем блок с нашим данженом
-        if f'title="{self.dungeon_id}"' not in html:
-            log_debug(f"[EVENT] Данжен {self.dungeon_id} не найден на странице, считаем на КД")
-            return True, 300  # Вернём 5 минут КД по умолчанию
-
-        # Ищем блок с классом _cd
-        pattern = rf'<div class="map-item-c map-item _dungeons([^"]*)"[^>]*>.*?title="{self.dungeon_id}"'
-        dungeon_match = re.search(pattern, html, re.DOTALL)
-
-        if dungeon_match and "_cd" in dungeon_match.group(1):
-            # На КД - ищем время
-            block = dungeon_match.group(0)
-            time_match = re.search(r'<span class="map-item-name">([^<]+)</span>', block)
-            if time_match:
-                cd_text = time_match.group(1).strip()
-                cd_seconds = parse_cooldown_to_seconds(cd_text)
-                log_debug(f"[EVENT] {self.dungeon_name} на КД: {cd_text}")
-                _event_cooldowns[self.dungeon_key] = now + cd_seconds
-                return True, cd_seconds
-            else:
-                log_debug(f"[EVENT] {self.dungeon_name} на КД (время неизвестно)")
-                _event_cooldowns[self.dungeon_key] = now + DEFAULT_FALLBACK_COOLDOWN
-                return True, DEFAULT_FALLBACK_COOLDOWN
-
-        log_info(f"[EVENT] {self.dungeon_name} готов!")
+        # Кэш истёк - пробуем войти, КД определится по редиректу
+        log_debug(f"[EVENT] {self.dungeon_name} - кэш пуст, пробуем войти")
         return False, 0
 
     def enter_dungeon(self):
         """
         Входит в данжен.
+        КД определяется по редиректу с lobby страницы.
         Возвращает: ("entered", 0), ("on_cooldown", seconds), ("error", 0)
         """
         global _event_cooldowns
 
         log_debug(f"[EVENT] Вход в {self.dungeon_name}...")
 
-        # Проверяем КД
+        # Проверяем кэш КД
         on_cd, cd_sec = self.check_cooldown()
         if on_cd:
             return "on_cooldown", cd_sec
@@ -693,11 +667,11 @@ class GenericEventDungeonClient:
         except Exception as e:
             log_debug(f"[EVENT] Ошибка ремонта: {e}")
 
-        # Переходим в lobby
+        # Переходим напрямую в lobby - если на КД, сервер сделает редирект
         log_info(f"[EVENT] Захожу в {self.dungeon_name}...")
         self.client.get(self.landing_url)
         current_url = self.client.current_url
-        log_debug(f"[EVENT] URL: {current_url}")
+        log_debug(f"[EVENT] URL после перехода: {current_url}")
 
         # Редирект на город = КД
         if "/city" in current_url or "/dungeons" in current_url:
