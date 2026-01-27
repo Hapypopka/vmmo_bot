@@ -38,3 +38,4 @@ profiles/
 # Cache files
 *_cache.json
 *.lock
+temp/

@@ -66,22 +66,38 @@ class VMMOClient:
             print(f"[ERR] Load cookies error")
             return False
 
-    def get(self, url, **kwargs):
-        """GET запрос с сохранением страницы"""
+    def get(self, url, max_retries=3, **kwargs):
+        """GET запрос с сохранением страницы и автоматическим retry"""
         if not url:
             print("[ERR] GET called with empty URL")
             return None
         if not url.startswith("http"):
             url = urljoin(BASE_URL, url)
 
-        resp = self.session.get(url, **kwargs)
-        self.current_page = resp.text
-        self.current_url = resp.url
+        # Устанавливаем таймаут по умолчанию
+        if 'timeout' not in kwargs:
+            kwargs['timeout'] = 30
 
-        # Проверяем страницу "обновление сервера"
-        resp = self._handle_server_update(resp, url, **kwargs)
+        for attempt in range(max_retries):
+            try:
+                resp = self.session.get(url, **kwargs)
+                self.current_page = resp.text
+                self.current_url = resp.url
 
-        return resp
+                # Проверяем страницу "обновление сервера"
+                resp = self._handle_server_update(resp, url, **kwargs)
+                return resp
+
+            except (requests.Timeout, requests.ConnectionError) as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 sec
+                    print(f"[CLIENT] GET {url[:50]}... failed ({e.__class__.__name__}), retry in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    print(f"[ERR] GET {url[:50]}... failed after {max_retries} attempts: {e}")
+                    raise
+
+        return None
 
     def _handle_server_update(self, resp, original_url, method="get", **kwargs):
         """Обрабатывает страницу 'Идет обновление сервера'"""
@@ -112,23 +128,40 @@ class VMMOClient:
             return False
         return "Идет обновление сервера" in self.current_page or "Идёт обновление сервера" in self.current_page
 
-    def post(self, url, **kwargs):
-        """POST запрос с обработкой обновления сервера"""
+    def post(self, url, max_retries=3, **kwargs):
+        """POST запрос с обработкой обновления сервера и автоматическим retry"""
         if not url:
             print("[ERR] POST called with empty URL")
             return None
         if not url.startswith("http"):
             url = urljoin(BASE_URL, url)
 
-        resp = self.session.post(url, **kwargs)
-        self.current_page = resp.text
-        self.current_url = resp.url
+        # Устанавливаем таймаут по умолчанию
+        if 'timeout' not in kwargs:
+            kwargs['timeout'] = 30
 
-        # Обработка обновления сервера (как в GET)
-        if self._is_server_update_page():
-            resp = self._handle_server_update(url, method="post", **kwargs)
+        for attempt in range(max_retries):
+            try:
+                resp = self.session.post(url, **kwargs)
+                self.current_page = resp.text
+                self.current_url = resp.url
 
-        return resp
+                # Обработка обновления сервера (как в GET)
+                if self._is_server_update_page():
+                    resp = self._handle_server_update(url, method="post", **kwargs)
+
+                return resp
+
+            except (requests.Timeout, requests.ConnectionError) as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 sec
+                    print(f"[CLIENT] POST {url[:50]}... failed ({e.__class__.__name__}), retry in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    print(f"[ERR] POST {url[:50]}... failed after {max_retries} attempts: {e}")
+                    raise
+
+        return None
 
     def soup(self):
         """Возвращает BeautifulSoup текущей страницы"""

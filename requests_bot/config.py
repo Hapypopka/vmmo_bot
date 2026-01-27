@@ -155,6 +155,37 @@ def add_protected_item(item_name):
         return False
 
 
+def reload_protected_items():
+    """
+    Перезагружает PROTECTED_ITEMS из файла.
+    Используется веб-панелью после изменений.
+    """
+    global PROTECTED_ITEMS
+    PROTECTED_ITEMS = _load_protected_items()
+    return PROTECTED_ITEMS
+
+
+def get_protected_items():
+    """
+    Возвращает актуальный список защищённых предметов.
+    Перезагружает из файла если он изменился.
+    """
+    global PROTECTED_ITEMS, _protected_items_mtime
+
+    try:
+        current_mtime = os.path.getmtime(PROTECTED_ITEMS_FILE) if os.path.exists(PROTECTED_ITEMS_FILE) else 0
+        if current_mtime != _protected_items_mtime:
+            PROTECTED_ITEMS = _load_protected_items()
+            _protected_items_mtime = current_mtime
+    except OSError:
+        pass
+
+    return PROTECTED_ITEMS
+
+# Время модификации файла для отслеживания изменений
+_protected_items_mtime = os.path.getmtime(PROTECTED_ITEMS_FILE) if os.path.exists(PROTECTED_ITEMS_FILE) else 0
+
+
 # HTTP headers
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",

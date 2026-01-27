@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from requests_bot.config import (
-    BASE_URL, AUCTION_BLACKLIST_FILE, PROTECTED_ITEMS, BACKPACK_THRESHOLD
+    BASE_URL, AUCTION_BLACKLIST_FILE, BACKPACK_THRESHOLD, get_protected_items
 )
 
 # TTL для чёрного списка аукциона (24 часа)
@@ -28,8 +28,9 @@ except ImportError:
 
 
 def is_protected_item(item_name):
-    """Проверяет, защищён ли предмет от продажи/разборки"""
-    for protected in PROTECTED_ITEMS:
+    """Проверяет, защищён ли предмет от продажи/разборки (динамически загружает список)"""
+    protected_items = get_protected_items()
+    for protected in protected_items:
         if protected.lower() in item_name.lower():
             return True
     return False
