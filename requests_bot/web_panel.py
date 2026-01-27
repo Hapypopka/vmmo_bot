@@ -38,6 +38,17 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 app = Flask(__name__, template_folder=TEMPLATES_DIR, static_folder=STATIC_DIR)
 app.secret_key = "vmmo_bot_secret_key_change_me"
 
+
+@app.after_request
+def add_no_cache_headers(response):
+    """Отключаем кэширование для API и динамических страниц"""
+    if request.path.startswith('/api/') or request.path in ['/', '/stats', '/config']:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
+
 # Пароль для доступа (простая авторизация)
 PANEL_PASSWORD = "1616"
 
