@@ -467,6 +467,51 @@ class DungeonRunner:
         print("[ERR] Could not resurrect")
         return False
 
+    def leave_party_if_needed(self):
+        """
+        Проверяет наличие кнопки "Покинуть банду" и нажимает её.
+        Некоторые данжены (напр. Владения Барона) оставляют игрока в банде после завершения.
+        Это блокирует крафт и другие действия.
+        """
+        html = self.client.current_page
+        if not html:
+            return False
+
+        # Ищем кнопку "Покинуть банду" с ppAction=leaveParty
+        leave_party_match = re.search(
+            r'href=["\']([^"\']*ppAction=leaveParty[^"\']*)["\']',
+            html
+        )
+
+        if leave_party_match:
+            leave_url = leave_party_match.group(1).replace("&amp;", "&")
+            print("[*] Найдена кнопка 'Покинуть банду', выходим...")
+            try:
+                self.client.get(leave_url)
+                time.sleep(0.5)
+                print("[OK] Вышли из банды")
+                return True
+            except Exception as e:
+                print(f"[ERR] Ошибка выхода из банды: {e}")
+                return False
+
+        return False
+
+    def ensure_out_of_dungeon(self):
+        """
+        Гарантирует выход из данжена/банды.
+        Вызывается после завершения данжена для надёжности.
+        """
+        # Сначала пробуем выйти из банды
+        self.leave_party_if_needed()
+
+        # Затем переходим в город для гарантии
+        try:
+            self.client.get("/city")
+            time.sleep(0.3)
+        except Exception:
+            pass
+
     def enter_dungeon(self, dungeon_id, api_link_url):
         """Входит в данжен и начинает бой"""
         print(f"\n[*] Entering dungeon: {dungeon_id}")
@@ -975,6 +1020,8 @@ class DungeonRunner:
                     continue
                 elif result == "completed":
                     print(f"\n[OK] DUNGEON COMPLETED! Actions: {actions}")
+                    # Гарантируем выход из банды/данжена
+                    self.ensure_out_of_dungeon()
                     return "completed", actions
                 elif result == "died":
                     print(f"\n[X] DIED after {actions} actions!")
