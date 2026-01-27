@@ -56,7 +56,13 @@
 
 <!-- График -->
 <div class="card mb-2">
-    <h3 class="card-title">История изменений</h3>
+    <div class="chart-header">
+        <h3 class="card-title">История изменений</h3>
+        <div class="chart-mode-toggle">
+            <button class="chart-mode-btn active" data-chart-mode="balance">📈 Баланс</button>
+            <button class="chart-mode-btn" data-chart-mode="earnings">📊 Заработок</button>
+        </div>
+    </div>
     <div class="chart-container">
         <canvas id="resourceChart"></canvas>
     </div>
@@ -222,6 +228,49 @@
         height: 16px;
     }
 
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .chart-header .card-title {
+        margin: 0;
+    }
+
+    .chart-mode-toggle {
+        display: flex;
+        gap: 0.25rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        padding: 0.25rem;
+    }
+
+    .chart-mode-btn {
+        padding: 0.4rem 0.8rem;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .chart-mode-btn:hover {
+        color: var(--text-color);
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .chart-mode-btn.active {
+        background: var(--primary);
+        color: white;
+    }
+
     .chart-container {
         position: relative;
         height: 400px;
@@ -288,6 +337,7 @@
     let activeResources = JSON.parse(localStorage.getItem('statsActiveResources')) || ['золото', 'серебро'];
     const savedFilters = JSON.parse(localStorage.getItem('statsFilters')) || {};
     let chartData = null;
+    let chartMode = localStorage.getItem('statsChartMode') || 'balance'; // balance или earnings
 
     // Функция восстановления состояния UI
     function restoreUIState() {
@@ -325,7 +375,29 @@
                 toggle.classList.remove('active');
             }
         });
+
+        // Восстанавливаем режим графика
+        document.querySelectorAll('.chart-mode-btn').forEach(btn => {
+            if (btn.dataset.chartMode === chartMode) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
     }
+
+    // Обработчик переключения режима графика
+    document.querySelectorAll('.chart-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            chartMode = btn.dataset.chartMode;
+            localStorage.setItem('statsChartMode', chartMode);
+
+            document.querySelectorAll('.chart-mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            loadStats();
+        });
+    });
 
     // Восстанавливаем состояние при загрузке DOM
     document.addEventListener('DOMContentLoaded', () => {
@@ -388,12 +460,16 @@
         const period = document.getElementById('periodSelect').value;
         const mode = document.getElementById('modeSelect').value;
 
+        // Определяем режим API: для earnings всегда используем earnings, иначе mode из селекта
+        const apiMode = chartMode === 'earnings' ? 'earnings' : mode;
+
         try {
             // Load chart data
-            const chartResp = await apiCall(`/api/stats/chart/${profile}?period=${period}&mode=${mode}`);
+            const chartResp = await apiCall(`/api/stats/chart/${profile}?period=${period}&mode=${apiMode}`);
             if (chartResp.success) {
                 chartData = chartResp.data;
-                chartData.mode = mode;  // сохраняем режим для форматирования
+                chartData.mode = mode;  // сохраняем режим селекта для форматирования дат
+                chartData.chartMode = chartMode;  // сохраняем режим графика
                 updateChart();
             }
 
@@ -425,19 +501,38 @@
         chartContainer.style.display = 'block';
         noDataMsg.style.display = 'none';
 
+        const isEarningsMode = chartData.chartMode === 'earnings';
         const datasets = [];
+
         for (const resource of activeResources) {
             if (chartData.resources[resource]) {
-                datasets.push({
-                    label: resource.charAt(0).toUpperCase() + resource.slice(1),
-                    data: chartData.resources[resource],
-                    borderColor: resourceColors[resource].line,
-                    backgroundColor: resourceColors[resource].bg,
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 2,
-                    pointHoverRadius: 5
-                });
+                if (isEarningsMode) {
+                    // Для режима заработка - bar chart с цветами по знаку
+                    const data = chartData.resources[resource];
+                    const bgColors = data.map(v => v >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)');
+                    const borderColors = data.map(v => v >= 0 ? '#22c55e' : '#ef4444');
+
+                    datasets.push({
+                        label: resource.charAt(0).toUpperCase() + resource.slice(1),
+                        data: data,
+                        backgroundColor: bgColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    });
+                } else {
+                    // Для режима баланса - line chart
+                    datasets.push({
+                        label: resource.charAt(0).toUpperCase() + resource.slice(1),
+                        data: chartData.resources[resource],
+                        borderColor: resourceColors[resource].line,
+                        backgroundColor: resourceColors[resource].bg,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
+                    });
+                }
             }
         }
 
@@ -448,11 +543,11 @@
         }
 
         // Конвертируем timestamps в формат для отображения
-        const isDaysMode = chartData.mode === 'days';
+        const isDaysMode = chartData.mode === 'days' || isEarningsMode;
         const labels = chartData.timestamps.map(ts => {
             const d = new Date(ts);
             if (isDaysMode) {
-                // Для режима "по дням" показываем только дату
+                // Для режима "по дням" и "заработок" показываем только дату
                 return d.toLocaleString('ru-RU', {day: '2-digit', month: '2-digit'});
             } else {
                 // Для режима "по сессиям" показываем дату и время
@@ -461,7 +556,7 @@
         });
 
         chart = new Chart(ctx, {
-            type: 'line',
+            type: isEarningsMode ? 'bar' : 'line',
             data: {
                 labels: labels,
                 datasets: datasets
@@ -485,7 +580,16 @@
                             title: function(context) {
                                 const idx = context[0].dataIndex;
                                 const ts = chartData.timestamps[idx];
-                                return new Date(ts).toLocaleString('ru-RU');
+                                return new Date(ts).toLocaleString('ru-RU', {day: '2-digit', month: 'long', year: 'numeric'});
+                            },
+                            label: function(context) {
+                                const value = context.parsed.y;
+                                const label = context.dataset.label;
+                                if (isEarningsMode) {
+                                    const sign = value >= 0 ? '+' : '';
+                                    return `${label}: ${sign}${value.toLocaleString('ru-RU')}`;
+                                }
+                                return `${label}: ${value.toLocaleString('ru-RU')}`;
                             }
                         }
                     }
@@ -504,7 +608,13 @@
                     },
                     y: {
                         ticks: {
-                            color: '#94a3b8'
+                            color: '#94a3b8',
+                            callback: function(value) {
+                                if (isEarningsMode && value > 0) {
+                                    return '+' + value.toLocaleString('ru-RU');
+                                }
+                                return value.toLocaleString('ru-RU');
+                            }
                         },
                         grid: {
                             color: 'rgba(255, 255, 255, 0.1)'

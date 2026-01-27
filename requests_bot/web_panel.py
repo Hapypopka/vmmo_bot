@@ -2184,6 +2184,81 @@ def api_stats_chart(profile):
 
         return {"timestamps": timestamps, "resources": resources}
 
+    def get_daily_earnings(profiles_to_check):
+        """Вычисляет заработок по дням (разница между последним и первым снэпшотом каждого дня)"""
+        from collections import defaultdict
+        from datetime import timedelta
+
+        all_snapshots = []
+
+        for p in profiles_to_check:
+            history = get_history(hours, p)
+            for snap in history:
+                all_snapshots.append({
+                    'profile': p,
+                    'timestamp': snap['timestamp'],
+                    'resources': snap['resources']
+                })
+
+        if not all_snapshots:
+            return {"timestamps": [], "resources": {r: [] for r in resource_keys}}
+
+        # Группируем снэпшоты по дате и профилю
+        # Сохраняем первый и последний снэпшот каждого дня для каждого профиля
+        daily_snapshots = defaultdict(lambda: defaultdict(lambda: {'first': None, 'last': None}))
+
+        for snap in all_snapshots:
+            try:
+                ts = snap['timestamp'].replace('+03:00', '').replace('Z', '')
+                dt = datetime.fromisoformat(ts)
+                date_key = dt.date()
+                profile_name = snap['profile']
+
+                current = daily_snapshots[date_key][profile_name]
+
+                # Первый снэпшот дня
+                if current['first'] is None:
+                    current['first'] = {'dt': dt, 'resources': snap['resources']}
+                elif dt < current['first']['dt']:
+                    current['first'] = {'dt': dt, 'resources': snap['resources']}
+
+                # Последний снэпшот дня
+                if current['last'] is None:
+                    current['last'] = {'dt': dt, 'resources': snap['resources']}
+                elif dt > current['last']['dt']:
+                    current['last'] = {'dt': dt, 'resources': snap['resources']}
+            except:
+                continue
+
+        if not daily_snapshots:
+            return {"timestamps": [], "resources": {r: [] for r in resource_keys}}
+
+        # Формируем результат - заработок за каждый день
+        timestamps = []
+        resources = {r: [] for r in resource_keys}
+
+        for date_key in sorted(daily_snapshots.keys()):
+            dt = datetime(date_key.year, date_key.month, date_key.day, 12, 0, 0)
+            timestamps.append(dt.isoformat() + '+03:00')
+
+            # Суммируем заработок по всем профилям за этот день
+            daily_earnings = {r: 0 for r in resource_keys}
+
+            for profile_name in profiles_to_check:
+                if profile_name in daily_snapshots[date_key]:
+                    snap_data = daily_snapshots[date_key][profile_name]
+                    if snap_data['first'] and snap_data['last']:
+                        first_res = snap_data['first']['resources']
+                        last_res = snap_data['last']['resources']
+                        for r in resource_keys:
+                            earned = last_res.get(r, 0) - first_res.get(r, 0)
+                            daily_earnings[r] += earned
+
+            for r in resource_keys:
+                resources[r].append(daily_earnings[r])
+
+        return {"timestamps": timestamps, "resources": resources}
+
     # Режим по дням
     if mode == "days":
         if profile == "all":
@@ -2194,6 +2269,18 @@ def api_stats_chart(profile):
             profiles_to_check = [profile]
 
         data = get_daily_data(profiles_to_check)
+        return jsonify({"success": True, "data": data})
+
+    # Режим заработка по дням
+    if mode == "earnings":
+        if profile == "all":
+            profiles_to_check = list(PROFILE_NAMES.keys())
+        else:
+            if profile not in PROFILE_NAMES:
+                return jsonify({"success": False, "error": "Profile not found"})
+            profiles_to_check = [profile]
+
+        data = get_daily_earnings(profiles_to_check)
         return jsonify({"success": True, "data": data})
 
     # Если "all" - суммируем ресурсы всех профилей
