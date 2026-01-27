@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from requests_bot.client import VMMOClient
 from requests_bot.run_dungeon import DungeonRunner
 from requests_bot.event_dungeon import (
-    EventDungeonClient, EquipmentClient, try_event_dungeon, try_ny_event_dungeon, set_ny_event_cooldown,
+    EventDungeonClient, EquipmentClient, try_ny_event_dungeon, set_ny_event_cooldown,
     try_event_dungeon_generic, set_event_cooldown, EVENT_DUNGEONS
 )
 from requests_bot.hell_games import HellGamesClient, fight_in_hell_games
@@ -29,7 +29,7 @@ from requests_bot.stats import init_stats, get_stats, print_stats, set_stats_pro
 from requests_bot.watchdog import reset_watchdog, check_watchdog, reset_no_progress_counter
 from requests_bot.config import (
     DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings,
-    set_profile, get_profile_name, get_profile_username, is_event_dungeon_enabled, get_credentials,
+    set_profile, get_profile_name, get_profile_username, get_credentials,
     is_pet_resurrection_enabled, record_death, is_survival_mines_enabled, get_survival_mines_max_wave,
     get_skill_cooldowns, get_survival_mines_max_level, is_dungeons_enabled,
     is_hell_games_enabled, is_light_side,
@@ -198,19 +198,6 @@ class VMMOBot:
         except Exception as e:
             log_warning(f"[RESOURCES] Ошибка инициализации: {e}")
 
-    def try_restart_craft(self):
-        """Проверяет готовность крафта и перезапускает если готов"""
-        # Если iron_craft включен - не используем repeat, логика крафта в другом месте
-        if is_iron_craft_enabled():
-            return False
-        try:
-            if self.backpack_client.repeat_craft_if_ready():
-                log_info("Крафт перезапущен")
-                return True
-        except Exception as e:
-            log_debug(f"Ошибка проверки крафта: {e}")
-        return False
-
     def check_craft(self):
         """
         ГЛАВНАЯ проверка крафта - вызывается ВЕЗДЕ!
@@ -220,8 +207,7 @@ class VMMOBot:
             bool: True если крафт был обработан (забран/запущен)
         """
         if not is_iron_craft_enabled():
-            # Iron craft отключен - используем простую проверку repeat
-            return self.try_restart_craft()
+            return False  # Крафт отключен
 
         # Быстрая проверка - если крафт ещё идёт, не делаем HTTP запросы
         from requests_bot.config import get_craft_finish_time
@@ -420,26 +406,6 @@ class VMMOBot:
             log_error(f"[CRAFT] Ошибка: {e}")
             return False, 0
 
-    def try_event_dungeon(self):
-        """Пробует войти в ивентовый данжен Сталкер (ОТКЛЮЧЁН)"""
-        log_debug("Проверяю ивент 'Сталкер'...")
-        try:
-            result, cd_seconds = try_event_dungeon(self.client)
-
-            if result == "entered":
-                log_info("Вошли в ивентовый данжен!")
-                return True, 0
-            elif result == "on_cooldown":
-                log_debug(f"Ивент на КД ({cd_seconds // 60}м)")
-                return False, cd_seconds
-            else:
-                log_debug(f"Ивент недоступен: {result}")
-                return False, 0
-        except Exception as e:
-            log_error(f"Ошибка ивента: {e}")
-            self.stats["errors"] += 1
-            return False, 0
-
     def try_ny_event_dungeon_method(self):
         """Пробует войти в NY ивент - Логово Демона Мороза"""
         log_debug("Проверяю NY ивент 'Логово Демона Мороза'...")
@@ -508,40 +474,7 @@ class VMMOBot:
             log_watchdog(f"Сработал: {watchdog_result}")
             self.stats["watchdog_triggers"] += 1
 
-        # 1. Проверяем ивент (если включен для профиля)
-        entered_event = False
-        event_cd = 0
-        if is_event_dungeon_enabled():
-            entered_event, event_cd = self.try_event_dungeon()
-        else:
-            log_debug("Ивент отключен для этого профиля")
-
-        if entered_event:
-            # Бой в ивенте
-            set_activity("⚔️ Сталкер (ивент)")
-            log_dungeon_start("Сталкер (ивент)", "event_stalker")
-            self.dungeon_runner.current_dungeon_id = "event_stalker"
-            # Устанавливаем combat_url из текущего URL клиента
-            self.dungeon_runner.combat_url = self.client.current_url
-            result, actions = self.dungeon_runner.fight_until_done()
-            self.stats["total_actions"] += actions
-
-            if result == "completed":
-                self.stats["dungeons_completed"] += 1
-                log_dungeon_result("Сталкер (ивент)", result, actions)
-            elif result == "died":
-                self.stats["deaths"] += 1
-                log_dungeon_result("Сталкер (ивент)", result, actions)
-                self.dungeon_runner.resurrect()
-                self.check_and_resurrect_pet()
-                # Ремонтируем снаряжение после смерти в ивенте
-                try:
-                    if self.client.repair_equipment():
-                        log_info("Снаряжение отремонтировано после смерти")
-                except Exception as e:
-                    log_debug(f"Ошибка ремонта после смерти: {e}")
-
-        # 1.5. Проверяем ВСЕ ивент-данжены - ЦИКЛ пока хоть один доступен
+        # 1. Проверяем ВСЕ ивент-данжены - ЦИКЛ пока хоть один доступен
         if is_ny_event_dungeon_enabled():
             total_event_runs = 0
 

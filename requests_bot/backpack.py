@@ -650,55 +650,6 @@ class BackpackClient:
         log_backpack(f"Очистка завершена: бонусов {stats['bonuses']}, аукцион {stats['auctioned']}, разобрано {stats['disassembled']}, выброшено {stats['dropped']}")
         return stats
 
-    def check_craft_ready(self):
-        """
-        Проверяет, есть ли готовый крафт на странице.
-        Ищет блок info-box с текстом "Готово" И кнопкой "Повторить" (ppAction=craftAgain).
-
-        Returns:
-            str or None: URL для повтора крафта или None
-        """
-        soup = self.client.soup()
-        if not soup:
-            return None
-
-        # Ищем все info-box
-        info_boxes = soup.select("div.info-box")
-        for box in info_boxes:
-            box_text = box.get_text()
-            # Проверяем есть ли "Готово" в боксе
-            if "Готово" in box_text:
-                # Ищем кнопку "Повторить" (ppAction=craftAgain)
-                buttons = box.select("a.go-btn")
-                for btn in buttons:
-                    href = btn.get("href", "")
-                    if "craftAgain" in href:
-                        return href
-
-                # Готово есть, но кнопки "Повторить" нет - пропускаем
-                log_debug("[CRAFT] Крафт готов, но кнопки 'Повторить' нет")
-                return None
-
-        return None
-
-    def repeat_craft_if_ready(self):
-        """
-        Если крафт готов — нажимает "Повторить".
-        Вызывать на странице города перед входом в данжены.
-
-        Returns:
-            bool: True если крафт был перезапущен
-        """
-        repeat_url = self.check_craft_ready()
-        if not repeat_url:
-            return False
-
-        log_backpack("Крафт готов! Нажимаем 'Повторить'...")
-
-        self.client.get(repeat_url)
-        log_backpack("Крафт перезапущен!")
-        return True
-
     def cleanup_if_needed(self, max_pages=3):
         """
         Очищает рюкзак если нужно (превышен порог).
