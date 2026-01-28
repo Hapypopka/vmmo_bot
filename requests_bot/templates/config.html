@@ -44,26 +44,6 @@
         </div>
 
         <div class="form-group flex flex-between flex-center">
-            <label>Ивент данжи</label>
-            <label class="toggle">
-                <input type="checkbox" id="event_dungeon_enabled"
-                       {{ 'checked' if config.get('event_dungeon_enabled', False) }}
-                       onchange="toggleSetting('{{ profile }}', 'event_dungeon_enabled')">
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-
-        <div class="form-group flex flex-between flex-center">
-            <label>НГ Ивенты</label>
-            <label class="toggle">
-                <input type="checkbox" id="ny_event_dungeon_enabled"
-                       {{ 'checked' if config.get('ny_event_dungeon_enabled', False) }}
-                       onchange="toggleSetting('{{ profile }}', 'ny_event_dungeon_enabled')">
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-
-        <div class="form-group flex flex-between flex-center">
             <label>Шахта выживания</label>
             <label class="toggle">
                 <input type="checkbox" id="survival_mines_enabled"
