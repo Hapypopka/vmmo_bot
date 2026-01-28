@@ -1175,6 +1175,12 @@ class CyclicCraftClient(IronCraftClient):
                 # Очищаем время завершения крафта после забора
                 from requests_bot.config import clear_craft_finish_time
                 clear_craft_finish_time()
+                # Отмечаем прогресс для авторестарта
+                try:
+                    from requests_bot.watchdog import mark_progress
+                    mark_progress("craft")
+                except ImportError:
+                    pass
             # НЕ возвращаемся - идём дальше запускать новый крафт
 
         elif status["in_progress"]:
@@ -1195,6 +1201,12 @@ class CyclicCraftClient(IronCraftClient):
             wait_time = RECIPES[recipe]["craft_time"]
             item_name = ITEM_NAMES.get(item_id, item_id)
             log_info(f"[CRAFT] Запуск крафта: {item_name} (рецепт: {recipe}, время: {wait_time}с)")
+            # Отмечаем прогресс для авторестарта
+            try:
+                from requests_bot.watchdog import mark_progress
+                mark_progress("craft")
+            except ImportError:
+                pass
             return True, wait_time
         else:
             log_info(f"[CRAFT] Ошибка запуска крафта для {item_id}")
