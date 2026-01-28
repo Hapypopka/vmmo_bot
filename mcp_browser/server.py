@@ -308,14 +308,14 @@ async def list_tools():
         ),
         Tool(
             name="browser_login",
-            description="Залогиниться на m.vten.ru по логину и паролю. По умолчанию использует Castertoyi",
+            description="Залогиниться на m.vten.ru по логину и паролю. По умолчанию использует Пупупу Пупупу",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "username": {
                         "type": "string",
-                        "description": "Логин (по умолчанию: Castertoyi)",
-                        "default": "Castertoyi"
+                        "description": "Логин (по умолчанию: Пупупу Пупупу)",
+                        "default": "Пупупу Пупупу"
                     },
                     "password": {
                         "type": "string",
@@ -492,7 +492,7 @@ async def call_tool(name: str, arguments: dict):
             return [TextContent(type="text", text="Browser reset complete. New browser started.")]
 
         elif name == "browser_login":
-            username = arguments.get("username", "Castertoyi")
+            username = arguments.get("username", "Пупупу Пупупу")
             password = arguments.get("password", "Agesevemu1313!")
 
             # Переходим на главную (там форма логина)
