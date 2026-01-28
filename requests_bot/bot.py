@@ -36,8 +36,10 @@ from requests_bot.config import (
     is_iron_craft_enabled, get_craft_items,
     is_arena_enabled, get_arena_max_fights,
     is_resource_selling_enabled,
-    is_daily_rewards_enabled
+    is_daily_rewards_enabled,
+    is_valentine_event_enabled
 )
+from requests_bot.valentine_event import run_valentine_dungeons, VALENTINE_DUNGEONS
 from requests_bot.sell_resources import sell_resources
 from requests_bot.logger import (
     init_logger, get_log_file,
@@ -455,6 +457,57 @@ class VMMOBot:
 
         # 2.5. Проверяем крафт - используем единый метод
         self.check_craft()
+
+        # 2.6. Ивент Дня Святого Валентина (если включен)
+        if is_valentine_event_enabled():
+            log_debug("Проверяю ивент Дня Святого Валентина...")
+            try:
+                from requests_bot.valentine_event import set_cooldown_after_completion
+
+                for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
+                    name = dungeon_config["name"]
+
+                    # Очищаем рюкзак перед ивентом
+                    self.cleanup_backpack()
+                    self.check_and_collect_mail()
+                    self.check_craft()
+
+                    from requests_bot.valentine_event import try_enter_dungeon
+                    result, cd = try_enter_dungeon(self.client, dungeon_id)
+
+                    if result == "on_cooldown":
+                        log_debug(f"[VALENTINE] {name} на КД ({cd // 60}м)")
+                        continue
+                    elif result == "error":
+                        continue
+                    elif result == "entered":
+                        set_activity(f"💘 {name}")
+                        log_info(f"[VALENTINE] Бой в {name}...")
+                        self.dungeon_runner.current_dungeon_id = dungeon_id
+                        self.dungeon_runner.combat_url = self.client.current_url
+                        fight_result, actions = self.dungeon_runner.fight_until_done()
+                        self.stats["total_actions"] += actions
+
+                        if fight_result == "completed":
+                            self.stats["dungeons_completed"] += 1
+                            mark_progress("dungeon")
+                            log_info(f"[VALENTINE] {name} пройден! ({actions} действий)")
+                            set_cooldown_after_completion(self.client, dungeon_id)
+                            self.check_craft()
+                        elif fight_result == "died":
+                            self.stats["deaths"] += 1
+                            log_warning(f"[VALENTINE] Смерть в {name}")
+                            self.dungeon_runner.resurrect()
+                            self.check_and_resurrect_pet()
+                            try:
+                                if self.client.repair_equipment():
+                                    log_info("Снаряжение отремонтировано после смерти")
+                            except Exception as e:
+                                log_debug(f"Ошибка ремонта: {e}")
+                            self.check_craft()
+            except Exception as e:
+                log_error(f"[VALENTINE] Ошибка: {e}")
+                self.stats["errors"] += 1
 
         # 3. Получаем список данженов (если включены)
         dungeons = []

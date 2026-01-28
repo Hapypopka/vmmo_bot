@@ -911,6 +911,7 @@ def create_profile(username, password):
         "backpack_threshold": 18,
         "dungeons_enabled": True,
         "arena_enabled": False,
+        "valentine_event_enabled": False,
         "hell_games_enabled": False,
         "survival_mines_enabled": False,
         "pet_resurrection_enabled": False,

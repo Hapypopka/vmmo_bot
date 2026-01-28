@@ -315,6 +315,11 @@ def is_dungeons_enabled():
 
 # ARCHIVED: is_event_dungeon_enabled() and is_ny_event_dungeon_enabled() moved to archive/events/ (2026-01)
 
+def is_valentine_event_enabled():
+    """Проверяет, включен ли ивент Дня Святого Валентина для текущего профиля"""
+    return _profile_config.get("valentine_event_enabled", False)
+
+
 def is_arena_enabled():
     """Проверяет, включена ли арена для текущего профиля"""
     return _profile_config.get("arena_enabled", False)

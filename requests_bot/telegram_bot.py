@@ -1081,6 +1081,7 @@ def format_user_settings(profile: str) -> str:
     dungeons = "✅" if cfg.get("dungeons_enabled", True) else "❌"
     hell = "✅" if cfg.get("hell_games_enabled", False) else "❌"
     arena = "✅" if cfg.get("arena_enabled", False) else "❌"
+    valentine = "✅" if cfg.get("valentine_event_enabled", False) else "❌"
     craft = "✅" if cfg.get("iron_craft_enabled", False) else "❌"
     mines = "✅" if cfg.get("survival_mines_enabled", False) else "❌"
 
@@ -1096,6 +1097,7 @@ def format_user_settings(profile: str) -> str:
         f"🏰 Данжи: {dungeons}\n"
         f"🔥 Адские игры: {hell}\n"
         f"⚔️ Арена: {arena}\n"
+        f"💘 Валентин: {valentine}\n"
         f"⚒️ Крафт: {craft}\n"
         f"⛏️ Шахта: {mines}\n\n"
         f"⏱️ Кулдауны: {cd_list}"
@@ -1143,6 +1145,7 @@ def get_settings_keyboard(profile: str):
             InlineKeyboardButton(f"{icon('arena_enabled')} Арена", callback_data=f"toggle_{profile}_arena_enabled"),
             InlineKeyboardButton(f"🎯 {arena_max} боёв", callback_data=f"arena_max_{profile}")
         ],
+        [InlineKeyboardButton(f"{icon('valentine_event_enabled')} 💘 Валентин ивент", callback_data=f"toggle_{profile}_valentine_event_enabled")],
         [
             InlineKeyboardButton(f"{icon('iron_craft_enabled')} Крафт", callback_data=f"toggle_{profile}_iron_craft_enabled"),
             InlineKeyboardButton("⚙️ Настр.", callback_data=f"craft_settings_{profile}")
@@ -2113,6 +2116,7 @@ def create_new_profile(profile: str, username: str, password: str, cooldowns: di
             "dungeons_enabled": True,
             "only_dungeons": ["dng:dSanctuary", "dng:dHellRuins"],
             "arena_enabled": False,
+            "valentine_event_enabled": False,
             "hell_games_enabled": False,
             "survival_mines_enabled": False,
             "iron_craft_enabled": True,
