@@ -6,15 +6,23 @@
 # ============================================
 
 import time
+import os
+import signal
 
 from requests_bot.config import (
-    WATCHDOG_TIMEOUT, WATCHDOG_CYCLE_THRESHOLD, NO_PROGRESS_LIMIT, DUNGEONS_URL
+    WATCHDOG_TIMEOUT, WATCHDOG_CYCLE_THRESHOLD, NO_PROGRESS_LIMIT, DUNGEONS_URL,
+    AUTO_RECOVERY_TIMEOUT
 )
 
 # Глобальное состояние
 _last_action_time = time.time()
 _watchdog_trigger_count = 0
 _consecutive_no_progress = 0  # Счётчик атак без прогресса
+
+# Трекинг прогресса для авторестарта
+_last_progress_time = time.time()  # Время последнего реального прогресса
+_dungeons_completed = 0  # Счётчик завершённых данженов в сессии
+_items_processed = 0  # Счётчик обработанных предметов
 
 
 def reset_watchdog():
@@ -125,3 +133,66 @@ def check_watchdog(client, popups_client=None):
 
     reset_watchdog()
     return "recovered"
+
+
+# ============================================
+# Авторестарт при отсутствии прогресса
+# ============================================
+
+def mark_progress(action_type: str = "generic"):
+    """
+    Отмечает реальный прогресс бота.
+    Вызывать при:
+    - Завершении данжена
+    - Обработке предметов (продажа/разборка)
+    - Завершении крафта
+    - Сборе почты
+    """
+    global _last_progress_time, _dungeons_completed, _items_processed
+    _last_progress_time = time.time()
+
+    if action_type == "dungeon":
+        _dungeons_completed += 1
+    elif action_type == "item":
+        _items_processed += 1
+
+
+def get_time_since_progress() -> int:
+    """Возвращает секунды с последнего реального прогресса"""
+    return int(time.time() - _last_progress_time)
+
+
+def reset_progress_tracking():
+    """Сбрасывает трекинг прогресса (вызывать при старте бота)"""
+    global _last_progress_time, _dungeons_completed, _items_processed
+    _last_progress_time = time.time()
+    _dungeons_completed = 0
+    _items_processed = 0
+
+
+def check_auto_recovery() -> bool:
+    """
+    Проверяет, нужен ли авторестарт бота.
+
+    Returns:
+        True если бот должен перезапуститься
+    """
+    time_since = get_time_since_progress()
+
+    if time_since >= AUTO_RECOVERY_TIMEOUT:
+        minutes = time_since // 60
+        print(f"[AUTO-RECOVERY] Нет прогресса {minutes} мин! Требуется рестарт.")
+        return True
+
+    return False
+
+
+def trigger_auto_restart():
+    """
+    Инициирует авторестарт бота.
+    Завершает текущий процесс с кодом 42 (специальный код для рестарта).
+    """
+    print("[AUTO-RECOVERY] Инициирую авторестарт бота...")
+
+    # Код 42 = запрос на рестарт (можно обработать в launcher скрипте)
+    os._exit(42)

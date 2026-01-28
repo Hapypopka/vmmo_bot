@@ -396,7 +396,11 @@ class BackpackClient:
         return True
 
     def open_all_bonuses(self):
-        """Открывает все бонусы и сундуки в рюкзаке"""
+        """
+        Открывает все бонусы и сундуки в рюкзаке.
+        ОПТИМИЗИРОВАНО: собираем все предметы за один парсинг.
+        НО: открытие бонусов может добавлять новые предметы, поэтому цикл нужен.
+        """
         if not self.open_backpack():
             return 0
 
@@ -406,30 +410,32 @@ class BackpackClient:
         opened = 0
         for _ in range(50):  # Защита от бесконечного цикла
             items = self.get_items()
-            # Ищем предметы с кнопкой "open" и подходящим названием
-            openable_items = []
-            for item in items:
-                if "open" not in item["buttons"]:
-                    continue
-                name_lower = item["name"].lower()
-                if any(kw in name_lower for kw in openable_keywords):
-                    openable_items.append(item)
+
+            # Ищем ВСЕ открываемые предметы
+            openable_items = [
+                item for item in items
+                if "open" in item["buttons"]
+                and any(kw in item["name"].lower() for kw in openable_keywords)
+            ]
 
             if not openable_items:
                 break
 
-            item = openable_items[0]
-            log_backpack(f"Открываю: {item['name']}")
-            if self.open_bonus(item):
-                opened += 1
-            else:
-                break
+            # Открываем все найденные за один проход
+            for item in openable_items:
+                log_backpack(f"Открываю: {item['name']}")
+                if self.open_bonus(item):
+                    opened += 1
+
+            # После открытия могут появиться новые бонусы, поэтому перезагружаем
+            self.open_backpack()
 
         return opened
 
     def disassemble_all(self, skip_green=True):
         """
         Разбирает все предметы с кнопкой разборки.
+        ОПТИМИЗИРОВАНО: собираем все URL разом, потом обрабатываем без перезагрузки страницы.
 
         Args:
             skip_green: Пропускать зелёные предметы
@@ -443,47 +449,75 @@ class BackpackClient:
         disassembled = 0
         blacklist = load_auction_blacklist()
 
-        for _ in range(100):  # Защита
-            items = self.get_items()
-            log_debug(f"[BACKPACK] Предметов на странице: {len(items)}")
+        # ОПТИМИЗАЦИЯ: собираем ВСЕ предметы для разборки за один парсинг
+        items = self.get_items()
+        log_debug(f"[BACKPACK] Предметов на странице: {len(items)}")
 
-            # DEBUG: показываем первые 5 предметов
-            for i, item in enumerate(items[:5]):
-                btns = list(item["buttons"].keys())
-                flags = []
-                if item["is_protected"]:
-                    flags.append("PROTECTED")
-                if item["is_green"]:
-                    flags.append("GREEN")
-                log_debug(f"[BACKPACK] [{i}] {item['name'][:25]} | btns={btns} | {','.join(flags)}")
+        # Фильтруем предметы для разборки
+        to_disassemble = []
+        for item in items:
+            if item["is_protected"]:
+                continue
+            if skip_green and item["is_green"]:
+                continue
+            if "disassemble" not in item["buttons"]:
+                continue
+            to_disassemble.append(item)
 
-            # Ищем предмет для разборки
-            target = None
-            for item in items:
-                if item["is_protected"]:
-                    continue
-                if skip_green and item["is_green"]:
-                    continue
-                if "disassemble" not in item["buttons"]:
-                    continue
-                target = item
-                break
+        if not to_disassemble:
+            log_debug("[BACKPACK] Нет предметов для разборки")
+            return 0
 
-            if not target:
-                log_debug("[BACKPACK] Не найден предмет для разборки!")
-                break
+        log_debug(f"[BACKPACK] Для разборки: {len(to_disassemble)} предметов")
 
-            log_backpack(f"Разбираю: {target['name']}")
-            if self.disassemble_item(target):
+        # ОПТИМИЗАЦИЯ: разбираем батчем без перезагрузки страницы после каждого
+        for item in to_disassemble:
+            log_backpack(f"Разбираю: {item['name']}")
+            if self._disassemble_direct(item):
                 disassembled += 1
-            else:
-                break
 
         return disassembled
+
+    def _disassemble_direct(self, item):
+        """
+        Разбирает предмет напрямую (без перезагрузки рюкзака).
+
+        Args:
+            item: Словарь с информацией о предмете
+
+        Returns:
+            bool: Успешно ли
+        """
+        if "disassemble" not in item["buttons"]:
+            return False
+
+        url = item["buttons"]["disassemble"]
+        self.client.get(url)
+
+        # Ищем кнопку подтверждения "Да, точно"
+        soup = self.client.soup()
+        confirm_url = None
+
+        for btn in soup.select("a.go-btn"):
+            text = btn.get_text(strip=True)
+            if "да" in text.lower() and "точно" in text.lower():
+                href = btn.get("href")
+                if href:
+                    confirm_url = href if href.startswith("http") else urljoin(self.client.current_url, href)
+                    break
+
+        if confirm_url:
+            self.client.get(confirm_url)
+            self.items_disassembled += 1
+            return True
+
+        log_warning(f"[BACKPACK] Кнопка подтверждения не найдена для: {item['name']}")
+        return False
 
     def drop_green_unusable(self):
         """
         Выбрасывает зелёные предметы без кнопок аукциона/разборки.
+        ОПТИМИЗИРОВАНО: собираем все предметы за один парсинг.
 
         Returns:
             int: Количество выброшенных
@@ -491,40 +525,33 @@ class BackpackClient:
         if not self.open_backpack():
             return 0
 
+        items = self.get_items()
+
+        # Собираем ВСЕ зелёные предметы для выброса
+        to_drop = [
+            item for item in items
+            if not item["is_protected"]
+            and item["is_green"]
+            and "auction" not in item["buttons"]
+            and "disassemble" not in item["buttons"]
+            and "drop" in item["buttons"]
+        ]
+
+        if not to_drop:
+            return 0
+
         dropped = 0
-
-        for _ in range(50):
-            items = self.get_items()
-
-            # Ищем зелёный предмет без полезных кнопок
-            target = None
-            for item in items:
-                if item["is_protected"]:
-                    continue
-                if not item["is_green"]:
-                    continue
-                if "auction" in item["buttons"] or "disassemble" in item["buttons"]:
-                    continue
-                if "drop" not in item["buttons"]:
-                    continue
-                target = item
-                break
-
-            if not target:
-                break
-
-            log_backpack(f"Выбрасываю: {target['name']}")
-            if self.drop_item(target):
+        for item in to_drop:
+            log_backpack(f"Выбрасываю: {item['name']}")
+            if self._drop_direct(item):
                 dropped += 1
-            else:
-                break
 
         return dropped
 
     def drop_unusable(self):
         """
         Выбрасывает ВСЕ предметы (не только зелёные) без кнопок аукциона/разборки.
-        Например: Изумительная пылинка, Золотой Оберег и т.п.
+        ОПТИМИЗИРОВАНО: собираем все предметы за один парсинг.
 
         Returns:
             int: Количество выброшенных
@@ -532,34 +559,62 @@ class BackpackClient:
         if not self.open_backpack():
             return 0
 
+        items = self.get_items()
+
+        # Собираем ВСЕ предметы для выброса
+        to_drop = [
+            item for item in items
+            if not item["is_protected"]
+            and "auction" not in item["buttons"]
+            and "disassemble" not in item["buttons"]
+            and "drop" in item["buttons"]
+        ]
+
+        if not to_drop:
+            return 0
+
         dropped = 0
-
-        for _ in range(50):
-            items = self.get_items()
-
-            # Ищем любой предмет без полезных кнопок
-            target = None
-            for item in items:
-                if item["is_protected"]:
-                    continue
-                # Пропускаем если есть полезные кнопки
-                if "auction" in item["buttons"] or "disassemble" in item["buttons"]:
-                    continue
-                if "drop" not in item["buttons"]:
-                    continue
-                target = item
-                break
-
-            if not target:
-                break
-
-            log_backpack(f"Выбрасываю (мусор): {target['name']}")
-            if self.drop_item(target):
+        for item in to_drop:
+            log_backpack(f"Выбрасываю (мусор): {item['name']}")
+            if self._drop_direct(item):
                 dropped += 1
-            else:
-                break
 
         return dropped
+
+    def _drop_direct(self, item):
+        """
+        Выбрасывает предмет напрямую (без перезагрузки рюкзака).
+
+        Args:
+            item: Словарь с информацией о предмете
+
+        Returns:
+            bool: Успешно ли
+        """
+        if "drop" not in item["buttons"]:
+            return False
+
+        url = item["buttons"]["drop"]
+        self.client.get(url)
+
+        soup = self.client.soup()
+        confirm_url = None
+
+        for btn in soup.select("a.go-btn"):
+            text = btn.get_text(strip=True)
+            if "да" in text.lower() and "точно" in text.lower():
+                href = btn.get("href")
+                if href:
+                    confirm_url = href if href.startswith("http") else urljoin(self.client.current_url, href)
+                    break
+
+        if confirm_url:
+            self.client.get(confirm_url)
+            self.items_dropped += 1
+            return True
+
+        log_warning(f"[BACKPACK] Кнопка подтверждения не найдена для выброса: {item['name']}")
+        return False
 
     def go_to_next_page(self, current_page=1):
         """

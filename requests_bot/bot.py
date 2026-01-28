@@ -23,7 +23,10 @@ from requests_bot.backpack import BackpackClient
 from requests_bot.popups import PopupsClient
 from requests_bot.pets import PetClient
 from requests_bot.stats import init_stats, get_stats, print_stats, set_stats_profile
-from requests_bot.watchdog import reset_watchdog, check_watchdog, reset_no_progress_counter
+from requests_bot.watchdog import (
+    reset_watchdog, check_watchdog, reset_no_progress_counter,
+    mark_progress, reset_progress_tracking, check_auto_recovery, trigger_auto_restart
+)
 from requests_bot.config import (
     DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings,
     set_profile, get_profile_name, get_profile_username, get_credentials,
@@ -274,6 +277,7 @@ class VMMOBot:
             self.stats["silver_collected"] += silver
             if gold > 0 or silver > 0:
                 log_info(f"Почта: +{gold}g +{silver}s")
+                mark_progress("mail")  # Отмечаем прогресс
             return stats
         except Exception as e:
             log_error(f"Ошибка почты: {e}")
@@ -321,6 +325,7 @@ class VMMOBot:
                 self.stats["items_sold"] += total_cleaned
                 if total_cleaned > 0:
                     log_info(f"Очищено: {disassembled} разобрано, {dropped} выброшено")
+                    mark_progress("item")  # Отмечаем прогресс
 
             # Продажа ресурсов на аукционе (если включено)
             if is_resource_selling_enabled():
@@ -620,6 +625,7 @@ class VMMOBot:
 
                 if result == "completed":
                     self.stats["dungeons_completed"] += 1
+                    mark_progress("dungeon")  # Отмечаем прогресс для авторестарта
                     log_dungeon_result(dungeon_name, result, actions)
 
                     # Записываем в файловую статистику
@@ -732,6 +738,9 @@ class VMMOBot:
 
         # Ресурсы уже инициализированы в login() -> _init_resources_session()
 
+        # Сбрасываем трекинг прогресса для авторестарта
+        reset_progress_tracking()
+
         # Арена - только в начале сессии, один раз
         self.try_arena()
 
@@ -773,6 +782,12 @@ class VMMOBot:
                         reset_watchdog()
                     except Exception:
                         pass
+
+                # Проверяем авторестарт (20 мин без прогресса)
+                if check_auto_recovery():
+                    username = get_profile_username()
+                    telegram_notify(f"🔄 [{username}] Авторестарт: нет прогресса 20+ мин")
+                    trigger_auto_restart()
 
                 if max_cycles and cycle >= max_cycles:
                     log_info(f"Достигнут лимит циклов ({max_cycles})")
