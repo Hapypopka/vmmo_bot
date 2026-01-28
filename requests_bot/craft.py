@@ -33,7 +33,7 @@ def _notify_craft_issue(profile: str, recipe_name: str, reason: str):
         message = f"[{profile}] Крафт: {recipe_name}\n{reason}\nВозможно рецепт не изучен!"
         notify_sync(message)
     except Exception as e:
-        print(f"[CRAFT] Не удалось отправить уведомление: {e}")
+        log_info(f"[CRAFT] Не удалось отправить уведомление: {e}")
 
 # Названия предметов для поиска в инвентаре
 ITEM_NAMES = {
@@ -284,7 +284,7 @@ class IronCraftClient:
 
         # Открываем рюкзак и считаем предметы
         if not backpack.open_backpack():
-            print("[CRAFT] Не удалось открыть рюкзак")
+            log_info("[CRAFT] Не удалось открыть рюкзак")
             return inventory
 
         # Проходим по всем страницам рюкзака
@@ -334,7 +334,7 @@ class IronCraftClient:
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False)
         except Exception as e:
-            print(f"[CRAFT] Ошибка сохранения кэша инвентаря: {e}")
+            log_info(f"[CRAFT] Ошибка сохранения кэша инвентаря: {e}")
 
     def get_iron_inventory(self):
         """Обратная совместимость - возвращает только железные материалы"""
@@ -438,27 +438,27 @@ class IronCraftClient:
         status = self.get_craft_status()
 
         if not status["ready"]:
-            print("[CRAFT] Крафт ещё не готов")
+            log_info("[CRAFT] Крафт ещё не готов")
             return None
 
         collect_url = status.get("collect_url")
         if not collect_url:
-            print("[CRAFT] Не найдена кнопка 'Забрать'")
+            log_info("[CRAFT] Не найдена кнопка 'Забрать'")
             return None
 
         # Валидация URL - защита от "none" и других мусорных значений
         if collect_url.lower() in ("none", "null", ""):
-            print(f"[CRAFT] Невалидный URL: {collect_url}")
+            log_info(f"[CRAFT] Невалидный URL: {collect_url}")
             return None
 
         craft_type = status.get("type")
-        print(f"[CRAFT] Забираю {RECIPES.get(craft_type, {}).get('name', craft_type)}...")
+        log_info(f"[CRAFT] Забираю {RECIPES.get(craft_type, {}).get('name', craft_type)}...")
 
         if not collect_url.startswith("http"):
             collect_url = urljoin(BASE_URL, collect_url)
 
         self.client.get(collect_url)
-        print("[CRAFT] Забрано!")
+        log_info("[CRAFT] Забрано!")
 
         # Очищаем сохранённое время завершения
         from requests_bot.config import clear_craft_finish_time
@@ -484,27 +484,27 @@ class IronCraftClient:
         status = self.get_craft_status()
 
         if not status["ready"]:
-            print("[CRAFT] Крафт не готов для повтора")
+            log_info("[CRAFT] Крафт не готов для повтора")
             return False
 
         repeat_url = status.get("repeat_url")
         if not repeat_url:
-            print("[CRAFT] Не найдена кнопка 'Повторить'")
+            log_info("[CRAFT] Не найдена кнопка 'Повторить'")
             return False
 
         # Валидация URL - защита от "none" и других мусорных значений
         if repeat_url.lower() in ("none", "null", ""):
-            print(f"[CRAFT] Невалидный URL повтора: {repeat_url}")
+            log_info(f"[CRAFT] Невалидный URL повтора: {repeat_url}")
             return False
 
         craft_type = status.get("type")
-        print(f"[CRAFT] Повторяю {RECIPES.get(craft_type, {}).get('name', craft_type)}...")
+        log_info(f"[CRAFT] Повторяю {RECIPES.get(craft_type, {}).get('name', craft_type)}...")
 
         if not repeat_url.startswith("http"):
             repeat_url = urljoin(BASE_URL, repeat_url)
 
         self.client.get(repeat_url)
-        print("[CRAFT] Крафт запущен!")
+        log_info("[CRAFT] Крафт запущен!")
         return True
 
     def start_craft(self, recipe_id):
@@ -520,11 +520,11 @@ class IronCraftClient:
             bool: True если успешно
         """
         if recipe_id not in RECIPES:
-            print(f"[CRAFT] Неизвестный рецепт: {recipe_id}")
+            log_info(f"[CRAFT] Неизвестный рецепт: {recipe_id}")
             return False
 
         recipe = RECIPES[recipe_id]
-        print(f"[CRAFT] Начинаю крафт: {recipe['name']}...")
+        log_info(f"[CRAFT] Начинаю крафт: {recipe['name']}...")
 
         # Особый путь для рецептов 2+ уровня (через страницу профессии)
         if recipe.get("level", 1) >= 2:
@@ -536,7 +536,7 @@ class IronCraftClient:
 
         soup = self.client.soup()
         if not soup:
-            print("[CRAFT] Не удалось загрузить страницу рецепта")
+            log_info("[CRAFT] Не удалось загрузить страницу рецепта")
             return False
 
         # Ищем кнопку "Начать работу"
@@ -555,17 +555,17 @@ class IronCraftClient:
                     break
 
         if not start_btn:
-            print("[CRAFT] Не найдена кнопка 'Начать работу'")
+            log_info("[CRAFT] Не найдена кнопка 'Начать работу'")
             page_text = soup.get_text().lower()
             known_reason = False
             if "обновлен" in page_text and "сервер" in page_text:
-                print("[CRAFT] Сервер на обновлении - ждём...")
+                log_info("[CRAFT] Сервер на обновлении - ждём...")
                 known_reason = True
             elif "недостаточно" in page_text or "не хватает" in page_text:
-                print("[CRAFT] Не хватает материалов!")
+                log_info("[CRAFT] Не хватает материалов!")
                 known_reason = True
             elif "вход" in page_text or "авторизац" in page_text:
-                print("[CRAFT] Сессия истекла - нужна переавторизация!")
+                log_info("[CRAFT] Сессия истекла - нужна переавторизация!")
                 known_reason = True
 
             if not known_reason:
@@ -574,14 +574,14 @@ class IronCraftClient:
 
         start_url = start_btn.get("href")
         if not start_url:
-            print("[CRAFT] Кнопка без ссылки")
+            log_info("[CRAFT] Кнопка без ссылки")
             return False
 
         if not start_url.startswith("http"):
             start_url = urljoin(BASE_URL, start_url)
 
         self.client.get(start_url)
-        print(f"[CRAFT] Крафт {recipe['name']} запущен!")
+        log_info(f"[CRAFT] Крафт {recipe['name']} запущен!")
 
         # Сохраняем время завершения крафта
         import time
@@ -589,7 +589,7 @@ class IronCraftClient:
         craft_time = recipe.get("craft_time", 300)
         finish_time = int(time.time()) + craft_time
         set_craft_finish_time(finish_time)
-        print(f"[CRAFT] Завершится через {craft_time}с (в {time.strftime('%H:%M:%S', time.localtime(finish_time))})")
+        log_info(f"[CRAFT] Завершится через {craft_time}с (в {time.strftime('%H:%M:%S', time.localtime(finish_time))})")
 
         return True
 
@@ -601,7 +601,7 @@ class IronCraftClient:
 
         soup = self.client.soup()
         if not soup:
-            print("[CRAFT] Не удалось загрузить страницу профессии")
+            log_info("[CRAFT] Не удалось загрузить страницу профессии")
             return False
 
         # Шаг 2: Ищем кнопку "Создать" для нужного рецепта
@@ -683,19 +683,19 @@ class IronCraftClient:
 
         if not create_btn:
             recipe_name = ITEM_NAMES.get(receipt_id, receipt_id)
-            print(f"[CRAFT] Не найдена кнопка 'Создать' для {receipt_id}")
+            log_info(f"[CRAFT] Не найдена кнопка 'Создать' для {receipt_id}")
             # Отладка: выводим все go-btn на странице
             all_btns = soup.select("a.go-btn")
             if all_btns:
-                print(f"[CRAFT] DEBUG: Найдено {len(all_btns)} кнопок go-btn:")
+                log_info(f"[CRAFT] DEBUG: Найдено {len(all_btns)} кнопок go-btn:")
                 for btn in all_btns[:5]:
-                    print(f"  - href: {btn.get('href', '')[:80]}")
+                    log_debug(f"  - href: {btn.get('href', '')[:80]}")
             # Ищем навигацию/пагинацию
             nav_links = soup.select("a[href*='page'], a[href*='offset'], .pagination a, .pager a, .nav a")
             if nav_links:
-                print(f"[CRAFT] DEBUG: Найдены nav links ({len(nav_links)}):")
+                log_info(f"[CRAFT] DEBUG: Найдены nav links ({len(nav_links)}):")
                 for link in nav_links[:5]:
-                    print(f"  - {link.get('href', '')[:60]} | text: {link.get_text(strip=True)[:20]}")
+                    log_debug(f"  - {link.get('href', '')[:60]} | text: {link.get_text(strip=True)[:20]}")
             # Уведомление - скорее всего рецепт не изучен
             _notify_craft_issue(self.profile, recipe_name, "Не найдена кнопка 'Создать'")
             return False
@@ -704,7 +704,7 @@ class IronCraftClient:
 
         # Валидация URL
         if not create_url or create_url.lower() in ("none", "null"):
-            print(f"[CRAFT] Невалидный URL 'Создать': {create_url}")
+            log_info(f"[CRAFT] Невалидный URL 'Создать': {create_url}")
             return False
 
         if not create_url.startswith("http"):
@@ -715,7 +715,7 @@ class IronCraftClient:
 
         soup = self.client.soup()
         if not soup:
-            print("[CRAFT] Не удалось загрузить страницу крафта")
+            log_info("[CRAFT] Не удалось загрузить страницу крафта")
             return False
 
         # Шаг 4: Ищем кнопку "Начать работу"
@@ -728,10 +728,10 @@ class IronCraftClient:
                 break
 
         if not start_btn:
-            print("[CRAFT] Не найдена кнопка 'Начать работу'")
+            log_info("[CRAFT] Не найдена кнопка 'Начать работу'")
             page_text = soup.get_text().lower()
             if "недостаточно" in page_text or "не хватает" in page_text:
-                print("[CRAFT] Не хватает материалов для слитка!")
+                log_info("[CRAFT] Не хватает материалов для слитка!")
             else:
                 # Неизвестная причина - уведомляем
                 _notify_craft_issue(self.profile, recipe['name'], "Не найдена кнопка 'Начать работу' (level 2+)")
@@ -741,14 +741,14 @@ class IronCraftClient:
 
         # Валидация URL - защита от "none" и других мусорных значений
         if not start_url or start_url.lower() in ("none", "null"):
-            print(f"[CRAFT] Невалидный URL 'Начать работу': {start_url}")
+            log_info(f"[CRAFT] Невалидный URL 'Начать работу': {start_url}")
             return False
 
         if not start_url.startswith("http"):
             start_url = urljoin(BASE_URL, start_url)
 
         self.client.get(start_url)
-        print(f"[CRAFT] Крафт {recipe['name']} запущен!")
+        log_info(f"[CRAFT] Крафт {recipe['name']} запущен!")
 
         # Сохраняем время завершения крафта
         import time
@@ -756,7 +756,7 @@ class IronCraftClient:
         craft_time = recipe.get("craft_time", 300)
         finish_time = int(time.time()) + craft_time
         set_craft_finish_time(finish_time)
-        print(f"[CRAFT] Завершится через {craft_time}с (в {time.strftime('%H:%M:%S', time.localtime(finish_time))})")
+        log_info(f"[CRAFT] Завершится через {craft_time}с (в {time.strftime('%H:%M:%S', time.localtime(finish_time))})")
 
         return True
 
@@ -800,7 +800,7 @@ class IronCraftClient:
 
     # NOTE: Удалены мёртвые методы: _get_wait_time, run_cycle, run_full_cycle
 
-    def sell_all_mining(self, mode="all"):
+    def sell_all_mining(self, mode="all", force_min_stack=None):
         """
         Продаёт материалы горного дела на аукционе.
 
@@ -809,10 +809,12 @@ class IronCraftClient:
                   "bronze" - только медь/бронза
                   "platinum" - только жел.руда/платина
                   "all" - всё
+            force_min_stack: если указан, игнорирует стандартные минимальные размеры стаков
+                             и использует это значение (1 = продавать всё)
 
         Использует AuctionClient для автоматического ценообразования.
         """
-        print(f"[CRAFT] Продаю материалы на аукционе (режим: {mode})...")
+        log_info(f"[CRAFT] Продаю материалы на аукционе (режим: {mode})...")
 
         try:
             from requests_bot.auction import AuctionClient
@@ -898,9 +900,11 @@ class IronCraftClient:
 
             MIN_STACK_SIZES = {}
             for item_id, item_name in ITEM_NAMES.items():
+                # Если force_min_stack указан - используем его для всех предметов
+                if force_min_stack is not None:
+                    MIN_STACK_SIZES[item_name] = force_min_stack
                 # Сначала проверяем UI настройку min_auction_stack
-                ui_setting = min_stack_config.get(item_id, 0)
-                if ui_setting > 0:
+                elif (ui_setting := min_stack_config.get(item_id, 0)) > 0:
                     MIN_STACK_SIZES[item_name] = ui_setting
                 # Потом batch_size из автокрафта
                 elif item_id in batch_sizes:
@@ -909,10 +913,13 @@ class IronCraftClient:
                 else:
                     MIN_STACK_SIZES[item_name] = get_optimal_batch_size(item_id)
 
+            if force_min_stack is not None:
+                log_info(f"[CRAFT] force_min_stack={force_min_stack} - игнорируем стандартные лимиты")
+
             # Проходим пока есть предметы с кнопкой аукциона
             for _ in range(50):  # защита от бесконечного цикла
                 if not backpack.open_backpack():
-                    print("[CRAFT] Не удалось открыть рюкзак!")
+                    log_info("[CRAFT] Не удалось открыть рюкзак!")
                     break
 
                 items = backpack.get_items()
@@ -923,7 +930,7 @@ class IronCraftClient:
                     for ci in craft_items_found:
                         has_auction = "auction" in ci["buttons"]
                         min_stack = MIN_STACK_SIZES.get(ci["name"], 1)
-                        print(f"[CRAFT-DEBUG] {ci['name']} x{ci['count']}, auction={has_auction}, min_stack={min_stack}, buttons={list(ci['buttons'].keys())}")
+                        log_debug(f"[CRAFT-DEBUG] {ci['name']} x{ci['count']}, auction={has_auction}, min_stack={min_stack}, buttons={list(ci['buttons'].keys())}")
 
                 # Ищем предмет с кнопкой аукциона (кроме пропущенных)
                 target = None
@@ -959,7 +966,7 @@ class IronCraftClient:
                 name = target["name"]
                 auction_url = target["buttons"]["auction"]
 
-                print(f"[CRAFT] Выставляю на аукцион: {name}")
+                log_info(f"[CRAFT] Выставляю на аукцион: {name}")
 
                 # Переходим на страницу аукциона
                 self.client.get(auction_url)
@@ -982,38 +989,38 @@ class IronCraftClient:
                     final_price = price_per_unit * my_count
                     gold = int(final_price)
                     silver = int((final_price - gold) * 100)
-                    print(f"[CRAFT] Цена из кэша: {cached_price:.2f}з/шт → продаём {my_count} шт за {final_price:.2f}з ({gold}з {silver}с)")
+                    log_info(f"[CRAFT] Цена из кэша: {cached_price:.2f}з/шт → продаём {my_count} шт за {final_price:.2f}з ({gold}з {silver}с)")
                 else:
                     # Нет кэша - используем старую логику
                     gold, silver = auction.calculate_price(my_count, item_name=name)
 
                     # Неизвестный предмет без конкурентов - не продаём
                     if gold is None:
-                        print(f"[CRAFT] Нет конкурентов и нет дефолтной цены для '{name}', пропускаю")
+                        log_info(f"[CRAFT] Нет конкурентов и нет дефолтной цены для '{name}', пропускаю")
                         skipped_items.add(name)
                         continue
 
-                print(f"[CRAFT] x{my_count} за {gold}з {silver}с")
+                log_info(f"[CRAFT] x{my_count} за {gold}з {silver}с")
 
                 # Создаём лот
                 result = auction.try_create_lot(gold, silver)
 
                 if result == "success":
-                    print(f"[CRAFT] Выставлено!")
+                    log_info(f"[CRAFT] Выставлено!")
                     sold_count += 1
                 elif result == "low_price":
-                    print(f"[CRAFT] Цена слишком низкая, пропускаю '{name}'")
+                    log_info(f"[CRAFT] Цена слишком низкая, пропускаю '{name}'")
                     skipped_items.add(name)  # Больше не пытаемся продать этот тип
                 else:
-                    print(f"[CRAFT] Ошибка выставления")
+                    log_info(f"[CRAFT] Ошибка выставления")
 
                 time.sleep(0.5)
 
-            print(f"[CRAFT] Продажа завершена! Выставлено лотов: {sold_count}")
+            log_info(f"[CRAFT] Продажа завершена! Выставлено лотов: {sold_count}")
             return sold_count
 
         except Exception as e:
-            print(f"[CRAFT] Ошибка продажи: {e}")
+            log_info(f"[CRAFT] Ошибка продажи: {e}")
             return 0
 
     def sell_all_iron(self):
@@ -1073,13 +1080,13 @@ class CyclicCraftClient(IronCraftClient):
             if current_count > 0:
                 batch_size = get_optimal_batch_size(current_recipe)
                 item_name = ITEM_NAMES.get(current_recipe, current_recipe)
-                print(f"[CRAFT] Найдены остатки от прошлой сессии: {item_name} x{current_count}/{batch_size}")
+                log_info(f"[CRAFT] Найдены остатки от прошлой сессии: {item_name} x{current_count}/{batch_size}")
                 return current_recipe, current_count, batch_size
 
             return None, 0, 0
 
         except Exception as e:
-            print(f"[CRAFT] Ошибка проверки остатков: {e}")
+            log_info(f"[CRAFT] Ошибка проверки остатков: {e}")
             return None, 0, 0
 
     def do_cyclic_craft_step(self):
@@ -1103,7 +1110,7 @@ class CyclicCraftClient(IronCraftClient):
 
         items = get_craft_items()
         if not items:
-            print("[CRAFT] Список автокрафта пуст")
+            log_info("[CRAFT] Список автокрафта пуст")
             return False, 0
 
         # Проверяем - не застряли ли в банде (блокирует крафт)
@@ -1119,12 +1126,12 @@ class CyclicCraftClient(IronCraftClient):
 
                 if leftover_count >= leftover_batch:
                     # Достаточно - продаём сразу
-                    print(f"[CRAFT] Остатки готовы к продаже: {item_name} x{leftover_count}")
+                    log_info(f"[CRAFT] Остатки готовы к продаже: {item_name} x{leftover_count}")
                     self._sell_item_batch(leftover_recipe)
                     return True, 5
                 else:
                     # Нужно докрафтить до batch_size
-                    print(f"[CRAFT] Докрафтиваю остатки: {item_name} {leftover_count}/{leftover_batch}")
+                    log_info(f"[CRAFT] Докрафтиваю остатки: {item_name} {leftover_count}/{leftover_batch}")
                     # Продолжаем с этим же рецептом (лок уже есть)
 
         # 1. Определяем лучший крафт и его оптимальный batch_size
@@ -1141,6 +1148,7 @@ class CyclicCraftClient(IronCraftClient):
         inventory = self.get_mining_inventory()
         current_count = inventory.get(best_item_id, 0)
         item_name = ITEM_NAMES.get(best_item_id, best_item_id)
+        log_info(f"[CRAFT] Инвентарь {item_name}: {current_count}, batch_size: {batch_size}")
 
         # Сохраняем прогресс для веб-панели
         try:
@@ -1151,7 +1159,7 @@ class CyclicCraftClient(IronCraftClient):
 
         if current_count >= batch_size:
             # Продать накопленное
-            print(f"[CRAFT] Накоплено {item_name}: {current_count}/{batch_size} → продаю")
+            log_info(f"[CRAFT] Накоплено {item_name}: {current_count}/{batch_size} → продаю")
             self._sell_item_batch(best_item_id)
             return True, 5  # Проверить снова через 5 сек
 
@@ -1163,7 +1171,7 @@ class CyclicCraftClient(IronCraftClient):
             collected_type = self.collect_craft()
             if collected_type:
                 item_name = ITEM_NAMES.get(collected_type, collected_type)
-                print(f"[CRAFT] Забрано: {item_name}")
+                log_info(f"[CRAFT] Забрано: {item_name}")
                 # Очищаем время завершения крафта после забора
                 from requests_bot.config import clear_craft_finish_time
                 clear_craft_finish_time()
@@ -1172,6 +1180,7 @@ class CyclicCraftClient(IronCraftClient):
         elif status["in_progress"]:
             # Ждать завершения
             craft_type = status.get("type")
+            log_info(f"[CRAFT] Крафт в процессе: {craft_type}, жду...")
 
             # Проверяем каждые 30 секунд вместо полного времени крафта
             # Это позволяет быстрее забрать готовый крафт
@@ -1185,15 +1194,15 @@ class CyclicCraftClient(IronCraftClient):
         if recipe and self.start_craft(recipe):
             wait_time = RECIPES[recipe]["craft_time"]
             item_name = ITEM_NAMES.get(item_id, item_id)
-            print(f"[CRAFT] Запуск крафта: {item_name} (рецепт: {recipe}, время: {wait_time}с)")
+            log_info(f"[CRAFT] Запуск крафта: {item_name} (рецепт: {recipe}, время: {wait_time}с)")
             return True, wait_time
         else:
-            print(f"[CRAFT] Ошибка запуска крафта для {item_id}")
+            log_info(f"[CRAFT] Ошибка запуска крафта для {item_id}")
             # Проверяем - может мы застряли в банде?
             if self._try_leave_party_and_retry(recipe):
                 wait_time = RECIPES[recipe]["craft_time"]
                 item_name = ITEM_NAMES.get(item_id, item_id)
-                print(f"[CRAFT] Запуск крафта после выхода из банды: {item_name}")
+                log_info(f"[CRAFT] Запуск крафта после выхода из банды: {item_name}")
                 return True, wait_time
             return False, 60  # Повтор через минуту
 
@@ -1222,7 +1231,7 @@ class CyclicCraftClient(IronCraftClient):
             old_recipe = self._selected_recipe
             self._selected_recipe = None
             item_name = ITEM_NAMES.get(old_recipe, old_recipe) if old_recipe else "none"
-            print(f"[CRAFT] Обнаружено изменение craft_items! Сбрасываем рецепт ({item_name})")
+            log_info(f"[CRAFT] Обнаружено изменение craft_items! Сбрасываем рецепт ({item_name})")
 
         # Если рецепт уже выбран - возвращаем его без пересчётов
         if self._selected_recipe:
@@ -1237,7 +1246,7 @@ class CyclicCraftClient(IronCraftClient):
                 self._selected_recipe = items[0]["item"]
                 self._craft_items_hash = current_hash
                 item_name = ITEM_NAMES.get(self._selected_recipe, self._selected_recipe)
-                print(f"[CRAFT] Выбран рецепт (ручной): {item_name}")
+                log_info(f"[CRAFT] Выбран рецепт (ручной): {item_name}")
                 return self._selected_recipe
             self._selected_recipe = "ironBar"
             self._craft_items_hash = current_hash
@@ -1250,7 +1259,7 @@ class CyclicCraftClient(IronCraftClient):
 
             # Обновляем кэш ТОЛЬКО при первом выборе
             if is_cache_expired():
-                print("[CRAFT] Кэш цен устарел, обновляю...")
+                log_info("[CRAFT] Кэш цен устарел, обновляю...")
                 refresh_craft_prices_cache(self.client)
 
             # Берём лок на рецепт (с учётом распределения)
@@ -1260,11 +1269,11 @@ class CyclicCraftClient(IronCraftClient):
                 self._selected_recipe = best_item
                 self._craft_items_hash = current_hash
                 item_name = ITEM_NAMES.get(best_item, best_item)
-                print(f"[CRAFT] Выбран рецепт (авто): {item_name} - крафтим всю сессию")
+                log_info(f"[CRAFT] Выбран рецепт (авто): {item_name} - крафтим всю сессию")
                 return self._selected_recipe
 
         except Exception as e:
-            print(f"[CRAFT] Ошибка автовыбора: {e}")
+            log_info(f"[CRAFT] Ошибка автовыбора: {e}")
             import traceback
             traceback.print_exc()
 
@@ -1273,7 +1282,7 @@ class CyclicCraftClient(IronCraftClient):
             self._selected_recipe = items[0]["item"]
             self._craft_items_hash = current_hash
             item_name = ITEM_NAMES.get(self._selected_recipe, self._selected_recipe)
-            print(f"[CRAFT] Fallback: {item_name} (первый из списка)")
+            log_info(f"[CRAFT] Fallback: {item_name} (первый из списка)")
             return self._selected_recipe
 
         self._selected_recipe = "ironBar"
@@ -1297,14 +1306,14 @@ class CyclicCraftClient(IronCraftClient):
 
         if leave_match:
             leave_url = leave_match.group(1).replace("&amp;", "&")
-            print("[CRAFT] Обнаружена банда, выхожу перед проверкой крафта...")
+            log_info("[CRAFT] Обнаружена банда, выхожу перед проверкой крафта...")
             try:
                 self.client.get(leave_url)
                 time.sleep(0.5)
-                print("[CRAFT] Вышел из банды")
+                log_info("[CRAFT] Вышел из банды")
                 return True
             except Exception as e:
-                print(f"[CRAFT] Ошибка выхода из банды: {e}")
+                log_info(f"[CRAFT] Ошибка выхода из банды: {e}")
                 return False
 
         return False
@@ -1320,7 +1329,7 @@ class CyclicCraftClient(IronCraftClient):
         Returns:
             bool: True если удалось выйти и запустить крафт
         """
-        print("[CRAFT] Проверяю, не застряли ли в банде...")
+        log_info("[CRAFT] Проверяю, не застряли ли в банде...")
 
         # Переходим на любую страницу где может быть кнопка
         self.client.get("/city")
@@ -1338,15 +1347,15 @@ class CyclicCraftClient(IronCraftClient):
 
         if leave_match:
             leave_url = leave_match.group(1).replace("&amp;", "&")
-            print("[CRAFT] Найдена кнопка 'Покинуть банду', выхожу...")
+            log_info("[CRAFT] Найдена кнопка 'Покинуть банду', выхожу...")
             try:
                 self.client.get(leave_url)
                 time.sleep(0.5)
-                print("[CRAFT] Вышел из банды, пробую запустить крафт...")
+                log_info("[CRAFT] Вышел из банды, пробую запустить крафт...")
                 # Пробуем запустить крафт снова
                 return self.start_craft(recipe)
             except Exception as e:
-                print(f"[CRAFT] Ошибка выхода из банды: {e}")
+                log_info(f"[CRAFT] Ошибка выхода из банды: {e}")
                 return False
 
         return False
@@ -1360,7 +1369,7 @@ class CyclicCraftClient(IronCraftClient):
             item_id: ID предмета для продажи
         """
         item_name = ITEM_NAMES.get(item_id, item_id)
-        print(f"[CRAFT] Продажа накопленного: {item_name}")
+        log_info(f"[CRAFT] Продажа накопленного: {item_name}")
 
         # Определяем режим продажи по цепочке крафта
         if item_id in ["copper", "copperOre", "copperBar"]:
@@ -1383,9 +1392,9 @@ class CyclicCraftClient(IronCraftClient):
             from requests_bot.craft_prices import refresh_craft_lock
             refresh_craft_lock(self.profile, item_id)
         except Exception as e:
-            print(f"[CRAFT] Ошибка обновления лока: {e}")
+            log_info(f"[CRAFT] Ошибка обновления лока: {e}")
 
-        print(f"[CRAFT] Продажа завершена")
+        log_info(f"[CRAFT] Продажа завершена")
 
     def _get_recipe_for_item(self, item_id):
         """
@@ -1474,6 +1483,7 @@ class CyclicCraftClient(IronCraftClient):
 
         elif item_id == "platinumBar":
             # Для платинового слитка нужно 5 платины
+            log_info(f"[CRAFT] Проверка цепочки platinumBar: platinum={inv['platinum']}, rawOre={inv['rawOre']}")
             if inv["platinum"] >= 5:
                 return "platinumBar"
             elif inv["rawOre"] >= 25:
