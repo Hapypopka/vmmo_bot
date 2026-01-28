@@ -190,9 +190,29 @@ def check_auto_recovery() -> bool:
 def trigger_auto_restart():
     """
     Инициирует авторестарт бота.
-    Завершает текущий процесс с кодом 42 (специальный код для рестарта).
+    Перезапускает текущий процесс через os.execv().
     """
+    import sys
+
     print("[AUTO-RECOVERY] Инициирую авторестарт бота...")
 
-    # Код 42 = запрос на рестарт (можно обработать в launcher скрипте)
-    os._exit(42)
+    # Получаем текущие аргументы командной строки
+    python = sys.executable
+    args = sys.argv[:]
+
+    # Удаляем lock файл перед рестартом
+    try:
+        from requests_bot.config import get_profile
+        profile = get_profile()
+        if profile:
+            lock_file = f"profiles/{profile}/.lock"
+            if os.path.exists(lock_file):
+                os.remove(lock_file)
+                print(f"[AUTO-RECOVERY] Удалён lock файл: {lock_file}")
+    except Exception as e:
+        print(f"[AUTO-RECOVERY] Ошибка удаления lock: {e}")
+
+    print(f"[AUTO-RECOVERY] Перезапуск: {python} {' '.join(args)}")
+
+    # Перезапускаем процесс
+    os.execv(python, [python] + args)
