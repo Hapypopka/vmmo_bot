@@ -19,7 +19,7 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, s
 # Resource History модуль
 try:
     from requests_bot.resource_history import (
-        get_history, get_sessions, get_offline_changes, get_all_chart_data
+        get_history, get_sessions, get_all_chart_data
     )
     RESOURCE_HISTORY_AVAILABLE = True
 except ImportError:
@@ -2441,36 +2441,6 @@ def api_stats_sessions(profile):
         for s in sessions:
             s['profile'] = profile
         return jsonify({"success": True, "sessions": sessions})
-
-
-@app.route("/api/stats/offline/<profile>")
-@login_required
-def api_stats_offline(profile):
-    """API: Изменения вне бота"""
-    if not RESOURCE_HISTORY_AVAILABLE:
-        return jsonify({"success": False, "error": "Resource history not available"})
-
-    limit = int(request.args.get("limit", 20))
-
-    if profile == "all":
-        # Все offline изменения
-        all_changes = []
-        for p in PROFILE_NAMES.keys():
-            changes = get_offline_changes(limit, p)
-            for c in changes:
-                c['profile'] = p
-                all_changes.append(c)
-
-        all_changes.sort(key=lambda x: x['detected_at'], reverse=True)
-        return jsonify({"success": True, "changes": all_changes[:limit]})
-    else:
-        if profile not in PROFILE_NAMES:
-            return jsonify({"success": False, "error": "Profile not found"})
-
-        changes = get_offline_changes(limit, profile)
-        for c in changes:
-            c['profile'] = profile
-        return jsonify({"success": True, "changes": changes})
 
 
 @app.route("/api/stats/summary/<profile>")

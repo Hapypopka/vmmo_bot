@@ -177,16 +177,9 @@ class VMMOBot:
                 start_session(resources)
                 log_info(f"[RESOURCES] Старт сессии: {resources}")
 
-                # Сохраняем в историю и проверяем offline изменения
-                session_id, offline_changes = start_bot_session(resources)
+                # Сохраняем в историю
+                session_id, _ = start_bot_session(resources)
                 self._history_session_id = session_id
-
-                if offline_changes:
-                    changes_str = ", ".join(
-                        f"{k}: {v:+d}" for k, v in offline_changes['changes'].items()
-                    )
-                    log_info(f"[RESOURCES] Изменения вне бота: {changes_str}")
-                    telegram_notify(f"📊 [{get_profile_username()}] Изменения вне бота:\n{changes_str}")
             else:
                 log_warning(f"[RESOURCES] Не удалось распарсить ресурсы! URL: {self.client.current_url}")
         except Exception as e:
