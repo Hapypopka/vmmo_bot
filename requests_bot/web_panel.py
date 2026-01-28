@@ -538,22 +538,33 @@ def get_grouped_stats():
 
 def get_logs(profile, lines=100):
     """Получает последние логи бота"""
+    # Основные логи находятся в /logs/bot_charN_live.log
+    logs_dir = os.path.join(SCRIPT_DIR, "logs")
+    live_log = os.path.join(logs_dir, f"bot_{profile}_live.log")
+
+    # Пробуем сначала live лог
+    if os.path.exists(live_log):
+        try:
+            with open(live_log, "r", encoding="utf-8", errors="ignore") as f:
+                all_lines = f.readlines()
+                return "".join(all_lines[-lines:])
+        except Exception:
+            pass
+
+    # Fallback: старый путь в profiles/charN/logs/
     log_dir = os.path.join(PROFILES_DIR, profile, "logs")
-    if not os.path.exists(log_dir):
-        return "Нет логов"
+    if os.path.exists(log_dir):
+        log_files = sorted([f for f in os.listdir(log_dir) if f.endswith(".log")], reverse=True)
+        if log_files:
+            log_path = os.path.join(log_dir, log_files[0])
+            try:
+                with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                    all_lines = f.readlines()
+                    return "".join(all_lines[-lines:])
+            except Exception:
+                pass
 
-    # Находим последний лог-файл
-    log_files = sorted([f for f in os.listdir(log_dir) if f.endswith(".log")], reverse=True)
-    if not log_files:
-        return "Нет логов"
-
-    log_path = os.path.join(log_dir, log_files[0])
-    try:
-        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-            all_lines = f.readlines()
-            return "".join(all_lines[-lines:])
-    except Exception:
-        return "Ошибка чтения логов"
+    return "Нет логов"
 
 
 def get_deaths(profile):
@@ -900,8 +911,6 @@ def create_profile(username, password):
         "backpack_threshold": 18,
         "dungeons_enabled": True,
         "arena_enabled": False,
-        "event_dungeon_enabled": False,
-        "ny_event_dungeon_enabled": False,
         "hell_games_enabled": False,
         "survival_mines_enabled": False,
         "pet_resurrection_enabled": False,
@@ -1556,6 +1565,51 @@ def api_sell_crafts():
         return jsonify({"success": False, "error": "Таймаут (3 мин)"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/sell_crafts/stream")
+@login_required
+def api_sell_crafts_stream():
+    """SSE endpoint: Стрим прогресса продажи крафтов в реальном времени"""
+    import sys
+    from flask import Response
+
+    def generate():
+        # Запускаем скрипт в режиме стриминга
+        process = subprocess.Popen(
+            [sys.executable, "-m", "requests_bot.sell_crafts", "--stream"],
+            cwd=SCRIPT_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1  # Line buffered
+        )
+
+        try:
+            for line in process.stdout:
+                line = line.strip()
+                if line:
+                    # Отправляем как SSE event
+                    yield f"data: {line}\n\n"
+
+            process.wait()
+            # Отправляем финальное событие
+            yield f"data: {{\"done\": true}}\n\n"
+        except GeneratorExit:
+            process.kill()
+        finally:
+            if process.poll() is None:
+                process.kill()
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'  # Для nginx
+        }
+    )
 
 
 # ============================================

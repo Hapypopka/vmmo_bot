@@ -13,10 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from requests_bot.client import VMMOClient
 from requests_bot.run_dungeon import DungeonRunner
-from requests_bot.event_dungeon import (
-    EventDungeonClient, EquipmentClient, try_ny_event_dungeon, set_ny_event_cooldown,
-    try_event_dungeon_generic, set_event_cooldown, EVENT_DUNGEONS
-)
+# ARCHIVED: event_dungeon.py moved to archive/events/ (NY event ended 2026-01)
 from requests_bot.hell_games import HellGamesClient, fight_in_hell_games
 from requests_bot.survival_mines import SurvivalMinesClient, fight_in_survival_mines
 from requests_bot.arena import ArenaClient
@@ -34,7 +31,6 @@ from requests_bot.config import (
     get_skill_cooldowns, get_survival_mines_max_level, is_dungeons_enabled,
     is_hell_games_enabled, is_light_side,
     is_iron_craft_enabled, get_craft_items,
-    is_ny_event_dungeon_enabled,
     is_arena_enabled, get_arena_max_fights,
     is_resource_selling_enabled,
     is_daily_rewards_enabled
@@ -125,8 +121,6 @@ class VMMOBot:
         self.daily_rewards_client = DailyRewardsClient(self.client)
         self.backpack_client = BackpackClient(self.client)
         self.popups_client = PopupsClient(self.client)
-        self.event_client = EventDungeonClient(self.client)
-        self.equip_client = EquipmentClient(self.client)
         self.pet_client = PetClient(self.client)
 
         # Крафт клиент создаётся ОДИН РАЗ - хранит выбранный рецепт всю сессию
@@ -406,26 +400,6 @@ class VMMOBot:
             log_error(f"[CRAFT] Ошибка: {e}")
             return False, 0
 
-    def try_ny_event_dungeon_method(self):
-        """Пробует войти в NY ивент - Логово Демона Мороза"""
-        log_debug("Проверяю NY ивент 'Логово Демона Мороза'...")
-        try:
-            result, cd_seconds = try_ny_event_dungeon(self.client)
-
-            if result == "entered":
-                log_info("Вошли в Логово Демона Мороза!")
-                return True, 0
-            elif result == "on_cooldown":
-                log_debug(f"NY ивент на КД ({cd_seconds // 60}м)")
-                return False, cd_seconds
-            else:
-                log_debug(f"NY ивент недоступен: {result}")
-                return False, 0
-        except Exception as e:
-            log_error(f"Ошибка NY ивента: {e}")
-            self.stats["errors"] += 1
-            return False, 0
-
     def get_min_dungeon_cooldown(self):
         """Получает минимальный КД среди всех данженов"""
         # Если данжены отключены - всегда "на КД" для запуска шахты/hell games
@@ -474,81 +448,7 @@ class VMMOBot:
             log_watchdog(f"Сработал: {watchdog_result}")
             self.stats["watchdog_triggers"] += 1
 
-        # 1. Проверяем ВСЕ ивент-данжены - ЦИКЛ пока хоть один доступен
-        if is_ny_event_dungeon_enabled():
-            total_event_runs = 0
-
-            # Проходим по всем ивент-данженам в цикле
-            while True:
-                event_entered_any = False
-
-                for dungeon_key, dungeon_config in EVENT_DUNGEONS.items():
-                    dungeon_name = dungeon_config["name"]
-                    dungeon_id = dungeon_config["id"]
-
-                    # Сначала очищаем рюкзак и почту
-                    self.cleanup_backpack()
-                    self.check_and_collect_mail()
-
-                    # ОБЯЗАТЕЛЬНО проверяем крафт перед ивентом!
-                    self.check_craft()
-
-                    # Пробуем войти в ивент-данжен
-                    log_debug(f"Проверяю ивент: {dungeon_name}...")
-                    result, cd = try_event_dungeon_generic(self.client, dungeon_key)
-
-                    if result == "on_cooldown":
-                        log_debug(f"{dungeon_name} на КД ({cd // 60}м)")
-                        continue
-                    elif result == "error":
-                        log_debug(f"{dungeon_name}: ошибка входа")
-                        continue
-                    elif result != "entered":
-                        continue
-
-                    # Успешно вошли - бой
-                    event_entered_any = True
-                    total_event_runs += 1
-                    set_activity(f"⚔️ {dungeon_name}")
-                    log_dungeon_start(dungeon_name, dungeon_id)
-                    self.dungeon_runner.current_dungeon_id = dungeon_id
-                    self.dungeon_runner.combat_url = self.client.current_url
-                    fight_result, actions = self.dungeon_runner.fight_until_done()
-                    self.stats["total_actions"] += actions
-
-                    if fight_result == "completed":
-                        self.stats["dungeons_completed"] += 1
-                        log_dungeon_result(dungeon_name, fight_result, actions)
-                        # Парсим реальное КД с сервера и записываем
-                        set_event_cooldown(dungeon_key, self.client)
-                        # Проверяем крафт после ивента!
-                        self.check_craft()
-                    elif fight_result == "died":
-                        self.stats["deaths"] += 1
-                        log_dungeon_result(dungeon_name, fight_result, actions)
-                        self.dungeon_runner.resurrect()
-                        self.check_and_resurrect_pet()
-                        try:
-                            if self.client.repair_equipment():
-                                log_info("Снаряжение отремонтировано после смерти")
-                        except Exception as e:
-                            log_debug(f"Ошибка ремонта после смерти: {e}")
-                        # Проверяем крафт даже после смерти!
-                        self.check_craft()
-                    else:
-                        log_debug(f"{dungeon_name}: неизвестный результат '{fight_result}'")
-
-                # Если ни в один ивент не вошли - все на КД, выходим
-                if not event_entered_any:
-                    log_debug("Все ивент-данжены на КД или недоступны")
-                    break
-
-            if total_event_runs > 0:
-                log_info(f"Ивенты: завершено {total_event_runs} заходов")
-        else:
-            log_debug("Ивент-данжены отключены для этого профиля")
-
-        # 2. Проверяем рюкзак и почту
+        # 1. Проверяем рюкзак и почту
         self.cleanup_backpack()
         self.check_and_collect_mail()
 

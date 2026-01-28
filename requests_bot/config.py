@@ -312,15 +312,7 @@ def is_dungeons_enabled():
     return _profile_config.get("dungeons_enabled", True)
 
 
-def is_event_dungeon_enabled():
-    """Проверяет, включен ли ивент Сталкер для текущего профиля"""
-    return _profile_config.get("event_dungeon_enabled", False)
-
-
-def is_ny_event_dungeon_enabled():
-    """Проверяет, включен ли NY ивент (Логово Демона Мороза) для текущего профиля"""
-    return _profile_config.get("ny_event_dungeon_enabled", False)
-
+# ARCHIVED: is_event_dungeon_enabled() and is_ny_event_dungeon_enabled() moved to archive/events/ (2026-01)
 
 def is_arena_enabled():
     """Проверяет, включена ли арена для текущего профиля"""
