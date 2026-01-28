@@ -300,7 +300,7 @@ class DungeonRunner:
             return False
 
         # Проверяем URL на смерть
-        if "/dead" in url or "/death" in url:
+        if "/dead" in url or "/death" in url or "/graveyard" in url:
             return True
 
         # Проверяем модальное окно смерти (как в Playwright)
