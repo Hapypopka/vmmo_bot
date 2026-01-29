@@ -15,7 +15,7 @@ from requests_bot.config import (
 )
 
 # TTL для чёрного списка аукциона (24 часа)
-BLACKLIST_TTL = 24 * 60 * 60  # 86400 секунд
+BLACKLIST_TTL = 7 * 24 * 60 * 60  # 7 дней (604800 секунд)
 
 try:
     from requests_bot.logger import log_debug, log_info, log_warning, log_backpack
