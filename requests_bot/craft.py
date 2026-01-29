@@ -1436,8 +1436,8 @@ class CyclicCraftClient(IronCraftClient):
                 return "rawOre"
 
         elif item_id == "ironBar":
-            # Для слитка нужно железо (7 штук)
-            if inv["iron"] >= 7:
+            # Для слитка нужно железо (5 штук)
+            if inv["iron"] >= 5:
                 return "ironBar"
             elif inv["rawOre"] >= 2:
                 return "iron"
@@ -1549,7 +1549,7 @@ class CyclicCraftClient(IronCraftClient):
                 else:
                     return "rawOre"
             elif inv["ironBar"] < 3:
-                if inv["iron"] >= 7:
+                if inv["iron"] >= 5:
                     return "ironBar"
                 elif inv["rawOre"] >= 2:
                     return "iron"
@@ -1578,7 +1578,7 @@ class CyclicCraftClient(IronCraftClient):
                 else:
                     return "rawOre"
             elif inv["ironBar"] < 3:
-                if inv["iron"] >= 7:
+                if inv["iron"] >= 5:
                     return "ironBar"
                 elif inv["rawOre"] >= 2:
                     return "iron"
