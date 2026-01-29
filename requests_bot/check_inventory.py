@@ -46,18 +46,29 @@ def get_craft_inventory(profile: str) -> dict:
         return {}
 
 
-def get_craft_mode(profile: str) -> str:
-    """Получает режим крафта из конфига"""
+def get_profile_config(profile: str) -> dict:
+    """Получает конфиг профиля"""
     config_file = PROFILES_DIR / profile / "config.json"
     if not config_file.exists():
-        return "?"
+        return {}
 
     try:
         with open(config_file, "r", encoding="utf-8") as f:
-            config = json.load(f)
-        return config.get("craft_mode", "iron")
+            return json.load(f)
     except Exception:
-        return "?"
+        return {}
+
+
+def get_craft_mode(profile: str) -> str:
+    """Получает режим крафта из конфига"""
+    config = get_profile_config(profile)
+    return config.get("craft_mode", "iron") if config else "?"
+
+
+def get_username(profile: str) -> str:
+    """Получает имя персонажа из конфига"""
+    config = get_profile_config(profile)
+    return config.get("username", profile) if config else profile
 
 
 def print_inventory_table():
@@ -121,10 +132,7 @@ def print_inventory_compact():
     """Компактный вывод для телеграма/веб-панели с детализацией"""
     lines = []
     lines.append("📦 ИНВЕНТАРЬ КРАФТА")
-    lines.append("=" * 55)
     lines.append("")
-    lines.append("Чар      Режим   | Руда Жел Слит | МРуд Медь МСл Брон БрСл")
-    lines.append("-" * 55)
 
     # Суммы
     totals = {
@@ -140,15 +148,22 @@ def print_inventory_compact():
 
     for profile in profiles:
         inv = get_craft_inventory(profile)
-        mode = get_craft_mode(profile)
-
         if not inv:
             continue
+
+        username = get_username(profile)
+
+        # Собираем что есть
+        items = []
 
         # Железная цепочка
         ore = inv.get("rawOre", 0)
         iron = inv.get("iron", 0)
         iron_bar = inv.get("ironBar", 0)
+
+        if ore: items.append(f"{ore} руды")
+        if iron: items.append(f"{iron} железа")
+        if iron_bar: items.append(f"{iron_bar} жел.слитков")
 
         # Медная/бронзовая цепочка
         cu_ore = inv.get("copperOre", 0)
@@ -156,6 +171,12 @@ def print_inventory_compact():
         cu_bar = inv.get("copperBar", 0)
         bronze = inv.get("bronze", 0)
         br_bar = inv.get("bronzeBar", 0)
+
+        if cu_ore: items.append(f"{cu_ore} мед.руды")
+        if copper: items.append(f"{copper} меди")
+        if cu_bar: items.append(f"{cu_bar} мед.слитков")
+        if bronze: items.append(f"{bronze} бронзы")
+        if br_bar: items.append(f"{br_bar} бр.слитков")
 
         # Суммируем
         totals["rawOre"] += ore
@@ -168,13 +189,23 @@ def print_inventory_compact():
         totals["bronzeBar"] += br_bar
 
         # Показываем только если есть что-то
-        has_items = any([ore, iron, iron_bar, cu_ore, copper, cu_bar, bronze, br_bar])
-        if has_items:
-            lines.append(f"{profile:<8} {mode:<7} | {ore:>4} {iron:>3} {iron_bar:>4} | {cu_ore:>4} {copper:>4} {cu_bar:>3} {bronze:>4} {br_bar:>4}")
+        if items:
+            lines.append(f"{username} - {', '.join(items)}")
 
-    lines.append("-" * 55)
-    lines.append(f"{'ИТОГО':<8} {'':<7} | {totals['rawOre']:>4} {totals['iron']:>3} {totals['ironBar']:>4} | {totals['copperOre']:>4} {totals['copper']:>4} {totals['copperBar']:>3} {totals['bronze']:>4} {totals['bronzeBar']:>4}")
-    lines.append("=" * 55)
+    # Итоги
+    lines.append("")
+    lines.append("─" * 40)
+    total_items = []
+    if totals["rawOre"]: total_items.append(f"{totals['rawOre']} руды")
+    if totals["iron"]: total_items.append(f"{totals['iron']} железа")
+    if totals["ironBar"]: total_items.append(f"{totals['ironBar']} жел.слитков")
+    if totals["copperOre"]: total_items.append(f"{totals['copperOre']} мед.руды")
+    if totals["copper"]: total_items.append(f"{totals['copper']} меди")
+    if totals["copperBar"]: total_items.append(f"{totals['copperBar']} мед.слитков")
+    if totals["bronze"]: total_items.append(f"{totals['bronze']} бронзы")
+    if totals["bronzeBar"]: total_items.append(f"{totals['bronzeBar']} бр.слитков")
+
+    lines.append(f"ИТОГО: {', '.join(total_items)}")
 
     return "\n".join(lines)
 
