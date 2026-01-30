@@ -364,6 +364,11 @@ def is_iron_craft_enabled():
     return _profile_config.get("iron_craft_enabled", False)
 
 
+def is_sell_crafts_on_startup():
+    """Продавать все крафты при старте бота (по умолчанию True)"""
+    return _profile_config.get("sell_crafts_on_startup", True)
+
+
 def get_dungeon_tabs():
     """
     Возвращает список вкладок данжей для проверки.

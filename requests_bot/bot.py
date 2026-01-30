@@ -33,7 +33,7 @@ from requests_bot.config import (
     is_pet_resurrection_enabled, record_death, is_survival_mines_enabled, get_survival_mines_max_wave,
     get_skill_cooldowns, get_survival_mines_max_level, is_dungeons_enabled,
     is_hell_games_enabled, is_light_side,
-    is_iron_craft_enabled, get_craft_items,
+    is_iron_craft_enabled, get_craft_items, is_sell_crafts_on_startup,
     is_arena_enabled, get_arena_max_fights,
     is_resource_selling_enabled,
     is_daily_rewards_enabled,
@@ -159,6 +159,19 @@ class VMMOBot:
         # Инициализируем сессию ресурсов ПЕРЕД крафтом
         # (иначе check_craft уходит на другую страницу и parse_resources не работает)
         self._init_resources_session()
+
+        # Продаём ВСЕ крафты при старте (если включено)
+        # Это очищает старые материалы от предыдущих режимов крафта
+        if is_sell_crafts_on_startup() and is_iron_craft_enabled():
+            try:
+                log_info("[STARTUP] Продаю старые крафты перед началом...")
+                from requests_bot.craft import IronCraftClient
+                temp_craft = IronCraftClient(self.client)
+                sold = temp_craft.sell_all_mining(mode="all", force_min_stack=1)
+                if sold:
+                    log_info(f"[STARTUP] Продано {sold} лотов")
+            except Exception as e:
+                log_warning(f"[STARTUP] Ошибка продажи крафтов: {e}")
 
         # Теперь проверяем крафт
         log_info("[CRAFT] Проверяю крафт сразу после логина...")
