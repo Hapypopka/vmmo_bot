@@ -1134,15 +1134,29 @@ class CyclicCraftClient(IronCraftClient):
                     log_info(f"[CRAFT] Докрафтиваю остатки: {item_name} {leftover_count}/{leftover_batch}")
                     # Продолжаем с этим же рецептом (лок уже есть)
 
-        # 1. Определяем лучший крафт и его оптимальный batch_size
+        # 1. Определяем лучший крафт и его batch_size
         best_item_id = self._get_best_craft_item()
 
-        # Получаем оптимальный batch_size на основе времени крафта
-        try:
-            from requests_bot.craft_prices import get_optimal_batch_size
-            batch_size = get_optimal_batch_size(best_item_id)
-        except Exception:
-            batch_size = 5  # fallback
+        # Определяем batch_size:
+        # - Если автовыбор ВЫКЛЮЧЕН → берём из craft_items конфига
+        # - Если автовыбор ВКЛЮЧЕН → используем get_optimal_batch_size()
+        auto_select = get_setting("auto_select_craft", True)
+        batch_size = 5  # дефолт
+
+        if not auto_select:
+            # Ищем batch_size в craft_items конфига
+            items = get_craft_items()
+            for item in items:
+                if item.get("item") == best_item_id:
+                    batch_size = item.get("batch_size", 5)
+                    break
+        else:
+            # Автовыбор - используем оптимальный batch_size по времени крафта
+            try:
+                from requests_bot.craft_prices import get_optimal_batch_size
+                batch_size = get_optimal_batch_size(best_item_id)
+            except Exception:
+                batch_size = 5
 
         # 2. Проверка инвентаря выбранного предмета
         inventory = self.get_mining_inventory()
