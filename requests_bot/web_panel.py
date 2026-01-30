@@ -1577,13 +1577,16 @@ def api_sell_crafts_stream():
 
     def generate():
         # Запускаем скрипт в режиме стриминга
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"  # Отключаем буферизацию Python
         process = subprocess.Popen(
-            [sys.executable, "-m", "requests_bot.sell_crafts", "--stream"],
+            [sys.executable, "-u", "-m", "requests_bot.sell_crafts", "--stream"],
             cwd=SCRIPT_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1  # Line buffered
+            bufsize=1,  # Line buffered
+            env=env
         )
 
         try:

@@ -303,6 +303,29 @@
         </div>
     </div>
 </div>
+
+<!-- Модалка продажи крафтов -->
+<div id="sellCraftsModal" class="modal" style="display: none;">
+    <div class="modal-backdrop" onclick="closeSellModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>💰 Продажа крафтов</h3>
+            <button class="modal-close" onclick="closeSellModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="sellProgress" class="sell-progress">
+                <div class="progress-bar">
+                    <div id="sellProgressBar" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div id="sellProgressText" class="progress-text">Подготовка...</div>
+            </div>
+            <div id="sellResults" class="sell-results"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="sellCloseBtn" class="btn btn-secondary" onclick="closeSellModal()" disabled>Закрыть</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -435,6 +458,120 @@
     .tg-bot-section .card {
         padding: 1rem 1.25rem;
     }
+
+    /* Модалка продажи крафтов */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+    }
+
+    .modal-content {
+        position: relative;
+        background: var(--card-bg);
+        border-radius: 12px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 80vh;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .modal-close:hover {
+        color: var(--danger);
+    }
+
+    .modal-body {
+        padding: 1.25rem;
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+
+    .modal-footer {
+        padding: 1rem 1.25rem;
+        border-top: 1px solid var(--border);
+        text-align: right;
+    }
+
+    .progress-bar {
+        height: 8px;
+        background: var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 0.75rem;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #a855f7, #7c3aed);
+        transition: width 0.3s ease;
+    }
+
+    .progress-text {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+    }
+
+    .sell-results {
+        font-size: 0.85rem;
+    }
+
+    .sell-result-item {
+        padding: 0.4rem 0;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .sell-result-item:last-child {
+        border-bottom: none;
+    }
+
+    .sell-result-item.success { color: var(--success); }
+    .sell-result-item.skipped { color: var(--warning); }
+    .sell-result-item.error { color: var(--danger); }
+    .sell-result-item.empty { color: var(--text-muted); }
+    .sell-result-item.processing { color: var(--accent); }
 </style>
 
 <script>
@@ -490,19 +627,90 @@
         showToast(result.success ? 'Скипы сброшены!' : 'Ошибка', result.success ? 'success' : 'error');
     }
 
-    async function sellAllCrafts() {
-        if (!confirm('Продать все крафты?')) return;
-        const btn = event.target;
-        btn.disabled = true;
-        btn.textContent = 'Продаю...';
+    let sellEventSource = null;
 
-        try {
-            const result = await apiCall('/api/sell_crafts', 'POST');
-            showToast(result.success ? 'Крафты проданы!' : 'Ошибка', result.success ? 'success' : 'error');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Продать крафты';
+    function openSellModal() {
+        document.getElementById('sellCraftsModal').style.display = 'flex';
+        document.getElementById('sellResults').innerHTML = '';
+        document.getElementById('sellProgressBar').style.width = '0%';
+        document.getElementById('sellProgressText').textContent = 'Подготовка...';
+        document.getElementById('sellCloseBtn').disabled = true;
+        // Отключаем авторефреш пока модалка открыта
+        if (window.disableAutoRefresh) window.disableAutoRefresh();
+    }
+
+    function closeSellModal() {
+        document.getElementById('sellCraftsModal').style.display = 'none';
+        if (sellEventSource) {
+            sellEventSource.close();
+            sellEventSource = null;
         }
+        // Включаем авторефреш обратно
+        if (window.enableAutoRefresh) window.enableAutoRefresh();
+    }
+
+    function addSellResult(icon, name, text, cssClass) {
+        const results = document.getElementById('sellResults');
+        const item = document.createElement('div');
+        item.className = `sell-result-item ${cssClass}`;
+        item.innerHTML = `<span>${icon}</span><span>${name}:</span><span>${text}</span>`;
+        results.appendChild(item);
+        results.scrollTop = results.scrollHeight;
+    }
+
+    function sellAllCrafts() {
+        if (!confirm('Продать все крафты?')) return;
+
+        openSellModal();
+
+        // Подключаемся к SSE
+        sellEventSource = new EventSource('/api/sell_crafts/stream');
+
+        sellEventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'start') {
+                    document.getElementById('sellProgressText').textContent = `Обработка 0/${data.total} профилей...`;
+                }
+                else if (data.type === 'processing') {
+                    const pct = Math.round((data.current - 1) / data.total * 100);
+                    document.getElementById('sellProgressBar').style.width = pct + '%';
+                    document.getElementById('sellProgressText').textContent = `Обработка ${data.current}/${data.total}: ${data.name}...`;
+                }
+                else if (data.type === 'result') {
+                    const pct = Math.round(data.current / data.total * 100);
+                    document.getElementById('sellProgressBar').style.width = pct + '%';
+                    document.getElementById('sellProgressText').textContent = `Готово ${data.current}/${data.total}`;
+
+                    if (data.skipped) {
+                        addSellResult('⏭️', data.name, 'пропущен (бот работает)', 'skipped');
+                    } else if (data.error) {
+                        addSellResult('❌', data.name, data.error, 'error');
+                    } else if (data.sold > 0) {
+                        addSellResult('✅', data.name, `продано ${data.sold}`, 'success');
+                    } else {
+                        addSellResult('📭', data.name, 'ничего не найдено', 'empty');
+                    }
+                }
+                else if (data.done) {
+                    document.getElementById('sellProgressBar').style.width = '100%';
+                    document.getElementById('sellProgressText').textContent = 'Готово!';
+                    document.getElementById('sellCloseBtn').disabled = false;
+                    sellEventSource.close();
+                    sellEventSource = null;
+                }
+            } catch (e) {
+                console.error('SSE parse error:', e, event.data);
+            }
+        };
+
+        sellEventSource.onerror = function(e) {
+            document.getElementById('sellProgressText').textContent = 'Ошибка соединения';
+            document.getElementById('sellCloseBtn').disabled = false;
+            sellEventSource.close();
+            sellEventSource = null;
+        };
     }
 
     // TG бот

@@ -1691,10 +1691,15 @@
         document.head.appendChild(toastStyles);
 
         // ═══════════════════════════════════════════════════════════════════
-        // 🔄 AUTO-REFRESH
+        // 🔄 AUTO-REFRESH (отключается при активных модалках/SSE)
         // ═══════════════════════════════════════════════════════════════════
         {% if request.endpoint in ['index', 'stats_page'] %}
-        setTimeout(() => location.reload(), 30000);
+        let autoRefreshEnabled = true;
+        window.disableAutoRefresh = () => { autoRefreshEnabled = false; };
+        window.enableAutoRefresh = () => { autoRefreshEnabled = true; };
+        setTimeout(() => {
+            if (autoRefreshEnabled) location.reload();
+        }, 30000);
         {% endif %}
     </script>
 
