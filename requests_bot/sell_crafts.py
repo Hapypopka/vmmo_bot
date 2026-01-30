@@ -9,9 +9,25 @@ import sys
 import json
 import argparse
 import io
+import logging
+from datetime import datetime
 
 # Добавляем родительскую папку в путь
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Настройка логирования в файл
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOG_FILE = os.path.join(SCRIPT_DIR, "logs", "sell_crafts.log")
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 class SuppressOutput:
@@ -37,21 +53,36 @@ with SuppressOutput():
     from requests_bot.client import VMMOClient
     from requests_bot.config import set_profile, get_credentials
 
-# Пути
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Пути (SCRIPT_DIR уже определён выше для логов)
 PROFILES_DIR = os.path.join(SCRIPT_DIR, "profiles")
 
-# Профили и имена
-PROFILE_NAMES = {
-    "char1": "nza",
-    "char2": "Happypoq",
-    "char3": "Arilyn",
-    "char4": "Lovelion",
-    "char5": "Хеппипопка",
-    "char6": "Faizka",
-    "char7": "Подкачок",
-    "char8": "Один Чар",
-}
+
+def get_all_profiles() -> dict:
+    """Динамически определяет все профили из папки profiles/"""
+    profiles = {}
+    if not os.path.exists(PROFILES_DIR):
+        return profiles
+
+    for name in sorted(os.listdir(PROFILES_DIR)):
+        profile_dir = os.path.join(PROFILES_DIR, name)
+        if os.path.isdir(profile_dir) and name.startswith("char"):
+            # Пробуем получить имя из config.json
+            config_path = os.path.join(profile_dir, "config.json")
+            display_name = name
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                        display_name = config.get("username", name)
+                except Exception:
+                    pass
+            profiles[name] = display_name
+
+    return profiles
+
+
+# Профили определяются динамически
+PROFILE_NAMES = get_all_profiles()
 
 
 def is_bot_running(profile: str) -> bool:
@@ -78,9 +109,13 @@ def is_bot_running(profile: str) -> bool:
         return False
 
 
-def sell_crafts_for_profile(profile: str) -> dict:
+def sell_crafts_for_profile(profile: str, suppress_stdout: bool = False) -> dict:
     """
     Продаёт все крафты на аукцион для одного профиля.
+
+    Args:
+        profile: Имя профиля
+        suppress_stdout: Подавлять stdout (для SSE режима)
 
     Returns:
         dict: {"profile": str, "name": str, "sold": int, "errors": int, "error": str|None, "skipped": bool}
@@ -95,34 +130,55 @@ def sell_crafts_for_profile(profile: str) -> dict:
         "skipped": False
     }
 
+    logger.info(f"=== Начинаю обработку {profile} ({name}) ===")
+
     # Проверяем, не запущен ли бот
     if is_bot_running(profile):
         result["skipped"] = True
         result["error"] = "бот работает"
+        logger.info(f"{profile}: пропущен - бот работает")
         return result
 
     try:
-        # Подавляем весь вывод от клиента
-        with SuppressOutput():
+        # В stream-режиме подавляем весь stdout чтобы не мешать SSE
+        if suppress_stdout:
+            original_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+
+        try:
+            logger.info(f"{profile}: устанавливаю профиль...")
             set_profile(profile)
             username, password = get_credentials()
+            logger.info(f"{profile}: username={username}")
 
+            logger.info(f"{profile}: создаю клиент...")
             client = VMMOClient()
+
+            logger.info(f"{profile}: логинюсь...")
             if not client.login(username, password):
                 result["error"] = "Не удалось авторизоваться"
+                logger.error(f"{profile}: ошибка авторизации")
                 return result
+
+            logger.info(f"{profile}: авторизация успешна, создаю IronCraftClient...")
 
             # Импортируем IronCraftClient для sell_all_mining
             from requests_bot.craft import IronCraftClient
             craft = IronCraftClient(client)
 
-            # Продаём все крафты на аукцион
-            craft.sell_all_mining(mode="all")
+            logger.info(f"{profile}: запускаю sell_all_mining(mode='all', force_min_stack=1)...")
+            # Продаём все крафты на аукцион (force_min_stack=1 - продаём всё, игнорируя лимиты)
+            sold_count = craft.sell_all_mining(mode="all", force_min_stack=1)
+            result["sold"] = sold_count or 0
 
-            result["sold"] = craft.auction_client.items_listed if hasattr(craft, 'auction_client') else 0
+            logger.info(f"{profile}: завершено, продано: {sold_count}")
+        finally:
+            if suppress_stdout:
+                sys.stdout = original_stdout
 
     except Exception as e:
         result["error"] = str(e)
+        logger.exception(f"{profile}: ИСКЛЮЧЕНИЕ: {e}")
 
     return result
 
@@ -130,17 +186,59 @@ def sell_crafts_for_profile(profile: str) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Продажа крафтов на аукционе")
     parser.add_argument("--telegram", action="store_true", help="Формат вывода для Telegram")
-    parser.add_argument("--profile", type=str, help="Конкретный профиль (char1-char8)")
+    parser.add_argument("--stream", action="store_true", help="Стриминг прогресса (для SSE)")
+    parser.add_argument("--profile", type=str, help="Конкретный профиль")
     args = parser.parse_args()
+
+    logger.info("=" * 50)
+    logger.info(f"ЗАПУСК sell_crafts.py в {datetime.now()}")
+    logger.info(f"Найдено профилей: {len(PROFILE_NAMES)}")
+    logger.info(f"Профили: {list(PROFILE_NAMES.keys())}")
 
     # Определяем профили
     if args.profile:
         if args.profile not in PROFILE_NAMES:
+            logger.error(f"Профиль {args.profile} не найден!")
             print(f"❌ Профиль {args.profile} не найден")
             sys.exit(1)
         profiles = [args.profile]
     else:
         profiles = list(PROFILE_NAMES.keys())
+
+    logger.info(f"Будут обработаны: {profiles}")
+
+    # Режим стриминга - выводим JSON для каждого профиля отдельно
+    if args.stream:
+        total = len(profiles)
+        # Начальное событие
+        print(json.dumps({"type": "start", "total": total}, ensure_ascii=False), flush=True)
+
+        for i, profile in enumerate(profiles):
+            # Событие "начал обработку"
+            name = PROFILE_NAMES.get(profile, profile)
+            print(json.dumps({
+                "type": "processing",
+                "profile": profile,
+                "name": name,
+                "current": i + 1,
+                "total": total
+            }, ensure_ascii=False), flush=True)
+
+            result = sell_crafts_for_profile(profile, suppress_stdout=True)
+
+            # Событие "результат"
+            print(json.dumps({
+                "type": "result",
+                "profile": profile,
+                "name": name,
+                "sold": result.get("sold", 0),
+                "skipped": result.get("skipped", False),
+                "error": result.get("error"),
+                "current": i + 1,
+                "total": total
+            }, ensure_ascii=False), flush=True)
+
+        return
 
     results = []
     for profile in profiles:
