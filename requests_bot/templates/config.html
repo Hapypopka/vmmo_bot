@@ -102,6 +102,20 @@
             </label>
         </div>
 
+        <!-- Продавать крафты при старте -->
+        <div class="form-group flex flex-between flex-center mb-1" style="padding-bottom: 1rem; border-bottom: 1px solid #333;">
+            <div>
+                <label>Продавать при старте</label>
+                <div class="text-muted" style="font-size: 0.75rem;">Продаёт все крафты при запуске бота</div>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="sell_crafts_on_startup"
+                       {{ 'checked' if config.get('sell_crafts_on_startup', True) }}
+                       onchange="toggleSetting('{{ profile }}', 'sell_crafts_on_startup')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
         <!-- Список предметов для автокрафта -->
         <div id="craft-items-list" class="mb-1">
             {% set craft_items = config.get('craft_items', []) %}
