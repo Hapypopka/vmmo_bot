@@ -830,8 +830,16 @@ def get_craft_info(profile):
     if active_recipe_id:
         item_name = CRAFTABLE_ITEMS.get(active_recipe_id, active_recipe_id)
 
-        # Определяем batch_size (приоритет: из лока > из ручного списка > get_optimal_batch_size)
-        if batch_size and batch_size > 0:
+        # Проверяем режим автовыбора
+        auto_select = config.get("auto_select_craft", True)
+
+        # Определяем batch_size:
+        # - Если auto_select ВЫКЛ → используем batch_size из craft_items (ручной режим)
+        # - Если auto_select ВКЛ → используем из лока или get_optimal_batch_size
+        if not auto_select and manual_batch_size:
+            # Ручной режим - приоритет настройкам пользователя
+            final_batch = manual_batch_size
+        elif batch_size and batch_size > 0:
             final_batch = batch_size
         elif manual_batch_size:
             final_batch = manual_batch_size
