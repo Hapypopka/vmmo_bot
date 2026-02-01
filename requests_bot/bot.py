@@ -122,7 +122,7 @@ class VMMOBot:
     def init_clients(self):
         """Инициализирует все клиенты"""
         self.dungeon_runner = DungeonRunner(self.client)
-        self.mail_client = MailClient(self.client)
+        self.mail_client = MailClient(self.client, profile=get_profile_name())
         self.daily_rewards_client = DailyRewardsClient(self.client)
         self.backpack_client = BackpackClient(self.client)
         self.popups_client = PopupsClient(self.client)
@@ -413,6 +413,79 @@ class VMMOBot:
             log_error(f"[CRAFT] Ошибка: {e}")
             return False, 0
 
+    def check_valentine_dungeons(self):
+        """
+        Проверяет и проходит Valentine данжены если доступны.
+        Вызывается как в начале цикла, так и во время ожидания КД обычных данжей.
+
+        Returns:
+            int: Количество пройденных данженов
+        """
+        if not is_valentine_event_enabled():
+            return 0
+
+        completed = 0
+        try:
+            from requests_bot.valentine_event import try_enter_dungeon, set_cooldown_after_completion, get_dungeon_difficulty, record_death
+
+            for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
+                name = dungeon_config["name"]
+                difficulty = get_dungeon_difficulty(dungeon_id)
+
+                if difficulty == "skip":
+                    continue
+
+                # Очищаем рюкзак перед ивентом
+                self.cleanup_backpack()
+                self.check_and_collect_mail()
+                self.check_craft()
+
+                result, cd = try_enter_dungeon(self.client, dungeon_id)
+
+                if result == "on_cooldown":
+                    log_debug(f"[VALENTINE] {name} на КД ({cd // 60}м)")
+                    continue
+                elif result in ("error", "skipped"):
+                    continue
+                elif result == "entered":
+                    diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал"}.get(difficulty, difficulty)
+                    set_activity(f"💘 {name} ({diff_name})")
+                    log_info(f"[VALENTINE] Бой в {name} ({diff_name})...")
+                    self.dungeon_runner.current_dungeon_id = dungeon_id
+                    self.dungeon_runner.combat_url = self.client.current_url
+                    fight_result, actions = self.dungeon_runner.fight_until_done()
+                    self.stats["total_actions"] += actions
+
+                    if fight_result == "completed":
+                        self.stats["dungeons_completed"] += 1
+                        mark_progress("dungeon")
+                        log_info(f"[VALENTINE] {name} пройден! ({actions} действий)")
+                        set_cooldown_after_completion(self.client, dungeon_id)
+                        completed += 1
+                        self.check_craft()
+                    elif fight_result == "died":
+                        self.stats["deaths"] += 1
+                        # Понижаем сложность
+                        new_diff, should_skip = record_death(dungeon_id, name, difficulty)
+                        if should_skip:
+                            log_warning(f"[VALENTINE] Смерть в {name} → СКИП")
+                        else:
+                            new_diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал"}.get(new_diff, new_diff)
+                            log_warning(f"[VALENTINE] Смерть в {name} → {new_diff_name}")
+                        self.dungeon_runner.resurrect()
+                        self.check_and_resurrect_pet()
+                        try:
+                            if self.client.repair_equipment():
+                                log_info("Снаряжение отремонтировано после смерти")
+                        except Exception as e:
+                            log_debug(f"Ошибка ремонта: {e}")
+                        self.check_craft()
+        except Exception as e:
+            log_error(f"[VALENTINE] Ошибка: {e}")
+            self.stats["errors"] += 1
+
+        return completed
+
     def get_min_dungeon_cooldown(self):
         """Получает минимальный КД среди всех данженов"""
         # Если данжены отключены - всегда "на КД" для запуска шахты/hell games
@@ -472,55 +545,7 @@ class VMMOBot:
         self.check_craft()
 
         # 2.6. Ивент Дня Святого Валентина (если включен)
-        if is_valentine_event_enabled():
-            log_debug("Проверяю ивент Дня Святого Валентина...")
-            try:
-                from requests_bot.valentine_event import set_cooldown_after_completion
-
-                for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
-                    name = dungeon_config["name"]
-
-                    # Очищаем рюкзак перед ивентом
-                    self.cleanup_backpack()
-                    self.check_and_collect_mail()
-                    self.check_craft()
-
-                    from requests_bot.valentine_event import try_enter_dungeon
-                    result, cd = try_enter_dungeon(self.client, dungeon_id)
-
-                    if result == "on_cooldown":
-                        log_debug(f"[VALENTINE] {name} на КД ({cd // 60}м)")
-                        continue
-                    elif result == "error":
-                        continue
-                    elif result == "entered":
-                        set_activity(f"💘 {name}")
-                        log_info(f"[VALENTINE] Бой в {name}...")
-                        self.dungeon_runner.current_dungeon_id = dungeon_id
-                        self.dungeon_runner.combat_url = self.client.current_url
-                        fight_result, actions = self.dungeon_runner.fight_until_done()
-                        self.stats["total_actions"] += actions
-
-                        if fight_result == "completed":
-                            self.stats["dungeons_completed"] += 1
-                            mark_progress("dungeon")
-                            log_info(f"[VALENTINE] {name} пройден! ({actions} действий)")
-                            set_cooldown_after_completion(self.client, dungeon_id)
-                            self.check_craft()
-                        elif fight_result == "died":
-                            self.stats["deaths"] += 1
-                            log_warning(f"[VALENTINE] Смерть в {name}")
-                            self.dungeon_runner.resurrect()
-                            self.check_and_resurrect_pet()
-                            try:
-                                if self.client.repair_equipment():
-                                    log_info("Снаряжение отремонтировано после смерти")
-                            except Exception as e:
-                                log_debug(f"Ошибка ремонта: {e}")
-                            self.check_craft()
-            except Exception as e:
-                log_error(f"[VALENTINE] Ошибка: {e}")
-                self.stats["errors"] += 1
+        self.check_valentine_dungeons()
 
         # 3. Получаем список данженов (если включены)
         dungeons = []
@@ -536,7 +561,12 @@ class VMMOBot:
             log_debug("Данжены отключены для этого профиля")
 
         if not dungeons:
-            # Все на КД - выбираем чем заняться
+            # Все на КД - проверяем Valentine ивент (может КД уже спал)
+            valentine_done = self.check_valentine_dungeons()
+            if valentine_done > 0:
+                log_info(f"[VALENTINE] Пройдено {valentine_done} ивент-данженов во время КД")
+
+            # Выбираем чем заняться
             min_cd, _ = self.get_min_dungeon_cooldown()
 
             if min_cd > 0 and is_survival_mines_enabled():
@@ -558,8 +588,9 @@ class VMMOBot:
                 except Exception as e:
                     log_error(f"Ошибка Заброшенной Шахты: {e}")
                     self.stats["errors"] += 1
-                # После Survival Mines СРАЗУ проверяем крафт!
+                # После Survival Mines проверяем крафт и Valentine
                 self.check_craft()
+                self.check_valentine_dungeons()
 
             elif min_cd > 0 and is_iron_craft_enabled():
                 # Приоритет 2: Крафт (пока ждём КД)
@@ -597,8 +628,9 @@ class VMMOBot:
                             except Exception as e:
                                 log_error(f"Ошибка Hell Games: {e}")
                                 self.stats["errors"] += 1
-                            # После Hell Games СРАЗУ проверяем крафт!
+                            # После Hell Games проверяем крафт и Valentine
                             self.check_craft()
+                            self.check_valentine_dungeons()
                 else:
                     # Hell Games не включены - проверяем почту/рюкзак и ждём
                     wait_time = min(min_cd, 60)
@@ -625,8 +657,9 @@ class VMMOBot:
                 except Exception as e:
                     log_error(f"Ошибка Hell Games: {e}")
                     self.stats["errors"] += 1
-                # После Hell Games СРАЗУ проверяем крафт!
+                # После Hell Games проверяем крафт и Valentine
                 self.check_craft()
+                self.check_valentine_dungeons()
 
             elif min_cd > 0:
                 # Ничего не включено - просто ждём
@@ -740,9 +773,19 @@ class VMMOBot:
                 elif result in ("watchdog", "stuck"):
                     self.stats["watchdog_triggers"] += 1
                     log_dungeon_result(dungeon_name, result, actions)
-                    # Уведомление в Telegram о застревании
-                    username = get_profile_username()
-                    telegram_notify(f"⚠️ [{username}] Watchdog: застрял в {dungeon_name}")
+
+                    # Проверяем - может сервер на обновлении?
+                    if self.client.is_server_updating():
+                        log_info("Watchdog сработал во время обновления сервера - ждём...")
+                        if self.client.wait_for_server(max_wait_minutes=10):
+                            log_info("Сервер доступен, продолжаем...")
+                            reset_watchdog()
+                            continue  # Продолжаем цикл данженов
+                    else:
+                        # Уведомление в Telegram о застревании
+                        username = get_profile_username()
+                        telegram_notify(f"⚠️ [{username}] Watchdog: застрял в {dungeon_name}")
+
                     # Пробуем вернуться в данжены
                     self.client.get("/dungeons?52")
                     reset_watchdog()
@@ -750,8 +793,38 @@ class VMMOBot:
                 else:
                     log_warning(f"Неизвестный результат: {result}")
                     log_dungeon_result(dungeon_name, result, actions)
-                    # Пробуем вернуться в данжены
-                    self.client.get("/dungeons?52")
+
+                    # Проверяем - может персонаж умер но не задетектили?
+                    if self.client.is_on_graveyard():
+                        log_warning(f"После unknown обнаружен на кладбище - это была смерть!")
+                        self.stats["deaths"] += 1
+
+                        # Записываем смерть в файловую статистику
+                        if self.bot_stats:
+                            self.bot_stats.death_recorded(dungeon_id)
+
+                        # Записываем в deaths.json для системы сложности
+                        current_difficulty = get_dungeon_difficulty(dungeon_id)
+                        new_difficulty, should_skip = record_death(dungeon_id, dungeon_name, current_difficulty)
+                        if should_skip:
+                            log_warning(f"Данжен {dungeon_name} добавлен в скип (много смертей)")
+                        else:
+                            log_info(f"Сложность {dungeon_name}: {current_difficulty} -> {new_difficulty}")
+
+                        # Уведомление в Telegram
+                        username = get_profile_username()
+                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} (unknown->died)")
+
+                        # Воскрешаемся
+                        self.dungeon_runner.resurrect()
+                        try:
+                            if self.client.repair_equipment():
+                                log_info("Снаряжение отремонтировано после смерти")
+                        except Exception as e:
+                            log_debug(f"Ошибка ремонта после смерти: {e}")
+                    else:
+                        # Пробуем вернуться в данжены
+                        self.client.get("/dungeons?52")
 
             except Exception as e:
                 log_error(f"Ошибка в данжене {dungeon_name}: {e}")
