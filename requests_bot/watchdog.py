@@ -190,9 +190,10 @@ def check_auto_recovery() -> bool:
 def trigger_auto_restart():
     """
     Инициирует авторестарт бота.
-    Перезапускает текущий процесс через os.execv().
+    Запускает новый процесс через subprocess и завершает текущий.
     """
     import sys
+    import subprocess
 
     print("[AUTO-RECOVERY] Инициирую авторестарт бота...")
 
@@ -205,14 +206,58 @@ def trigger_auto_restart():
         from requests_bot.config import get_profile
         profile = get_profile()
         if profile:
-            lock_file = f"profiles/{profile}/.lock"
+            # Используем абсолютный путь
+            script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            lock_file = os.path.join(script_dir, "profiles", profile, ".lock")
             if os.path.exists(lock_file):
                 os.remove(lock_file)
                 print(f"[AUTO-RECOVERY] Удалён lock файл: {lock_file}")
     except Exception as e:
         print(f"[AUTO-RECOVERY] Ошибка удаления lock: {e}")
 
-    print(f"[AUTO-RECOVERY] Перезапуск: {python} {' '.join(args)}")
+    # Формируем команду для запуска
+    # Если запущено через -m, используем тот же формат
+    if args and args[0].endswith('.py'):
+        # Запуск через python script.py
+        cmd = [python] + args
+    else:
+        # Запуск через python -m module
+        cmd = [python, "-m", "requests_bot.bot"] + args[1:]
 
-    # Перезапускаем процесс
-    os.execv(python, [python] + args)
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    print(f"[AUTO-RECOVERY] Перезапуск: {' '.join(cmd)}")
+    print(f"[AUTO-RECOVERY] Working dir: {script_dir}")
+
+    try:
+        # На Linux используем nohup для надёжного фонового запуска
+        if os.name != 'nt':  # Не Windows
+            # Формируем shell-команду с nohup
+            shell_cmd = f"cd {script_dir} && nohup {' '.join(cmd)} > /dev/null 2>&1 &"
+            print(f"[AUTO-RECOVERY] Shell command: {shell_cmd}")
+            subprocess.Popen(
+                shell_cmd,
+                shell=True,
+                start_new_session=True
+            )
+        else:
+            # На Windows используем Popen напрямую
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                cwd=script_dir
+            )
+
+        print("[AUTO-RECOVERY] Новый процесс запущен, завершаю текущий...")
+        # Даём время новому процессу запуститься
+        time.sleep(2)
+        # Завершаем текущий процесс
+        os._exit(0)
+    except Exception as e:
+        print(f"[AUTO-RECOVERY] Ошибка запуска нового процесса: {e}")
+        # Пробуем старый метод как fallback
+        try:
+            os.execv(python, [python] + args)
+        except Exception as e2:
+            print(f"[AUTO-RECOVERY] Fallback execv тоже не сработал: {e2}")
