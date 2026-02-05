@@ -18,6 +18,7 @@ from .backpack import (
     add_to_auction_blacklist,
 )
 from .config import get_craft_items
+from .sales_tracker import record_listed
 
 BASE_URL = "https://vmmo.vten.ru"
 
@@ -44,6 +45,12 @@ DEFAULT_PRICES = {
     "Тор": 500,              # 5 золота
 }
 
+# Минимальные стаки для продажи (предметы, которые не крафтовые но продаём только пачками)
+# Ключ - начало названия предмета, значение - минимальный стак
+STACK_SELL_RULES = {
+    "Осколок": 10,
+}
+
 # Маппинг item_id из крафта → название предмета
 CRAFT_ITEM_NAMES = {
     "ironBar": "Железный Слиток",
@@ -65,7 +72,7 @@ CRAFT_ITEM_NAMES = {
 # ============================================
 
 PRICE_CACHE_FILE = os.path.join(os.path.dirname(__file__), "..", "profiles", "auction_price_cache.json")
-PRICE_CACHE_TTL = 8 * 60 * 60  # 8 часов в секундах
+PRICE_CACHE_TTL = 24 * 60 * 60  # 24 часа в секундах
 
 
 def load_price_cache() -> dict:
@@ -132,11 +139,16 @@ def set_cached_price(item_name: str, price_per_unit: int, profile: str = "unknow
 
 def get_batch_size_for_item(item_name):
     """
-    Получает batch_size для предмета из конфига крафта.
+    Получает batch_size для предмета из конфига крафта или правил стаков.
 
     Returns:
         int: batch_size или 1 если не найден (продавать сразу)
     """
+    # Проверяем правила стаков (Осколки и т.д.)
+    for prefix, min_stack in STACK_SELL_RULES.items():
+        if item_name.startswith(prefix):
+            return min_stack
+
     craft_items = get_craft_items()
 
     # Ищем item_id по названию
@@ -277,17 +289,17 @@ class AuctionClient:
         Returns:
             tuple: (gold, silver)
         """
-        # 1. Проверяем кэш (если другой бот недавно выставлял этот предмет)
-        if item_name:
-            cached_price = get_cached_price(item_name)
-            if cached_price is not None:
-                # Используем цену из кэша - не перебиваем своего бота
-                our_total = cached_price * my_count
-                gold = our_total // 100
-                silver = our_total % 100
-                return gold, silver
+        # DISABLED: Кэш отключён - всегда проверяем актуальную цену на рынке
+        # Причина: с кэшем ничего не продаётся, конкуренты перебивают
+        # if item_name:
+        #     cached_price = get_cached_price(item_name)
+        #     if cached_price is not None:
+        #         our_total = cached_price * my_count
+        #         gold = our_total // 100
+        #         silver = our_total % 100
+        #         return gold, silver
 
-        # 2. Смотрим конкурентов на рынке
+        # Смотрим конкурентов на рынке
         comp_gold, comp_silver, comp_count = self.get_competitor_min_price()
 
         if comp_count == 0 or (comp_gold == 0 and comp_silver == 0):
@@ -298,9 +310,7 @@ class AuctionClient:
                 gold = our_total // 100
                 silver = our_total % 100
                 print(f"[AUCTION] Нет конкурентов, дефолтная цена: {price_per_unit}с/шт")
-                # Записываем в кэш
-                if item_name:
-                    set_cached_price(item_name, price_per_unit, self.profile)
+                # Кэш отключён
                 return gold, silver
             else:
                 # Неизвестный предмет - не продаём
@@ -323,9 +333,7 @@ class AuctionClient:
         gold = our_total // 100
         silver = our_total % 100
 
-        # 3. Записываем в кэш для других ботов
-        if item_name:
-            set_cached_price(item_name, our_price_per_unit, self.profile)
+        # Кэш отключён - каждый бот сам проверяет рынок
 
         return gold, silver
 
@@ -504,6 +512,8 @@ class AuctionClient:
             if result == "success":
                 print(f"[AUCTION] Лот создан!")
                 stats["listed"] += 1
+                # Записываем в статистику продаж
+                record_listed(name, my_count, gold, silver, profile=self.profile)
                 time.sleep(0.5)
 
             elif result == "low_price":
