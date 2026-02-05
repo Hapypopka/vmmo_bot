@@ -169,6 +169,18 @@ def get_batch_size_for_item(item_name):
     return 1  # Не в очереди крафта - продаём сразу
 
 
+def is_blacklist_exempt(item_name):
+    """Проверяет, защищён ли предмет от попадания в чёрный список (крафт, осколки)"""
+    # Осколки и другие стаковые предметы
+    for prefix in STACK_SELL_RULES:
+        if item_name.startswith(prefix):
+            return True
+    # Крафтовые предметы
+    if item_name in CRAFT_ITEM_NAMES.values():
+        return True
+    return False
+
+
 class AuctionClient:
     """Клиент для работы с аукционом"""
 
@@ -436,11 +448,15 @@ class AuctionClient:
                 if name in items_to_disassemble:
                     continue
 
-                # Предметы из blacklist - разбираем
+                # Предметы из blacklist - разбираем, если не можем - выкидываем
                 if name in blacklist:
                     print(f"[AUCTION] '{name}' в чёрном списке - разбираем")
                     if self.backpack.disassemble_item(item):
                         stats["disassembled"] += 1
+                    elif "drop" in item["buttons"]:
+                        print(f"[AUCTION] '{name}' нельзя разобрать - выкидываем")
+                        if self.backpack.drop_item(item):
+                            stats["disassembled"] += 1
                     continue
 
                 # Нужна кнопка аукциона
@@ -496,6 +512,10 @@ class AuctionClient:
             gold, silver = self.calculate_price(my_count, item_name=name)
 
             if gold is None:
+                if is_blacklist_exempt(name):
+                    # Крафт/осколки - не блеклистим, пропускаем
+                    print(f"[AUCTION] Нет конкурентов для '{name}' - пропускаем (exempt)")
+                    continue
                 # Неизвестный предмет без конкурентов - разбираем и добавляем в blacklist
                 print(f"[AUCTION] Нет конкурентов для '{name}' - разбираем, добавляю в blacklist")
                 add_to_auction_blacklist(name)
@@ -517,9 +537,12 @@ class AuctionClient:
                 time.sleep(0.5)
 
             elif result == "low_price":
-                print(f"[AUCTION] Цена слишком низкая - '{name}' для разборки, добавляю в blacklist")
-                add_to_auction_blacklist(name)
-                items_to_disassemble.append(name)
+                if is_blacklist_exempt(name):
+                    print(f"[AUCTION] Цена слишком низкая для '{name}' - пропускаем (exempt)")
+                else:
+                    print(f"[AUCTION] Цена слишком низкая - '{name}' для разборки, добавляю в blacklist")
+                    add_to_auction_blacklist(name)
+                    items_to_disassemble.append(name)
 
             else:
                 print(f"[AUCTION] Ошибка при создании лота")

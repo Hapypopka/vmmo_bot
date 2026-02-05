@@ -14,8 +14,7 @@ from requests_bot.config import (
     BASE_URL, AUCTION_BLACKLIST_FILE, BACKPACK_THRESHOLD, get_protected_items
 )
 
-# TTL для чёрного списка аукциона (24 часа)
-BLACKLIST_TTL = 7 * 24 * 60 * 60  # 7 дней (604800 секунд)
+# Чёрный список аукциона - вечный (без TTL)
 
 try:
     from requests_bot.logger import log_debug, log_info, log_warning, log_backpack
@@ -40,7 +39,7 @@ def load_auction_blacklist():
     """
     Загружает чёрный список аукциона.
     Формат: {"item_name": timestamp, ...}
-    Возвращает список актуальных имён (не старше BLACKLIST_TTL).
+    Чёрный список вечный - предметы не удаляются автоматически.
     """
     try:
         with open(AUCTION_BLACKLIST_FILE, "r", encoding="utf-8") as f:
@@ -50,27 +49,12 @@ def load_auction_blacklist():
 
     # Миграция: если старый формат (список), конвертируем
     if isinstance(data, list):
-        # Старый формат - конвертируем в новый с текущим временем
         now = time.time()
         new_data = {item: now for item in data}
         save_auction_blacklist_raw(new_data)
         return list(new_data.keys())
 
-    # Новый формат - фильтруем по TTL
-    now = time.time()
-    valid_items = []
-    expired_count = 0
-
-    for item_name, added_time in data.items():
-        if now - added_time < BLACKLIST_TTL:
-            valid_items.append(item_name)
-        else:
-            expired_count += 1
-
-    if expired_count > 0:
-        print(f"[BLACKLIST] Очищено {expired_count} устаревших записей")
-
-    return valid_items
+    return list(data.keys())
 
 
 def save_auction_blacklist_raw(data):
