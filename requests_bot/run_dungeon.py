@@ -243,8 +243,14 @@ class DungeonRunner:
         }
 
         # Получаем список вкладок из конфига (по умолчанию tab2)
+        # Если задан only_dungeons — загружаем все вкладки, фильтрация по ID
         from requests_bot.config import get_dungeon_tabs
-        tabs_to_load = get_dungeon_tabs() if section_id is None else [section_id]
+        if section_id is not None:
+            tabs_to_load = [section_id]
+        elif config_module.ONLY_DUNGEONS:
+            tabs_to_load = ["tab2", "tab3", "tab4", "tab5", "tab6"]
+        else:
+            tabs_to_load = get_dungeon_tabs()
 
         all_dungeons = []
 
@@ -386,6 +392,38 @@ class DungeonRunner:
                     except Exception as e:
                         print(f"[ERR] Ошибка нажатия 'Продолжить': {e}")
                         return False
+
+        return False
+
+    def try_restore_health(self):
+        """
+        Пытается восстановить здоровье между этапами данжена.
+        Ищет кнопку с restorePanel-healLink в URL.
+
+        Returns:
+            bool: True если здоровье восстановлено
+        """
+        html = self.client.current_page
+        if not html:
+            return False
+
+        # Ищем ссылку на восстановление здоровья
+        heal_match = re.search(
+            r'href=["\']([^"\']*restorePanel-healLink[^"\']*)["\']',
+            html
+        )
+
+        if heal_match:
+            heal_url = heal_match.group(1).replace("&amp;", "&")
+            print("[*] Найдена кнопка 'Восстановить здоровье', нажимаю...")
+            try:
+                self.client.get(heal_url)
+                time.sleep(0.5)
+                print("[OK] Здоровье восстановлено!")
+                return True
+            except Exception as e:
+                print(f"[ERR] Ошибка восстановления здоровья: {e}")
+                return False
 
         return False
 
@@ -884,6 +922,13 @@ class DungeonRunner:
 
             # Проверяем watchdog
             if is_watchdog_triggered():
+                # Сначала проверяем - может сервер на обновлении?
+                if self.client.is_server_updating():
+                    print("[WATCHDOG] Сервер на обновлении - ждём...")
+                    if self.client.wait_for_server(max_wait_minutes=10):
+                        print("[WATCHDOG] Сервер доступен, продолжаем бой...")
+                        reset_watchdog()
+                        continue  # Продолжаем бой
                 print("[WATCHDOG] Застряли в бою! Выходим...")
                 watchdog_result = check_watchdog(self.client)
                 return "watchdog", actions
@@ -1042,7 +1087,10 @@ class DungeonRunner:
 
         # Проверяем URL - на странице между этапами (step)
         if "/dungeon/step/" in url:
-            # Это интерстеп страница - ищем кнопку "Продолжить бой"
+            # Это интерстеп страница - сначала восстанавливаем ХП, потом продолжаем
+            self.try_restore_health()
+
+            # Ищем кнопку "Продолжить бой"
             if soup:
                 for btn in soup.select("a.go-btn"):
                     btn_text = btn.get_text(strip=True)
@@ -1067,6 +1115,9 @@ class DungeonRunner:
             time.sleep(1)
             self.client.get(self.combat_url)
             return "continue"
+
+        # Пробуем восстановить здоровье перед продолжением боя
+        self.try_restore_health()
 
         # Ищем кнопку "Продолжить бой" по тексту (главный способ)
         if soup:
