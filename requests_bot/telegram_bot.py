@@ -1058,14 +1058,34 @@ def save_user_settings(profile: str, settings: dict) -> bool:
 
 def toggle_setting(profile: str, setting: str) -> tuple:
     """Переключает настройку (вкл/выкл)"""
+    # Дефолты должны совпадать с шаблоном config.html
+    SETTING_DEFAULTS = {
+        "dungeons_enabled": True,
+        "auto_select_craft": True,
+        "sell_crafts_on_startup": True,
+        "arena_enabled": False,
+        "hell_games_enabled": False,
+        "valentine_event_enabled": False,
+        "survival_mines_enabled": False,
+        "iron_craft_enabled": False,
+        "pet_resurrection_enabled": False,
+        "is_light_side": False,
+    }
     settings = get_user_settings(profile)
     if not settings:
         return False, "Профиль не найден"
 
-    current = settings.get(setting, False)
+    current = settings.get(setting, SETTING_DEFAULTS.get(setting, False))
     settings[setting] = not current
 
     if save_user_settings(profile, settings):
+        # При отключении автовыбора крафта — сбрасываем лок
+        if setting == "auto_select_craft" and not settings[setting]:
+            try:
+                from requests_bot.craft_prices import release_craft_lock
+                release_craft_lock(profile)
+            except Exception:
+                pass
         return True, settings[setting]
     return False, "Ошибка сохранения"
 

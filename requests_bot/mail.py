@@ -8,6 +8,10 @@ import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+from requests_bot.sales_tracker import record_sale, record_expired
+from requests_bot.backpack import add_to_auction_blacklist
+from requests_bot.auction import is_blacklist_exempt
+
 BASE_URL = "https://vmmo.vten.ru"
 
 # Игнорируемые отправители (сообщения остаются непрочитанными)
@@ -19,12 +23,14 @@ IGNORED_SENDERS = [
 class MailClient:
     """Клиент для работы с почтой"""
 
-    def __init__(self, client):
+    def __init__(self, client, profile: str = "unknown"):
         """
         Args:
             client: VMMOClient instance
+            profile: Имя профиля для статистики
         """
         self.client = client
+        self.profile = profile
         self.collected_gold = 0
         self.collected_silver = 0
         self.messages_processed = 0
@@ -222,6 +228,25 @@ class MailClient:
             return match.group(1)
         return None
 
+    def extract_sold_item_info(self, msg_text):
+        """
+        Извлекает информацию о проданном лоте из текста сообщения.
+
+        Форматы:
+        - "Аукцион Твой лот [Железо x10] продан за 4з"
+        - "Аукцион Твой лот [Медь x5] продан"
+
+        Returns:
+            tuple: (item_name, count) или (None, None)
+        """
+        # Паттерн: [Название xКоличество] или [Название]
+        match = re.search(r'\[([^\]]+?)(?:\s*[xх](\d+))?\]', msg_text)
+        if match:
+            item_name = match.group(1).strip()
+            count = int(match.group(2)) if match.group(2) else 1
+            return item_name, count
+        return None, None
+
     def process_mailbox(self, on_backpack_full=None):
         """
         Обрабатывает все письма в почте.
@@ -256,11 +281,32 @@ class MailClient:
             print(f"[MAIL] Открываю: {msg['text'][:50]}...")
 
             # Проверяем истекший лот
-            if "Срок твоего лота истёк" in msg["text"]:
+            is_expired = "Срок твоего лота истёк" in msg["text"]
+            # Проверка продажи: "продан" + "аукцион" (case-insensitive)
+            msg_lower = msg["text"].lower()
+            is_sold = "продан" in msg_lower and "аукцион" in msg_lower
+
+            # DEBUG: логируем ВСЕ письма с деньгами или аукционные
+            if "аукцион" in msg_lower or "продан" in msg_lower or "истёк" in msg_lower:
+                print(f"[MAIL DEBUG] msg_text: {msg['text']}")
+                print(f"[MAIL DEBUG] is_sold={is_sold}, is_expired={is_expired}")
+
+            if is_expired:
                 item_name = self.extract_expired_item_name(msg["text"])
                 if item_name:
                     stats["expired_items"].append(item_name)
                     print(f"[MAIL] Истекший лот: {item_name}")
+                    # Записываем в статистику
+                    record_expired(item_name, count=1, profile=self.profile)
+                    # Добавляем в blacklist (кроме крафта, осколков, камней, рун)
+                    if not is_blacklist_exempt(item_name):
+                        add_to_auction_blacklist(item_name)
+                        print(f"[MAIL] '{item_name}' добавлен в blacklist (не продался)")
+
+            # Парсим информацию о проданном лоте ДО открытия письма
+            sold_item_name, sold_count = None, None
+            if is_sold:
+                sold_item_name, sold_count = self.extract_sold_item_info(msg["text"])
 
             # Открываем письмо
             self.client.get(msg["url"])
@@ -271,6 +317,10 @@ class MailClient:
                 stats["gold"] += gold
                 stats["silver"] += silver
                 print(f"[MAIL] Деньги: {gold}g {silver}s")
+
+                # Если это продажа - записываем в статистику
+                if is_sold and sold_item_name:
+                    record_sale(sold_item_name, sold_count or 1, gold, silver, profile=self.profile)
 
             # Забираем предметы
             result = self.collect_message_items()

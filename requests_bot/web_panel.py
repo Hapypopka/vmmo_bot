@@ -1294,10 +1294,32 @@ def api_save_config(profile):
 @login_required
 def api_toggle_setting(profile, setting):
     """API: Переключить булевую настройку"""
+    # Дефолты должны совпадать с шаблоном config.html
+    SETTING_DEFAULTS = {
+        "dungeons_enabled": True,
+        "auto_select_craft": True,
+        "sell_crafts_on_startup": True,
+        "arena_enabled": False,
+        "hell_games_enabled": False,
+        "valentine_event_enabled": False,
+        "survival_mines_enabled": False,
+        "iron_craft_enabled": False,
+        "pet_resurrection_enabled": False,
+        "is_light_side": False,
+    }
     config = get_config(profile)
-    current = config.get(setting, False)
+    current = config.get(setting, SETTING_DEFAULTS.get(setting, False))
     config[setting] = not current
     save_config(profile, config)
+
+    # При отключении автовыбора крафта — сбрасываем лок
+    if setting == "auto_select_craft" and not config[setting]:
+        try:
+            from requests_bot.craft_prices import release_craft_lock
+            release_craft_lock(profile)
+        except Exception:
+            pass
+
     return jsonify({"success": True, "value": config[setting]})
 
 
@@ -1375,6 +1397,18 @@ def api_reset_deaths(profile):
     """API: Сбросить смерти"""
     reset_deaths(profile)
     return jsonify({"success": True})
+
+
+@app.route("/api/deaths/<profile>/delete/<dungeon_id>", methods=["POST"])
+@login_required
+def api_delete_dungeon_deaths(profile, dungeon_id):
+    """API: Удалить смерти для конкретного данжена"""
+    deaths = get_deaths(profile)
+    if dungeon_id in deaths:
+        del deaths[dungeon_id]
+        save_deaths(profile, deaths)
+        return jsonify({"success": True, "deleted": dungeon_id})
+    return jsonify({"success": False, "error": "Dungeon not found"})
 
 
 @app.route("/api/deaths/<profile>/reset_skips", methods=["POST"])
