@@ -414,10 +414,10 @@ class AuctionClient:
 
         return "success"
 
-    def sell_all(self):
+    def sell_all(self, max_pages=3):
         """
         Выставляет все подходящие предметы на аукцион.
-        Логика как в Playwright версии.
+        Проходит по нескольким страницам рюкзака.
 
         Returns:
             dict: Статистика {listed, disassembled, errors}
@@ -430,12 +430,23 @@ class AuctionClient:
 
         items_to_disassemble = []  # Названия предметов для разборки
         blacklist = load_auction_blacklist()
+        current_page = 1
 
         for iteration in range(100):  # Защита от бесконечного цикла
-            # Открываем рюкзак
+            # Открываем рюкзак (всегда на стр.1)
             if not self.backpack.open_backpack():
                 print("[AUCTION] Не удалось открыть рюкзак")
                 break
+
+            # Переходим на нужную страницу
+            if current_page > 1:
+                reached = True
+                for p in range(1, current_page):
+                    if not self.backpack.go_to_next_page(p):
+                        reached = False
+                        break
+                if not reached:
+                    break
 
             items = self.backpack.get_items()
 
@@ -478,7 +489,11 @@ class AuctionClient:
                 break
 
             if not target:
-                # Больше нет предметов для аукциона
+                # На этой странице ничего нет - пробуем следующую
+                if current_page < max_pages:
+                    current_page += 1
+                    print(f"[AUCTION] Страница {current_page - 1} пуста, переход на стр.{current_page}")
+                    continue
                 break
 
             name = target["name"]
@@ -490,6 +505,7 @@ class AuctionClient:
                 print(f"[AUCTION] '{name}' сложность {difficulty} (не brutal) - разбираем")
                 if self.backpack.disassemble_item(target):
                     stats["disassembled"] += 1
+                current_page = 1  # предметы сдвинулись
                 continue
 
             # Зелёные предметы с кнопкой разборки - разбираем
@@ -498,6 +514,7 @@ class AuctionClient:
                 print(f"[AUCTION] '{name}' зелёный с разборкой - разбираем")
                 if self.backpack.disassemble_item(target):
                     stats["disassembled"] += 1
+                current_page = 1  # предметы сдвинулись
                 continue
 
             # Переходим на страницу аукциона
@@ -532,6 +549,9 @@ class AuctionClient:
 
             # Создаём лот
             result = self.try_create_lot(gold, silver)
+
+            # После аукциона всегда сбрасываем на стр.1 (предметы сдвигаются)
+            current_page = 1
 
             if result == "success":
                 print(f"[AUCTION] Лот создан!")
