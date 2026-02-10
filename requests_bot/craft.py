@@ -1253,27 +1253,25 @@ class CyclicCraftClient(IronCraftClient):
         Returns:
             str: item_id для крафта
         """
-        from requests_bot.config import get_craft_items, get_craft_items_from_disk, get_setting
+        from requests_bot.config import get_craft_items, get_craft_items_from_disk, get_setting_from_disk
 
-        # Вычисляем хэш текущего craft_items для обнаружения изменений
+        # Вычисляем хэш текущего craft_items + auto_select для обнаружения изменений
         # Читаем С ДИСКА чтобы обнаружить изменения через веб-панель
         items_from_disk = get_craft_items_from_disk()
-        current_hash = str(items_from_disk)  # Простой хэш через строковое представление
+        auto_select = get_setting_from_disk("auto_select_craft", True)
+        current_hash = str((items_from_disk, auto_select))
         items = items_from_disk if items_from_disk else get_craft_items()
 
-        # Если craft_items изменился - сбрасываем кэш рецепта
+        # Если craft_items или auto_select изменился - сбрасываем кэш рецепта
         if self._craft_items_hash and current_hash != self._craft_items_hash:
             old_recipe = self._selected_recipe
             self._selected_recipe = None
             item_name = ITEM_NAMES.get(old_recipe, old_recipe) if old_recipe else "none"
-            log_info(f"[CRAFT] Обнаружено изменение craft_items! Сбрасываем рецепт ({item_name})")
+            log_info(f"[CRAFT] Обнаружено изменение настроек крафта! Сбрасываем рецепт ({item_name})")
 
         # Если рецепт уже выбран - возвращаем его без пересчётов
         if self._selected_recipe:
             return self._selected_recipe
-
-        # Проверяем включён ли автовыбор
-        auto_select = get_setting("auto_select_craft", True)
 
         if not auto_select:
             # Автовыбор отключён - используем первый из списка

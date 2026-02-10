@@ -458,6 +458,24 @@ def get_craft_items_from_disk():
         return []
 
 
+def get_setting_from_disk(key, default=None):
+    """
+    Читает настройку напрямую с диска (не из памяти).
+    Нужно для подхвата изменений через веб-панель без рестарта.
+    """
+    global _current_profile
+    if not _current_profile:
+        return default
+
+    config_file = os.path.join(PROFILES_DIR, _current_profile, "config.json")
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            return config.get(key, default)
+    except Exception:
+        return default
+
+
 def add_craft_item(item_id, batch_size):
     """
     Добавляет предмет в список автокрафта.
@@ -591,7 +609,10 @@ def migrate_craft_queue_to_items():
 
 
 def save_profile_config():
-    """Сохраняет конфиг текущего профиля в файл"""
+    """Сохраняет конфиг текущего профиля в файл.
+    Перед записью подтягивает с диска настройки, которые могли быть
+    изменены извне (веб-панель, Telegram), чтобы не затереть их.
+    """
     global _profile_config, _current_profile
 
     if not _current_profile:
@@ -599,6 +620,20 @@ def save_profile_config():
 
     config_file = os.path.join(PROFILES_DIR, _current_profile, "config.json")
     try:
+        # Читаем актуальный конфиг с диска и мержим внешние изменения
+        if os.path.exists(config_file):
+            with open(config_file, "r", encoding="utf-8") as f:
+                disk_config = json.load(f)
+            # Подтягиваем все toggle-настройки с диска (они меняются через веб-панель)
+            for key in disk_config:
+                if key not in _profile_config or (isinstance(disk_config[key], bool) and key != "craft_finish_time"):
+                    _profile_config[key] = disk_config[key]
+            # Всегда берём craft_items и auto_select_craft с диска
+            if "craft_items" in disk_config:
+                _profile_config["craft_items"] = disk_config["craft_items"]
+            if "auto_select_craft" in disk_config:
+                _profile_config["auto_select_craft"] = disk_config["auto_select_craft"]
+
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(_profile_config, f, ensure_ascii=False, indent=2)
         return True
