@@ -664,6 +664,7 @@ class ArenaClient:
         log_info(f"[ARENA] Начинаю сессию арены, макс {max_fights} боёв")
 
         cd_retries = 0  # Счётчик ретраев при КД
+        consecutive_losses = 0  # Счётчик поражений подряд
 
         while stats["fights"] < max_fights:
             # Проверяем сколько боёв осталось
@@ -717,11 +718,20 @@ class ArenaClient:
             stats["rating_change"] += fight_result["rating_change"]
             if fight_result["won"]:
                 stats["wins"] += 1
+                consecutive_losses = 0
+            else:
+                consecutive_losses += 1
 
             log_info(f"[ARENA] Бой #{stats['fights']}: "
                     f"{'Победа' if fight_result['won'] else 'Поражение'}, "
                     f"+{fight_result['points']} очков, "
                     f"рейтинг {fight_result['rating_change']:+.1f}")
+
+            # Защита: 2 поражения подряд — стоп (особенно важно для gold арены)
+            if consecutive_losses >= 2:
+                log_warning(f"[ARENA] 2 поражения подряд, останавливаюсь!")
+                stats["stop_reason"] = "2 поражения подряд"
+                break
 
             # Проверяем кнопку "Ещё раз"
             again_url = self.get_again_button(result_html)

@@ -257,8 +257,13 @@ class VMMOBot:
 
             # Отправляем в Telegram
             username = get_profile_username()
-            telegram_notify(f"⚔️ [{username}] Арена: {stats['fights']} боёв, "
-                          f"{stats['wins']} побед, {stats['points']} очков")
+            stop_reason = stats.get("stop_reason", "")
+            if stop_reason:
+                telegram_notify(f"🛑 [{username}] Арена остановлена: {stop_reason}\n"
+                              f"{stats['fights']} боёв, {stats['wins']} побед")
+            else:
+                telegram_notify(f"⚔️ [{username}] Арена: {stats['fights']} боёв, "
+                              f"{stats['wins']} побед, {stats['points']} очков")
 
             # После арены проверяем - может умерли и надо воскреснуть
             if stats['fights'] > stats['wins']:
