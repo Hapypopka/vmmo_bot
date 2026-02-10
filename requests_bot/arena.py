@@ -49,14 +49,18 @@ CD_MAX_RETRIES = 5          # Макс попыток дождаться КД
 class ArenaClient:
     """Клиент для PvP арены."""
 
-    def __init__(self, client):
+    def __init__(self, client, gold=False):
         """
         Args:
             client: VMMOClient с активной сессией
+            gold: True для арены за золото (kind=1, bet=1)
         """
         self.client = client
         self.session = client.session
         self.base_url = "https://vmmo.vten.ru"
+        self.gold = gold
+        self.kind = 1 if gold else 0
+        self.select_url = f"{self.base_url}/pvp/select?kind={self.kind}"
 
         # Для сбора лута через refresher
         self.refresher_url = None
@@ -144,7 +148,7 @@ class ArenaClient:
             int: Количество боёв (0 если не удалось распарсить)
         """
         if html is None:
-            resp = self.session.get(f"{self.base_url}/pvp/select")
+            resp = self.session.get(self.select_url)
             if resp.status_code != 200:
                 log_error(f"[ARENA] Не удалось загрузить /pvp/select: {resp.status_code}")
                 return 0
@@ -330,7 +334,7 @@ class ArenaClient:
             - "Мало боёв: X" - лимит достигнут
         """
         log_info(f"[ARENA] Загружаю страницу арены...")
-        resp = self.session.get(f"{self.base_url}/pvp/select")
+        resp = self.session.get(self.select_url)
         if resp.status_code != 200:
             return False, f"Ошибка загрузки: {resp.status_code}"
 
@@ -340,7 +344,7 @@ class ArenaClient:
         was_in_party, html = self.check_and_leave_party(html)
         if was_in_party:
             # После выхода из банды перезагружаем страницу
-            resp = self.session.get(f"{self.base_url}/pvp/select")
+            resp = self.session.get(self.select_url)
             if resp.status_code == 200:
                 html = resp.text
 
@@ -461,7 +465,7 @@ class ArenaClient:
         time.sleep(READY_WAIT)
 
         # Проверяем начался ли бой
-        resp = self.session.get(f"{self.base_url}/pvp/select")
+        resp = self.session.get(self.select_url)
         html = resp.text
 
         if self.is_in_combat(html):

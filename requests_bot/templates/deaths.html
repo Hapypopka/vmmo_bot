@@ -9,7 +9,7 @@
         <button class="btn btn-warning" onclick="resetSkips('{{ profile }}')">Сбросить скипы</button>
         <button class="btn btn-danger" onclick="resetDeaths('{{ profile }}')">Сбросить всё</button>
         <a href="/config/{{ profile }}" class="btn btn-primary">Настройки</a>
-        <a href="/" class="btn" style="background: #333;">Назад</a>
+        <a href="/" class="btn btn-dark">Назад</a>
     </div>
 </div>
 
@@ -25,6 +25,7 @@
                     <th>Данжен</th>
                     <th class="text-right">Смертей</th>
                     <th>Статус</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -40,6 +41,9 @@
                         {% else %}
                         <span class="badge badge-success">OK</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteDungeon('{{ profile }}', '{{ dng_id }}')" title="Удалить">✕</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -127,6 +131,12 @@
     async function resetDeaths(profile) {
         if (!confirm('Сбросить ВСЮ статистику смертей?')) return;
         await apiCall(`/api/deaths/${profile}/reset`, 'POST');
+        location.reload();
+    }
+
+    async function deleteDungeon(profile, dungeonId) {
+        if (!confirm('Удалить статистику смертей для этого данжена?')) return;
+        await apiCall(`/api/deaths/${profile}/delete/${dungeonId}`, 'POST');
         location.reload();
     }
 

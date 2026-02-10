@@ -16,7 +16,7 @@
       "env": {
         "VMMO_SSH_HOST": "45.131.187.128",
         "VMMO_SSH_USER": "root",
-        "VMMO_SSH_KEY": "${HOME}/.ssh/id_ed25519_vmmo"
+        "VMMO_SSH_KEY": "C:/Users/Faiz/.ssh/id_ed25519_vmmo"
       }
     }
   }

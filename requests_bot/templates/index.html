@@ -40,19 +40,19 @@
             {% endif %}
         </span>
         {% if bot.craft.chain %}
-        <div class="craft-chain" id="craftChain-{{ bot.profile }}" style="display: none; margin-top: 0.5rem; padding-left: 0.75rem; font-size: 0.85rem; border-left: 2px solid #444;">
+        <div class="craft-chain" id="craftChain-{{ bot.profile }}" style="display: none; margin-top: 0.5rem; padding-left: 0.75rem; font-size: 0.85rem; border-left: 2px solid var(--border);">
             {% for item in bot.craft.chain %}
             <div style="margin-top: 0.25rem;">
                 <span class="text-muted">•</span> {{ item.name }}:
                 <span class="{{ 'text-success' if item.have >= item.amount else 'text-danger' }}">{{ item.have }}</span>/<span class="text-gold">{{ item.amount }}</span>
                 {% if item.children %}
-                <div style="padding-left: 0.75rem; border-left: 1px solid #555;">
+                <div style="padding-left: 0.75rem; border-left: 1px solid var(--border);">
                     {% for child in item.children %}
                     <div style="margin-top: 0.15rem;">
                         <span class="text-muted">•</span> {{ child.name }}:
                         <span class="{{ 'text-success' if child.have >= child.amount else 'text-danger' }}">{{ child.have }}</span>/<span class="text-gold">{{ child.amount }}</span>
                         {% if child.children %}
-                        <div style="padding-left: 0.75rem; border-left: 1px solid #666;">
+                        <div style="padding-left: 0.75rem; border-left: 1px solid var(--border);">
                             {% for grandchild in child.children %}
                             <div style="margin-top: 0.15rem;">
                                 <span class="text-muted">•</span> {{ grandchild.name }}:
@@ -74,7 +74,7 @@
 
     <div class="bot-resources">
         <div class="resource-box">
-            <img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="res-icon">
+            <img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="res-icon" width="18" height="18" alt="">
             <span class="text-gold">{{ bot.resources.get('золото', 0) }}</span>
             {% if bot.earned.get('золото', 0) != 0 %}
             <span class="resource-change {{ 'positive' if bot.earned.get('золото', 0) > 0 else 'negative' }}">
@@ -83,15 +83,15 @@
             {% endif %}
         </div>
         <div class="resource-box">
-            <img src="{{ url_for('static', filename='icons/money_silver.png') }}" class="res-icon">
+            <img src="{{ url_for('static', filename='icons/money_silver.png') }}" class="res-icon" width="18" height="18" alt="">
             <span>{{ bot.resources.get('серебро', 0) }}</span>
         </div>
         <div class="resource-box">
-            <img src="{{ url_for('static', filename='icons/skull.png') }}" class="res-icon">
+            <img src="{{ url_for('static', filename='icons/skull.png') }}" class="res-icon" width="18" height="18" alt="">
             <span>{{ bot.resources.get('черепа', 0) }}</span>
         </div>
         <div class="resource-box">
-            <img src="{{ url_for('static', filename='icons/mineral.png') }}" class="res-icon">
+            <img src="{{ url_for('static', filename='icons/mineral.png') }}" class="res-icon" width="18" height="18" alt="">
             <span>{{ bot.resources.get('минералы', 0) }}</span>
             {% if bot.earned.get('минералы', 0) != 0 %}
             <span class="resource-change {{ 'positive' if bot.earned.get('минералы', 0) > 0 else 'negative' }}">
@@ -100,7 +100,7 @@
             {% endif %}
         </div>
         <div class="resource-box">
-            <img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="res-icon">
+            <img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="res-icon" width="18" height="18" alt="">
             <span>{{ bot.resources.get('сапфиры', 0) }}</span>
             {% if bot.earned.get('сапфиры', 0) != 0 %}
             <span class="resource-change {{ 'positive' if bot.earned.get('сапфиры', 0) > 0 else 'negative' }}">
@@ -109,7 +109,7 @@
             {% endif %}
         </div>
         <div class="resource-box">
-            <img src="{{ url_for('static', filename='icons/ruby.png') }}" class="res-icon">
+            <img src="{{ url_for('static', filename='icons/ruby.png') }}" class="res-icon" width="18" height="18" alt="">
             <span>{{ bot.resources.get('рубины', 0) }}</span>
             {% if bot.earned.get('рубины', 0) != 0 %}
             <span class="resource-change {{ 'positive' if bot.earned.get('рубины', 0) > 0 else 'negative' }}">
@@ -157,7 +157,7 @@
     <h2 class="section-title">⛏️ Мулы <span class="text-muted">({{ mules_summary.running_count }}/{{ mules_summary.total_count }} работают)</span></h2>
 
     <!-- Сводка по мулам -->
-    <div class="card mules-summary" onclick="toggleMules()">
+    <div class="card mules-summary" onclick="toggleMules()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleMules()}" role="button" tabindex="0" aria-expanded="false" id="mulesToggle">
         <div class="flex flex-between flex-center">
             <div>
                 <strong>Все мулы <span id="mulesArrow">▲</span></strong>
@@ -172,7 +172,7 @@
         <div class="mules-stats mt-1">
             <div class="grid grid-3 gap-1">
                 <div class="resource-box">
-                    <img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="res-icon">
+                    <img src="{{ url_for('static', filename='icons/money_gold.png') }}" class="res-icon" width="18" height="18" alt="">
                     <span class="text-gold">{{ mules_summary.resources.get('золото', 0) }}</span>
                     {% if mules_summary.earned.get('золото', 0) != 0 %}
                     <span class="resource-change {{ 'positive' if mules_summary.earned.get('золото', 0) > 0 else 'negative' }}">
@@ -181,11 +181,11 @@
                     {% endif %}
                 </div>
                 <div class="resource-box">
-                    <img src="{{ url_for('static', filename='icons/money_silver.png') }}" class="res-icon">
+                    <img src="{{ url_for('static', filename='icons/money_silver.png') }}" class="res-icon" width="18" height="18" alt="">
                     <span>{{ mules_summary.resources.get('серебро', 0) }}</span>
                 </div>
                 <div class="resource-box">
-                    <img src="{{ url_for('static', filename='icons/skull.png') }}" class="res-icon">
+                    <img src="{{ url_for('static', filename='icons/skull.png') }}" class="res-icon" width="18" height="18" alt="">
                     <span>{{ mules_summary.resources.get('черепа', 0) }}</span>
                     {% if mules_summary.earned.get('черепа', 0) != 0 %}
                     <span class="resource-change {{ 'positive' if mules_summary.earned.get('черепа', 0) > 0 else 'negative' }}">
@@ -194,7 +194,7 @@
                     {% endif %}
                 </div>
                 <div class="resource-box">
-                    <img src="{{ url_for('static', filename='icons/mineral.png') }}" class="res-icon">
+                    <img src="{{ url_for('static', filename='icons/mineral.png') }}" class="res-icon" width="18" height="18" alt="">
                     <span>{{ mules_summary.resources.get('минералы', 0) }}</span>
                     {% if mules_summary.earned.get('минералы', 0) != 0 %}
                     <span class="resource-change {{ 'positive' if mules_summary.earned.get('минералы', 0) > 0 else 'negative' }}">
@@ -203,7 +203,7 @@
                     {% endif %}
                 </div>
                 <div class="resource-box">
-                    <img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="res-icon">
+                    <img src="{{ url_for('static', filename='icons/sapphire.png') }}" class="res-icon" width="18" height="18" alt="">
                     <span>{{ mules_summary.resources.get('сапфиры', 0) }}</span>
                     {% if mules_summary.earned.get('сапфиры', 0) != 0 %}
                     <span class="resource-change {{ 'positive' if mules_summary.earned.get('сапфиры', 0) > 0 else 'negative' }}">
@@ -212,7 +212,7 @@
                     {% endif %}
                 </div>
                 <div class="resource-box">
-                    <img src="{{ url_for('static', filename='icons/ruby.png') }}" class="res-icon">
+                    <img src="{{ url_for('static', filename='icons/ruby.png') }}" class="res-icon" width="18" height="18" alt="">
                     <span>{{ mules_summary.resources.get('рубины', 0) }}</span>
                     {% if mules_summary.earned.get('рубины', 0) != 0 %}
                     <span class="resource-change {{ 'positive' if mules_summary.earned.get('рубины', 0) > 0 else 'negative' }}">
@@ -310,7 +310,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>💰 Продажа крафтов</h3>
-            <button class="modal-close" onclick="closeSellModal()">×</button>
+            <button class="modal-close" onclick="closeSellModal()" aria-label="Закрыть">×</button>
         </div>
         <div class="modal-body">
             <div id="sellProgress" class="sell-progress">
@@ -330,47 +330,30 @@
 
 {% block scripts %}
 <style>
-    .section-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: var(--text);
-        margin-bottom: 0.75rem;
-    }
+    /* Terminal OS — index.html overrides */
 
     .mules-summary {
         cursor: pointer;
-        transition: all 0.2s ease;
     }
 
     .mules-summary:hover {
-        border-color: var(--accent);
+        border-color: var(--green);
     }
 
-    .res-icon {
-        width: 18px;
-        height: 18px;
-    }
-
-    .res-icon-sm {
-        width: 14px;
-        height: 14px;
-        vertical-align: middle;
-    }
+    .res-icon { width: 16px; height: 16px; }
+    .res-icon-sm { width: 14px; height: 14px; vertical-align: middle; }
 
     .resource-box {
         display: flex;
         align-items: center;
-        gap: 0.4rem;
-        padding: 0.4rem 0.6rem;
-        background: var(--glass);
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        font-size: 0.9rem;
+        gap: 0.375rem;
+        padding: 0.3rem 0.4rem;
+        border: 1px solid var(--border);
+        font-size: 12px;
     }
 
-    .resource-box .resource-change {
-        margin-left: 0;
-    }
+    .resource-box:hover { border-color: var(--border-active); }
+    .resource-box .resource-change { margin-left: 0; }
 
     .bot-name-wrapper {
         display: flex;
@@ -379,94 +362,56 @@
     }
 
     .bot-name-wrapper .rank-badge {
-        font-size: 1.125rem;
+        font-size: 1rem;
         background: none;
-        box-shadow: none;
         width: auto;
         height: auto;
+        border: none;
     }
 
     .badge-main {
         display: inline-block;
-        padding: 0.15rem 0.4rem;
-        background: var(--warning);
-        color: #000;
-        font-size: 0.65rem;
-        font-weight: 700;
-        border-radius: 4px;
+        padding: 0.1rem 0.35rem;
+        border: 1px solid var(--green);
+        color: var(--green);
+        font-size: 10px;
+        font-weight: 600;
         margin-left: 0.5rem;
         vertical-align: middle;
+        letter-spacing: 0.04em;
     }
 
-    /* Running bot card glow effect */
     .bot-card.running {
-        border-left: 3px solid var(--success);
+        border-left: 2px solid var(--green);
     }
 
-    .bot-card.stopped {
-        opacity: 0.75;
-    }
-
-    .bot-card.running:hover {
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), 0 0 20px var(--success-glow);
-    }
+    .bot-card.stopped { opacity: 0.5; }
 
     .bot-activity {
-        font-size: 0.85rem;
-        padding: 0.5rem 0.75rem;
-        background: var(--warning-bg);
-        border-left: 3px solid var(--warning);
-        border-radius: 0 8px 8px 0;
-        margin: 0.75rem 0;
-        color: var(--warning);
+        font-size: 12px;
+        padding: 0.3rem 0.5rem;
+        background: rgba(245, 158, 11, 0.06);
+        border-left: 2px solid var(--amber);
+        margin: 0.5rem 0;
+        color: var(--amber);
     }
 
     .bot-craft {
-        font-size: 0.85rem;
-        padding: 0.5rem 0.75rem;
-        background: var(--accent-bg);
-        border-left: 3px solid var(--accent);
-        border-radius: 0 8px 8px 0;
-        margin: 0.75rem 0;
-        color: var(--accent-light);
+        font-size: 12px;
+        padding: 0.3rem 0.5rem;
+        background: rgba(34, 197, 94, 0.06);
+        border-left: 2px solid var(--green);
+        margin: 0.5rem 0;
+        color: var(--green);
     }
 
-    .bot-resources {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.5rem;
-        margin: 0.75rem 0;
-    }
+    .tg-bot-section .card { padding: 0.75rem 1rem; }
 
-    .btn-purple {
-        background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
-        color: white;
-        box-shadow: 0 2px 12px rgba(168, 85, 247, 0.4);
-    }
-
-    .btn-purple:hover {
-        box-shadow: 0 4px 20px rgba(168, 85, 247, 0.5);
-        transform: translateY(-1px);
-    }
-
-    @media (max-width: 768px) {
-        .bot-resources {
-            grid-template-columns: repeat(2, 1fr);
-        }
-    }
-
-    .tg-bot-section .card {
-        padding: 1rem 1.25rem;
-    }
-
-    /* Модалка продажи крафтов */
+    /* Modal — Terminal OS */
     .modal {
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 1000;
+        inset: 0;
+        z-index: 2000;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -474,104 +419,94 @@
 
     .modal-backdrop {
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
     }
 
     .modal-content {
         position: relative;
-        background: var(--card-bg);
-        border-radius: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
         width: 90%;
         max-width: 500px;
         max-height: 80vh;
         overflow: hidden;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     }
 
     .modal-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1rem 1.25rem;
+        padding: 0.625rem 0.75rem;
         border-bottom: 1px solid var(--border);
     }
 
     .modal-header h3 {
         margin: 0;
-        font-size: 1.1rem;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
     }
 
     .modal-close {
         background: none;
         border: none;
-        color: var(--text-muted);
-        font-size: 1.5rem;
+        color: var(--text-3);
+        font-size: 16px;
         cursor: pointer;
-        padding: 0;
-        line-height: 1;
+        font-family: inherit;
     }
-
-    .modal-close:hover {
-        color: var(--danger);
-    }
+    .modal-close:hover { color: var(--red); }
 
     .modal-body {
-        padding: 1.25rem;
+        padding: 0.75rem;
         max-height: 50vh;
         overflow-y: auto;
     }
 
     .modal-footer {
-        padding: 1rem 1.25rem;
+        padding: 0.625rem 0.75rem;
         border-top: 1px solid var(--border);
         text-align: right;
     }
 
     .progress-bar {
-        height: 8px;
+        height: 4px;
         background: var(--border);
-        border-radius: 4px;
         overflow: hidden;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.5rem;
     }
 
     .progress-fill {
         height: 100%;
-        background: linear-gradient(90deg, #a855f7, #7c3aed);
+        background: var(--green);
         transition: width 0.3s ease;
     }
 
     .progress-text {
-        font-size: 0.9rem;
-        color: var(--text-muted);
-        margin-bottom: 1rem;
+        font-size: 11px;
+        color: var(--text-3);
+        margin-bottom: 0.75rem;
     }
 
-    .sell-results {
-        font-size: 0.85rem;
-    }
+    .sell-results { font-size: 12px; }
 
     .sell-result-item {
-        padding: 0.4rem 0;
-        border-bottom: 1px solid var(--border);
+        padding: 0.25rem 0;
+        border-bottom: 1px solid rgba(255,255,255,0.02);
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.375rem;
     }
 
-    .sell-result-item:last-child {
-        border-bottom: none;
-    }
-
-    .sell-result-item.success { color: var(--success); }
-    .sell-result-item.skipped { color: var(--warning); }
-    .sell-result-item.error { color: var(--danger); }
-    .sell-result-item.empty { color: var(--text-muted); }
-    .sell-result-item.processing { color: var(--accent); }
+    .sell-result-item:last-child { border-bottom: none; }
+    .sell-result-item.success { color: var(--green); }
+    .sell-result-item.skipped { color: var(--amber); }
+    .sell-result-item.error { color: var(--red); }
+    .sell-result-item.empty { color: var(--text-3); }
+    .sell-result-item.processing { color: var(--blue); }
 </style>
 
 <script>
@@ -596,6 +531,7 @@
 
         const grid = document.getElementById('mulesGrid');
         const arrow = document.getElementById('mulesArrow');
+        const toggle = document.getElementById('mulesToggle');
 
         if (mulesExpanded) {
             grid.style.display = 'grid';
@@ -604,6 +540,7 @@
             grid.style.display = 'none';
             arrow.textContent = '▲';
         }
+        if (toggle) toggle.setAttribute('aria-expanded', mulesExpanded);
     }
 
     function toggleCraftChain(event, profile) {

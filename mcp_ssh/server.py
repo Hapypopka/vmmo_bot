@@ -193,6 +193,39 @@ async def list_tools():
                     }
                 }
             }
+        ),
+        Tool(
+            name="ssh_bot_errors",
+            description="Получить последние ошибки из логов всех ботов",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "lines": {
+                        "type": "integer",
+                        "description": "Количество строк на бота (по умолчанию 10)",
+                        "default": 10
+                    },
+                    "profile": {
+                        "type": "string",
+                        "description": "Конкретный профиль или 'all' (по умолчанию all)",
+                        "default": "all"
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="ssh_bot_resources",
+            description="Текущие ресурсы всех ботов (золото, серебро, черепа и т.д.)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "profile": {
+                        "type": "string",
+                        "description": "Конкретный профиль или 'all' (по умолчанию all)",
+                        "default": "all"
+                    }
+                }
+            }
         )
     ]
 
@@ -366,6 +399,109 @@ async def call_tool(name: str, arguments: dict):
                 messages.append("Telegram бот перезапущен")
 
             return [TextContent(type="text", text="\n".join(messages))]
+
+        elif name == "ssh_bot_errors":
+            lines = arguments.get("lines", 10)
+            profile = arguments.get("profile", "all")
+
+            if profile == "all":
+                # Ошибки из всех логов
+                cmd = f"""
+                for f in {VMMO_BOT_PATH}/logs/bot_*_live.log; do
+                    profile=$(basename "$f" | sed 's/bot_\\(.*\\)_live.log/\\1/')
+                    errors=$(grep -iE 'error|exception|traceback|failed' "$f" 2>/dev/null | tail -{lines})
+                    if [ -n "$errors" ]; then
+                        echo "=== $profile ==="
+                        echo "$errors"
+                        echo ""
+                    fi
+                done
+                """
+            else:
+                log_path = f"{VMMO_BOT_PATH}/logs/bot_{profile}_live.log"
+                cmd = f"grep -iE 'error|exception|traceback|failed' {log_path} 2>/dev/null | tail -{lines}"
+
+            result = await conn.run(cmd, check=False)
+            output = result.stdout.strip() if result.stdout else "Ошибок не найдено"
+
+            return [TextContent(type="text", text=output)]
+
+        elif name == "ssh_bot_resources":
+            profile = arguments.get("profile", "all")
+
+            if profile == "all":
+                # Ресурсы всех профилей
+                cmd = f"""
+                python3 << 'PYEOF'
+import json
+import os
+from pathlib import Path
+
+profiles_dir = Path("{VMMO_BOT_PATH}/profiles")
+results = []
+
+for profile_dir in sorted(profiles_dir.iterdir()):
+    if not profile_dir.name.startswith("char"):
+        continue
+
+    status_file = profile_dir / "status.json"
+    if not status_file.exists():
+        continue
+
+    try:
+        with open(status_file) as f:
+            data = json.load(f)
+
+        resources = data.get("resources", {{}})
+        if resources:
+            line = f"{{profile_dir.name}}: "
+            parts = []
+            if resources.get("gold"):
+                parts.append(f"💰{{resources['gold']}}")
+            if resources.get("silver"):
+                parts.append(f"🥈{{resources['silver']}}")
+            if resources.get("skulls"):
+                parts.append(f"💀{{resources['skulls']}}")
+            if resources.get("arena_points"):
+                parts.append(f"⚔️{{resources['arena_points']}}")
+            if parts:
+                results.append(line + " ".join(parts))
+    except Exception:
+        pass
+
+print("\\n".join(results) if results else "Нет данных о ресурсах")
+PYEOF
+                """
+            else:
+                cmd = f"""
+                python3 << 'PYEOF'
+import json
+from pathlib import Path
+
+status_file = Path("{VMMO_BOT_PATH}/profiles/{profile}/status.json")
+if not status_file.exists():
+    print("Файл статуса не найден")
+else:
+    try:
+        with open(status_file) as f:
+            data = json.load(f)
+        resources = data.get("resources", {{}})
+        if resources:
+            print(f"Золото: {{resources.get('gold', 0)}}")
+            print(f"Серебро: {{resources.get('silver', 0)}}")
+            print(f"Черепа: {{resources.get('skulls', 0)}}")
+            print(f"Арена: {{resources.get('arena_points', 0)}}")
+        else:
+            print("Нет данных о ресурсах")
+    except Exception as e:
+        print(f"Ошибка: {{e}}")
+PYEOF
+                """
+
+            result = await conn.run(cmd, check=False)
+            output = result.stdout.strip() if result.stdout else "Ошибка получения ресурсов"
+
+            return [TextContent(type="text", text=output)]
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]

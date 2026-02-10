@@ -84,6 +84,9 @@ FINAL_RECIPES = [
     "copper",        # Медь
 ]
 
+# Рецепты исключённые из автовыбора (слишком долгие/невыгодные)
+AUTO_SELECT_EXCLUDED = {"platinumBar"}
+
 
 # ============================================
 # Система локов для распределения крафта между ботами
@@ -205,6 +208,9 @@ def get_profitable_recipes():
         list: [(recipe_id, profit_per_hour), ...] отсортированный по убыванию профита
     """
     sorted_recipes = get_sorted_recipes_by_profit()
+
+    # Исключаем рецепты из автовыбора
+    sorted_recipes = [(r, p) for r, p in sorted_recipes if r not in AUTO_SELECT_EXCLUDED]
 
     # Считаем средний профит среди положительных
     profits = [p for _, p in sorted_recipes if p > 0]
@@ -343,12 +349,11 @@ def acquire_craft_lock(profile):
 
     Структура: {profile: {"recipe_id": "ironBar", "timestamp": 123}, ...}
 
-    Логика:
+    Логика (равномерное распределение):
     1. Если у профиля есть активный лок - продлеваем
-    2. Получаем профитные рецепты и квоты
-    3. Считаем сколько ботов на каждом рецепте (без протухших)
-    4. Берём рецепт где quota > текущих ботов
-    5. Если все квоты заполнены - берём топовый (с превышением)
+    2. Считаем сколько ботов на каждом рецепте (без протухших)
+    3. Находим минимальное количество ботов
+    4. Среди рецептов с минимумом берём самый выгодный
 
     Args:
         profile: имя профиля (char1, char2, ...)
@@ -365,22 +370,13 @@ def acquire_craft_lock(profile):
             if profile in locks:
                 lock_info = locks[profile]
                 if now - lock_info.get("timestamp", 0) <= LOCK_TTL:
-                    # Наш лок ещё активен - обновляем и возвращаем
                     recipe_id = lock_info.get("recipe_id")
-                    locks[profile]["timestamp"] = now
-                    save_craft_locks(locks)
-                    return recipe_id
-
-            # Считаем активных ботов
-            active_bots = 0
-            for p, lock_info in locks.items():
-                timestamp = lock_info.get("timestamp", 0)
-                if now - timestamp <= LOCK_TTL:
-                    active_bots += 1
-
-            # Получаем профитные рецепты и рассчитываем квоты
-            profitable = get_profitable_recipes()
-            quotas = calculate_quotas(profitable, total_bots=max(active_bots + 1, 21))
+                    # Если рецепт в исключениях — сбрасываем лок и выбираем заново
+                    if recipe_id not in AUTO_SELECT_EXCLUDED:
+                        locks[profile]["timestamp"] = now
+                        save_craft_locks(locks)
+                        return recipe_id
+                    print(f"[CRAFT_LOCKS] {profile}: {recipe_id} в исключениях, выбираю другой")
 
             # Считаем ботов на каждом рецепте (внутри лока!)
             bot_counts = {recipe: 0 for recipe in FINAL_RECIPES}
@@ -393,25 +389,21 @@ def acquire_craft_lock(profile):
                     continue  # Протух - не считаем
                 bot_counts[recipe_id] = bot_counts.get(recipe_id, 0) + 1
 
-            # Ищем рецепт где quota > текущих ботов (в порядке профитности)
-            for recipe_id, profit in profitable:
-                quota = quotas.get(recipe_id, 0)
-                current = bot_counts.get(recipe_id, 0)
-                if current < quota:
+            # Получаем рецепты отсортированные по профиту (без исключённых)
+            sorted_recipes = get_sorted_recipes_by_profit()
+            sorted_recipes = [(r, p) for r, p in sorted_recipes if r not in AUTO_SELECT_EXCLUDED]
+
+            # Находим минимальное кол-во ботов среди доступных рецептов
+            available_counts = [bot_counts.get(r, 0) for r, _ in sorted_recipes]
+            min_count = min(available_counts) if available_counts else 0
+
+            # Среди рецептов с минимумом ботов берём самый выгодный
+            for recipe_id, profit in sorted_recipes:
+                if bot_counts.get(recipe_id, 0) == min_count:
                     locks[profile] = {"recipe_id": recipe_id, "timestamp": now}
                     save_craft_locks(locks)
-                    print(f"[CRAFT_LOCKS] {profile}: взял {recipe_id} (ботов: {current}/{quota}, профит: {profit:.1f}з/ч)")
+                    print(f"[CRAFT_LOCKS] {profile}: взял {recipe_id} (ботов: {min_count}, профит: {profit:.1f}з/ч)")
                     return recipe_id
-
-            # Все квоты заполнены - берём топовый рецепт с превышением
-            if profitable:
-                recipe_id = profitable[0][0]
-                profit = profitable[0][1]
-                current = bot_counts.get(recipe_id, 0)
-                locks[profile] = {"recipe_id": recipe_id, "timestamp": now}
-                save_craft_locks(locks)
-                print(f"[CRAFT_LOCKS] {profile}: все квоты заполнены, превышаю на {recipe_id} (ботов: {current}+1, профит: {profit:.1f}з/ч)")
-                return recipe_id
 
             # Fallback - первый из списка
             recipe_id = FINAL_RECIPES[0]

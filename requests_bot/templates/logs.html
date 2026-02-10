@@ -7,7 +7,7 @@
     <h1 class="page-title">Логи: {{ name }}</h1>
     <div class="btn-group">
         <button class="btn btn-primary" onclick="refreshLogs()">Обновить</button>
-        <a href="/" class="btn" style="background: #333;">Назад</a>
+        <a href="/" class="btn btn-dark">Назад</a>
     </div>
 </div>
 
@@ -15,7 +15,7 @@
     <div class="flex flex-between flex-center mb-1">
         <span class="text-muted">Последние 200 строк</span>
         <label class="toggle">
-            <input type="checkbox" id="auto_refresh" checked onchange="toggleAutoRefresh()">
+            <input type="checkbox" id="auto_refresh" checked onchange="toggleAutoRefresh()" aria-label="Автообновление">
             <span class="toggle-slider"></span>
         </label>
         <span class="text-muted">Автообновление</span>

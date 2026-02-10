@@ -330,6 +330,11 @@ def get_arena_max_fights():
     return _profile_config.get("arena_max_fights", 50)
 
 
+def is_arena_gold():
+    """Проверяет, включена ли арена за золото (kind=1, bet=1)"""
+    return _profile_config.get("arena_gold", False)
+
+
 def is_hell_games_enabled():
     """Проверяет, включены ли Адские Игры для текущего профиля"""
     return _profile_config.get("hell_games_enabled", True)

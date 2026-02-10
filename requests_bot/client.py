@@ -128,6 +128,46 @@ class VMMOClient:
             return False
         return "Идет обновление сервера" in self.current_page or "Идёт обновление сервера" in self.current_page
 
+    def is_server_updating(self):
+        """Публичный метод для проверки обновления сервера"""
+        return self._is_server_update_page()
+
+    def wait_for_server(self, check_url=None, max_wait_minutes=10):
+        """
+        Ожидает окончания обновления сервера.
+
+        Args:
+            check_url: URL для проверки (если None - перезагружает текущую страницу)
+            max_wait_minutes: максимальное время ожидания в минутах
+
+        Returns:
+            bool: True если сервер доступен, False если таймаут
+        """
+        if not self._is_server_update_page():
+            return True
+
+        url = check_url or self.current_url or BASE_URL
+        max_attempts = max_wait_minutes * 6  # проверка каждые 10 секунд
+
+        print(f"[CLIENT] Сервер на обновлении, ждём до {max_wait_minutes} минут...")
+
+        for attempt in range(max_attempts):
+            time.sleep(10)
+            try:
+                self.session.get(url, timeout=10)
+                self.current_page = self.session.get(url).text
+                if not self._is_server_update_page():
+                    print(f"[CLIENT] Сервер доступен после {(attempt + 1) * 10} секунд")
+                    return True
+            except Exception:
+                pass
+
+            if (attempt + 1) % 6 == 0:  # каждую минуту
+                print(f"[CLIENT] Обновление сервера... {(attempt + 1) // 6} мин")
+
+        print(f"[CLIENT] Таймаут ожидания сервера ({max_wait_minutes} мин)")
+        return False
+
     def post(self, url, max_retries=3, **kwargs):
         """POST запрос с обработкой обновления сервера и автоматическим retry"""
         if not url:

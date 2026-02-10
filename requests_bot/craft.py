@@ -558,8 +558,13 @@ class IronCraftClient:
             log_info("[CRAFT] Не найдена кнопка 'Начать работу'")
             page_text = soup.get_text().lower()
             known_reason = False
+
+            # Проверяем обновление сервера - ждём и повторяем
             if "обновлен" in page_text and "сервер" in page_text:
                 log_info("[CRAFT] Сервер на обновлении - ждём...")
+                if self.client.wait_for_server(max_wait_minutes=10):
+                    log_info("[CRAFT] Сервер доступен, повторяем крафт...")
+                    return self.start_craft(recipe)  # Рекурсивно повторяем
                 known_reason = True
             elif "недостаточно" in page_text or "не хватает" in page_text:
                 log_info("[CRAFT] Не хватает материалов!")
@@ -730,7 +735,15 @@ class IronCraftClient:
         if not start_btn:
             log_info("[CRAFT] Не найдена кнопка 'Начать работу'")
             page_text = soup.get_text().lower()
-            if "недостаточно" in page_text or "не хватает" in page_text:
+
+            # Проверяем обновление сервера
+            if "обновлен" in page_text and "сервер" in page_text:
+                log_info("[CRAFT] Сервер на обновлении - ждём...")
+                if self.client.wait_for_server(max_wait_minutes=10):
+                    log_info("[CRAFT] Сервер доступен, повторяем крафт...")
+                    return self.start_craft(recipe)
+                return False
+            elif "недостаточно" in page_text or "не хватает" in page_text:
                 log_info("[CRAFT] Не хватает материалов для слитка!")
             else:
                 # Неизвестная причина - уведомляем
@@ -1108,9 +1121,10 @@ class CyclicCraftClient(IronCraftClient):
         """
         from requests_bot.config import get_craft_items, get_setting
 
+        auto_select_enabled = get_setting("auto_select_craft", True)
         items = get_craft_items()
-        if not items:
-            log_info("[CRAFT] Список автокрафта пуст")
+        if not items and not auto_select_enabled:
+            log_info("[CRAFT] Список автокрафта пуст и автовыбор выключен")
             return False, 0
 
         # Проверяем - не застряли ли в банде (блокирует крафт)

@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import traceback as tb_module  # Alias чтобы избежать конфликтов
+from requests.exceptions import ConnectionError as RequestsConnectionError
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -34,7 +35,7 @@ from requests_bot.config import (
     get_skill_cooldowns, get_survival_mines_max_level, is_dungeons_enabled,
     is_hell_games_enabled, is_light_side,
     is_iron_craft_enabled, get_craft_items, is_sell_crafts_on_startup,
-    is_arena_enabled, get_arena_max_fights,
+    is_arena_enabled, get_arena_max_fights, is_arena_gold,
     is_resource_selling_enabled,
     is_daily_rewards_enabled,
     is_valentine_event_enabled
@@ -236,8 +237,11 @@ class VMMOBot:
 
         log_info("[ARENA] Проверяю арену...")
         try:
-            arena = ArenaClient(self.client)
+            gold = is_arena_gold()
+            arena = ArenaClient(self.client, gold=gold)
             max_fights = get_arena_max_fights()
+            if gold:
+                log_info("[ARENA] Режим: за золото")
 
             # Проверяем количество боёв
             fights = arena.get_fights_remaining()
@@ -401,10 +405,11 @@ class VMMOBot:
             return False, 0
 
         try:
-            from requests_bot.config import get_craft_items
+            from requests_bot.config import get_craft_items, get_setting
             items = get_craft_items()
-            if not items:
-                log_debug("[CRAFT] Список автокрафта пуст")
+            auto_select = get_setting("auto_select_craft", True)
+            if not items and not auto_select:
+                log_debug("[CRAFT] Список автокрафта пуст и автовыбор выключен")
                 return False, 0
 
             return self.craft_client.do_cyclic_craft_step()
@@ -421,12 +426,17 @@ class VMMOBot:
         Returns:
             int: Количество пройденных данженов
         """
-        if not is_valentine_event_enabled():
+        valentine_enabled = is_valentine_event_enabled()
+        log_debug(f"[VALENTINE] check_valentine_dungeons вызван, enabled={valentine_enabled}")
+        if not valentine_enabled:
             return 0
 
         completed = 0
         try:
-            from requests_bot.valentine_event import try_enter_dungeon, set_cooldown_after_completion, get_dungeon_difficulty, record_death
+            from requests_bot.valentine_event import try_enter_dungeon, set_cooldown_after_completion, get_dungeon_difficulty, record_death, update_cooldowns_from_server
+
+            # Обновляем КД с сервера
+            update_cooldowns_from_server(self.client)
 
             for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
                 name = dungeon_config["name"]
@@ -795,7 +805,7 @@ class VMMOBot:
                     log_dungeon_result(dungeon_name, result, actions)
 
                     # Проверяем - может персонаж умер но не задетектили?
-                    if self.client.is_on_graveyard():
+                    if self.client.is_dead():
                         log_warning(f"После unknown обнаружен на кладбище - это была смерть!")
                         self.stats["deaths"] += 1
 
@@ -890,7 +900,27 @@ class VMMOBot:
                 log_cycle_start(cycle)
 
                 # Проверяем авторизацию в начале каждого цикла
-                if not self.client.ensure_logged_in():
+                # При ConnectionError — ждём и ретраим (сервер может быть временно недоступен)
+                try:
+                    logged_in = self.client.ensure_logged_in()
+                except (RequestsConnectionError, OSError) as conn_err:
+                    logged_in = False
+                    log_warning(f"Сервер недоступен: {conn_err.__class__.__name__}")
+                    # Ждём с нарастающей задержкой: 30с, 60с, 120с, 120с...
+                    max_conn_retries = 10
+                    for attempt in range(1, max_conn_retries + 1):
+                        delay = min(30 * (2 ** (attempt - 1)), 120)
+                        log_info(f"Жду {delay}с перед попыткой {attempt}/{max_conn_retries}...")
+                        time.sleep(delay)
+                        try:
+                            logged_in = self.client.ensure_logged_in()
+                            if logged_in:
+                                log_info(f"Сервер снова доступен! Продолжаю работу.")
+                                break
+                        except (RequestsConnectionError, OSError):
+                            log_warning(f"Попытка {attempt}/{max_conn_retries} — сервер всё ещё недоступен")
+                            continue
+                if not logged_in:
                     log_error("Не удалось восстановить сессию, выход")
                     break
 
@@ -907,6 +937,11 @@ class VMMOBot:
                 try:
                     if not self.run_dungeon_cycle():
                         break
+                except (RequestsConnectionError, OSError) as conn_err:
+                    # Сервер упал во время цикла — ждём, не считаем критической ошибкой
+                    log_warning(f"Потеря связи в цикле {cycle}: {conn_err.__class__.__name__}")
+                    time.sleep(60)
+                    continue
                 except Exception as e:
                     log_error(f"Критическая ошибка в цикле {cycle}: {e}")
                     log_debug(tb_module.format_exc())
@@ -1008,10 +1043,25 @@ def main():
 
     bot = VMMOBot()
 
-    if args.test:
-        bot.run(max_cycles=1)
-    else:
-        bot.run(max_cycles=args.cycles)
+    try:
+        if args.test:
+            bot.run(max_cycles=1)
+        else:
+            bot.run(max_cycles=args.cycles)
+    except KeyboardInterrupt:
+        log_info("Бот остановлен пользователем (Ctrl+C)")
+    except Exception as e:
+        # Глобальный обработчик - ловит ВСЕ необработанные ошибки
+        log_error(f"FATAL ERROR: {e}")
+        log_error(tb_module.format_exc())
+
+        # Пробуем авторестарт при фатальной ошибке
+        try:
+            from requests_bot.watchdog import trigger_auto_restart
+            log_info("Пробую авторестарт после фатальной ошибки...")
+            trigger_auto_restart()
+        except Exception as restart_err:
+            log_error(f"Авторестарт не удался: {restart_err}")
 
 
 if __name__ == "__main__":
