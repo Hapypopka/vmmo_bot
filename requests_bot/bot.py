@@ -933,7 +933,7 @@ class VMMOBot:
                 if self.client.is_dead():
                     log_warning("Персонаж на кладбище! Ухожу...")
                     self.stats["deaths"] += 1
-                    telegram_notify(f"💀 [{get_profile_username()}] Умер в данже")
+                    log_warning(f"💀 [{get_profile_username()}] Умер в данже")
                     if not self.client.leave_graveyard():
                         log_error("Не удалось уйти с кладбища!")
                         time.sleep(60)

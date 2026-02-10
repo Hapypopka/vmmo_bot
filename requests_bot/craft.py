@@ -27,13 +27,8 @@ except ImportError:
 
 # Уведомления в Telegram
 def _notify_craft_issue(profile: str, recipe_name: str, reason: str):
-    """Отправляет уведомление о проблеме с крафтом в Telegram"""
-    try:
-        from requests_bot.telegram_bot import notify_sync
-        message = f"[{profile}] Крафт: {recipe_name}\n{reason}\nВозможно рецепт не изучен!"
-        notify_sync(message)
-    except Exception as e:
-        log_info(f"[CRAFT] Не удалось отправить уведомление: {e}")
+    """Логирует проблему с крафтом (без TG уведомления)"""
+    log_warning(f"[CRAFT] [{profile}] {recipe_name}: {reason}")
 
 # Названия предметов для поиска в инвентаре
 ITEM_NAMES = {
