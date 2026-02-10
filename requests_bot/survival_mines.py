@@ -521,7 +521,7 @@ class SurvivalMinesClient:
             except ImportError:
                 telegram_notify = lambda msg: None
             username = get_profile_username()
-            telegram_notify(f"⛏️ [{username}] Вошёл в Заброшенную Шахту (до волны {max_wave})")
+            log_info(f"⛏️ [{username}] Вошёл в Заброшенную Шахту (до волны {max_wave})")
         except Exception:
             pass
 
@@ -531,12 +531,12 @@ class SurvivalMinesClient:
         # 5. Выходим в город
         self.go_to_city()
 
-        # Уведомляем о результате
+        # Логируем результат
         try:
             if result == "completed":
-                telegram_notify(f"✅ [{username}] Шахта завершена (волна {max_wave})")
+                log_info(f"✅ [{username}] Шахта завершена (волна {max_wave})")
             elif result == "died":
-                telegram_notify(f"💀 [{username}] Погиб в шахте!")
+                log_warning(f"💀 [{username}] Погиб в шахте!")
         except Exception:
             pass
 

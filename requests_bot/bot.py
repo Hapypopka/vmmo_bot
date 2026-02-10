@@ -725,9 +725,9 @@ class VMMOBot:
                     new_diff, should_skip = record_death(dungeon_id, dungeon_name, current_diff)
                     username = get_profile_username()
                     if should_skip:
-                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} (normal) - данж скипается!")
+                        log_warning(f"💀 [{username}] Умер в {dungeon_name} (normal) - данж скипается!")
                     else:
-                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} ({current_diff} -> {new_diff})")
+                        log_warning(f"💀 [{username}] Умер в {dungeon_name} ({current_diff} -> {new_diff})")
                     continue
                 if not enter_result:
                     log_warning(f"Не удалось войти в {dungeon_name}")
@@ -767,12 +767,11 @@ class VMMOBot:
                     current_diff = self.dungeon_runner.current_difficulty
                     new_diff, should_skip = record_death(dungeon_id, dungeon_name, current_diff)
 
-                    # Уведомление в Telegram о смерти
                     username = get_profile_username()
                     if should_skip:
-                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} (normal) - данж скипается!")
+                        log_warning(f"💀 [{username}] Умер в {dungeon_name} (normal) - данж скипается!")
                     else:
-                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} ({current_diff} -> {new_diff})")
+                        log_warning(f"💀 [{username}] Умер в {dungeon_name} ({current_diff} -> {new_diff})")
 
                     self.dungeon_runner.resurrect()
                     self.check_and_resurrect_pet()
@@ -826,9 +825,8 @@ class VMMOBot:
                         else:
                             log_info(f"Сложность {dungeon_name}: {current_difficulty} -> {new_difficulty}")
 
-                        # Уведомление в Telegram
                         username = get_profile_username()
-                        telegram_notify(f"💀 [{username}] Умер в {dungeon_name} (unknown->died)")
+                        log_warning(f"💀 [{username}] Умер в {dungeon_name} (unknown->died)")
 
                         # Воскрешаемся
                         self.dungeon_runner.resurrect()
