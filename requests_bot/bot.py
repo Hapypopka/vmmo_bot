@@ -231,7 +231,7 @@ class VMMOBot:
 
     def try_arena(self):
         """Запускает арену если включена. Вызывается один раз в начале сессии."""
-        if not is_arena_enabled():
+        if not is_arena_enabled() and not is_arena_gold():
             return
         set_activity("🏟️ Арена")
 
