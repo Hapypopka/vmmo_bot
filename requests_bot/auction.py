@@ -495,7 +495,17 @@ class AuctionClient:
                 batch_size = get_batch_size_for_item(name)
                 item_count = item.get("count", 1)
                 if item_count < batch_size:
-                    # Не набралась партия - пропускаем
+                    # Не набралась партия — разбираем или выкидываем
+                    if "disassemble" in item["buttons"]:
+                        print(f"[AUCTION] '{name}' x{item_count} < {batch_size} - разбираем")
+                        if self.backpack.disassemble_item(item):
+                            stats["disassembled"] += 1
+                            current_page = 1
+                    elif "drop" in item["buttons"]:
+                        print(f"[AUCTION] '{name}' x{item_count} < {batch_size} - выкидываем")
+                        if self.backpack.drop_item(item):
+                            stats["disassembled"] += 1
+                            current_page = 1
                     continue
 
                 target = item
