@@ -431,15 +431,17 @@ class BackpackClient:
             items = self.get_items()
             log_debug(f"[BACKPACK] Предметов на странице: {len(items)}")
 
-            # DEBUG: показываем первые 5 предметов
-            for i, item in enumerate(items[:5]):
+            # DEBUG: показываем ВСЕ предметы
+            for i, item in enumerate(items):
                 btns = list(item["buttons"].keys())
                 flags = []
                 if item["is_protected"]:
                     flags.append("PROTECTED")
                 if item["is_green"]:
                     flags.append("GREEN")
-                log_debug(f"[BACKPACK] [{i}] {item['name'][:25]} | btns={btns} | {','.join(flags)}")
+                if item["is_legendary"]:
+                    flags.append("LEGENDARY")
+                log_debug(f"[BACKPACK] [{i}] {item['name'][:30]} | btns={btns} | {','.join(flags)}")
 
             # Ищем предмет для разборки
             target = None

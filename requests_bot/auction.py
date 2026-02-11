@@ -20,6 +20,11 @@ from .backpack import (
 from .config import get_craft_items
 from .sales_tracker import record_listed
 
+try:
+    from .logger import log_debug
+except ImportError:
+    def log_debug(msg): print(f"[DEBUG] {msg}")
+
 BASE_URL = "https://vmmo.vten.ru"
 
 # Минимальная цена по умолчанию (в серебре)
@@ -447,6 +452,16 @@ class AuctionClient:
                     break
 
             items = self.backpack.get_items()
+
+            # DEBUG: логируем все предметы (для диагностики)
+            if iteration == 0:
+                for i, item in enumerate(items):
+                    flags = []
+                    if item["is_protected"]: flags.append("PROT")
+                    if item["is_green"]: flags.append("GREEN")
+                    if item.get("is_legendary"): flags.append("LEG")
+                    btns = list(item["buttons"].keys())
+                    log_debug(f"[AUCTION] [{i}] {item['name'][:30]} x{item['count']} | btns={btns} | {','.join(flags)}")
 
             # Ищем предмет с кнопкой аукциона
             target = None
