@@ -336,10 +336,8 @@ class AuctionClient:
         total_silver = comp_gold * 100 + comp_silver
         price_per_unit = total_silver // comp_count
 
-        # Наша цена (на 1 серебро дешевле конкурента)
-        our_price_per_unit = price_per_unit - 1
-        if our_price_per_unit < 1:
-            our_price_per_unit = 1
+        # Наша цена = цена конкурента (не перебиваем своих)
+        our_price_per_unit = price_per_unit
 
         our_total = our_price_per_unit * my_count
         if our_total < DEFAULT_MIN_PRICE:

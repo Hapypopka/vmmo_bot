@@ -988,10 +988,8 @@ class IronCraftClient:
                 cached_price = get_cached_price(name)
 
                 if cached_price:
-                    # Есть кэш - ставим цену на 1 серебро ниже ЗА ЕДИНИЦУ
-                    # cached_price в золоте за 1 шт (например 0.39)
-                    # Вычитаем 0.01 (1 серебро)
-                    price_per_unit = max(0.01, cached_price - 0.01)
+                    # Есть кэш - ставим ту же цену (не перебиваем своих)
+                    price_per_unit = cached_price
 
                     # Умножаем на количество для стопки
                     final_price = price_per_unit * my_count
