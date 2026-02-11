@@ -22,7 +22,7 @@ LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
 COOKIES_FILE = os.path.join(SCRIPT_DIR, "cookies.json")
 SETTINGS_FILE = os.path.join(SCRIPT_DIR, "settings.json")
 STATS_FILE = os.path.join(SCRIPT_DIR, "stats.json")
-AUCTION_BLACKLIST_FILE = os.path.join(SCRIPT_DIR, "auction_blacklist.json")
+AUCTION_BLACKLIST_FILE = os.path.join(os.path.dirname(SCRIPT_DIR), "auction_blacklist.json")
 
 # URLs
 BASE_URL = "https://vmmo.vten.ru"
