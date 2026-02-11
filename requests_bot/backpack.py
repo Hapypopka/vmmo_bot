@@ -279,7 +279,7 @@ class BackpackClient:
                 "count": count,
                 "is_green": is_green,
                 "is_legendary": is_legendary,
-                "is_protected": is_protected_item(name) or is_legendary,  # Легендарные = защищены
+                "is_protected": is_protected_item(name),
                 "difficulty": difficulty,  # None, "normal", "heroic", "brutal"
                 "buttons": buttons,
             })
