@@ -411,18 +411,20 @@ class BackpackClient:
 
         return opened
 
-    def disassemble_all(self, skip_green=True):
+    def disassemble_all(self, skip_green=True, skip_open=False):
         """
         Разбирает все предметы с кнопкой разборки.
 
         Args:
             skip_green: Пропускать зелёные предметы
+            skip_open: Не открывать рюкзак (уже на нужной странице)
 
         Returns:
             int: Количество разобранных
         """
-        if not self.open_backpack():
-            return 0
+        if not skip_open:
+            if not self.open_backpack():
+                return 0
 
         disassembled = 0
         blacklist = load_auction_blacklist()
@@ -507,16 +509,20 @@ class BackpackClient:
 
         return dropped
 
-    def drop_unusable(self):
+    def drop_unusable(self, skip_open=False):
         """
         Выбрасывает ВСЕ предметы (не только зелёные) без кнопок аукциона/разборки.
         Например: Изумительная пылинка, Золотой Оберег и т.п.
 
+        Args:
+            skip_open: Не открывать рюкзак (уже на нужной странице)
+
         Returns:
             int: Количество выброшенных
         """
-        if not self.open_backpack():
-            return 0
+        if not skip_open:
+            if not self.open_backpack():
+                return 0
 
         dropped = 0
 
@@ -626,12 +632,12 @@ class BackpackClient:
                     break
                 log_debug(f"[BACKPACK] Страница {page} (разборка)")
 
-            # Разбираем (включая зелёные)
-            disassembled = self.disassemble_all(skip_green=False)
+            # Разбираем (включая зелёные) — skip_open чтобы не сбрасывать страницу
+            disassembled = self.disassemble_all(skip_green=False, skip_open=True)
             stats["disassembled"] += disassembled
 
             # Выбрасываем ВСЕ бесполезные предметы (не только зелёные)
-            dropped = self.drop_unusable()
+            dropped = self.drop_unusable(skip_open=True)
             stats["dropped"] += dropped
 
         log_backpack(f"Очистка завершена: бонусов {stats['bonuses']}, аукцион {stats['auctioned']}, разобрано {stats['disassembled']}, выброшено {stats['dropped']}")
