@@ -284,7 +284,7 @@ class MailClient:
             is_expired = "Срок твоего лота истёк" in msg["text"]
             # Проверка продажи: "продан" + "аукцион" (case-insensitive)
             msg_lower = msg["text"].lower()
-            is_sold = "продан" in msg_lower and "аукцион" in msg_lower
+            is_sold = ("продан" in msg_lower or "продажа" in msg_lower) and "аукцион" in msg_lower
 
             # DEBUG: логируем ВСЕ письма с деньгами или аукционные
             if "аукцион" in msg_lower or "продан" in msg_lower or "истёк" in msg_lower:
