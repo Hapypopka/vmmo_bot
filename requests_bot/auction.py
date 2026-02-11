@@ -517,6 +517,13 @@ class AuctionClient:
                 current_page = 1  # предметы сдвинулись
                 continue
 
+            # Перечитываем blacklist (мог обновиться из mail)
+            blacklist = load_auction_blacklist()
+            if name in blacklist:
+                print(f"[AUCTION] '{name}' в чёрном списке (recheck) - пропускаю")
+                current_page = 1
+                continue
+
             # Переходим на страницу аукциона
             print(f"[AUCTION] Выставляю: {name}")
             auction_url = target["buttons"]["auction"]
