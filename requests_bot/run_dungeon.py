@@ -702,6 +702,13 @@ class DungeonRunner:
         print("[ERR] Could not start combat")
         return False
 
+    def _is_last_stage_complete(self, html):
+        """Проверяет что последний этап stage-line имеет класс 'cur'.
+        Используется для Порогов Шэдоу Гарда — после 2го этапа не нужно идти на 3й."""
+        if not html:
+            return False
+        return bool(re.search(r'class="stage\s+_list-el-last\s+cur"', html))
+
     def _find_leave_party_url(self):
         """Ищет URL для кнопки 'Покинуть банду' в лобби"""
         html = self.client.current_page
@@ -1087,6 +1094,19 @@ class DungeonRunner:
 
         # Проверяем URL - на странице между этапами (step)
         if "/dungeon/step/" in url:
+            # Пороги Шэдоу Гарда: после последнего полезного этапа выходим
+            # (3й этап бесконечный и бесполезный)
+            if self.current_dungeon_id == "dng:ShadowGuard" and self._is_last_stage_complete(html):
+                print("[*] ShadowGuard: последний полезный этап пройден, выходим")
+                self.client.get(f"{self.base_url}/city")
+                time.sleep(0.5)
+                leave_url = self._find_leave_party_url()
+                if leave_url:
+                    print("[*] Покидаем банду")
+                    self.client.get(leave_url)
+                    time.sleep(0.5)
+                return "completed"
+
             # Это интерстеп страница - сначала восстанавливаем ХП, потом продолжаем
             self.try_restore_health()
 
