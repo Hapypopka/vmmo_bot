@@ -38,9 +38,11 @@ from requests_bot.config import (
     is_arena_enabled, get_arena_max_fights, is_arena_gold,
     is_resource_selling_enabled,
     is_daily_rewards_enabled,
-    is_valentine_event_enabled
+    is_valentine_event_enabled,
+    is_party_dungeon_enabled, get_party_dungeon_config,
 )
 from requests_bot.valentine_event import run_valentine_dungeons, VALENTINE_DUNGEONS
+from requests_bot.party_dungeon import run_party_dungeon
 from requests_bot.sell_resources import sell_resources
 from requests_bot.logger import (
     init_logger, get_log_file,
@@ -501,6 +503,59 @@ class VMMOBot:
 
         return completed
 
+    def check_party_dungeon(self):
+        """Пробует пройти пати-данж (координация с другими ботами).
+
+        Returns:
+            str or None: результат ("completed", "died", "timeout", "error") или None
+        """
+        if not is_party_dungeon_enabled():
+            return None
+
+        cfg = get_party_dungeon_config()
+        dungeon_id = cfg["dungeon_id"]
+        difficulty = cfg["difficulty"]
+
+        log_info(f"[PARTY] Проверяю пати-данж {dungeon_id}...")
+
+        try:
+            result = run_party_dungeon(
+                self.client, self.dungeon_runner,
+                dungeon_id=dungeon_id, difficulty=difficulty
+            )
+        except Exception as e:
+            log_error(f"[PARTY] Ошибка: {e}")
+            import traceback
+            traceback.print_exc()
+            return "error"
+
+        if result is None:
+            log_debug("[PARTY] Пропуск (КД или уже в пати)")
+            return None
+
+        if result == "completed":
+            self.stats["dungeons_completed"] += 1
+            mark_progress("dungeon")
+            log_info(f"[PARTY] Данж пройден!")
+            self.cleanup_backpack()
+            self.check_and_collect_mail()
+            self.check_craft()
+        elif result == "died":
+            self.stats["deaths"] += 1
+            log_warning(f"[PARTY] Смерть в пати-данже")
+            self.dungeon_runner.resurrect()
+            self.check_and_resurrect_pet()
+            try:
+                if self.client.repair_equipment():
+                    log_info("Снаряжение отремонтировано после смерти в пати-данже")
+            except Exception:
+                pass
+            self.check_craft()
+        elif result in ("timeout", "error"):
+            log_warning(f"[PARTY] Результат: {result}")
+
+        return result
+
     def get_min_dungeon_cooldown(self):
         """Получает минимальный КД среди всех данженов"""
         # Если данжены отключены - всегда "на КД" для запуска шахты/hell games
@@ -561,6 +616,9 @@ class VMMOBot:
 
         # 2.6. Ивент Дня Святого Валентина (если включен)
         self.check_valentine_dungeons()
+
+        # 2.7. Пати-данж (если включён)
+        self.check_party_dungeon()
 
         # 3. Получаем список данженов (если включены)
         dungeons = []

@@ -8,6 +8,8 @@ import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+from requests_bot.config import is_party_dungeon_enabled
+
 BASE_URL = "https://vmmo.vten.ru"
 DUNGEONS_URL = f"{BASE_URL}/dungeons?52"
 
@@ -41,6 +43,7 @@ class PopupsClient:
     def close_party_widget(self):
         """
         Закрывает виджет приглашения в данжен.
+        Если party_dungeon включён — НЕ отклоняет (инвайт обрабатывается party_dungeon.py).
         Возвращает True если виджет был закрыт.
         """
         soup = self.client.soup()
@@ -53,6 +56,11 @@ class PopupsClient:
 
         widget_text = widget.get_text().lower()
         if not any(t in widget_text for t in ["приглашает", "ожидает", "ждёт"]):
+            return False
+
+        # Если пати-данжены включены — не трогаем инвайт, его обработает party_dungeon
+        if is_party_dungeon_enabled():
+            print("[POPUP] Виджет приглашения — party_dungeon включён, не отклоняем")
             return False
 
         # Ищем кнопку "Покинуть банду"

@@ -22,7 +22,7 @@ LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
 COOKIES_FILE = os.path.join(SCRIPT_DIR, "cookies.json")
 SETTINGS_FILE = os.path.join(SCRIPT_DIR, "settings.json")
 STATS_FILE = os.path.join(SCRIPT_DIR, "stats.json")
-AUCTION_BLACKLIST_FILE = os.path.join(os.path.dirname(SCRIPT_DIR), "auction_blacklist.json")
+AUCTION_BLACKLIST_FILE = os.path.join(SCRIPT_DIR, "auction_blacklist.json")
 
 # URLs
 BASE_URL = "https://vmmo.vten.ru"
@@ -314,6 +314,28 @@ def is_dungeons_enabled():
 
 
 # ARCHIVED: is_event_dungeon_enabled() and is_ny_event_dungeon_enabled() moved to archive/events/ (2026-01)
+
+def is_party_dungeon_enabled():
+    """Проверяет, включены ли пати-данжены для текущего профиля"""
+    return _profile_config.get("party_dungeon_enabled", False)
+
+
+def get_party_dungeon_config():
+    """Возвращает конфиг пати-данжей.
+
+    Формат в config.json:
+    "party_dungeon_enabled": true,
+    "party_dungeon_id": "dng:Underlight",
+    "party_dungeon_difficulty": "impossible"
+
+    Returns:
+        dict: {"dungeon_id": str, "difficulty": str}
+    """
+    return {
+        "dungeon_id": _profile_config.get("party_dungeon_id", "dng:Underlight"),
+        "difficulty": _profile_config.get("party_dungeon_difficulty", "impossible"),
+    }
+
 
 def is_valentine_event_enabled():
     """Проверяет, включен ли ивент Дня Святого Валентина для текущего профиля"""

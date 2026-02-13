@@ -18,7 +18,8 @@ from requests_bot.config import (
     BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR,
     get_skill_cooldowns, get_dungeon_difficulty, get_skill_hp_threshold,
     load_deaths, get_extra_dungeons,
-    GCD, ATTACK_CD, LOOT_COLLECT_INTERVAL
+    GCD, ATTACK_CD, LOOT_COLLECT_INTERVAL,
+    is_party_dungeon_enabled, get_party_dungeon_config,
 )
 from requests_bot import config as config_module  # Для доступа к ONLY_DUNGEONS
 from requests_bot.logger import log_info, log_debug, log_error
@@ -275,6 +276,11 @@ class DungeonRunner:
             for dungeon_id, data in deaths.items():
                 if data.get("skipped") or data.get("current_difficulty") == "skip":
                     skipped_ids.add(dungeon_id)
+
+            # Если пати-данж включён — скипаем его в соло (пройдём через party_dungeon)
+            if is_party_dungeon_enabled():
+                party_cfg = get_party_dungeon_config()
+                skipped_ids.add(party_cfg["dungeon_id"])
 
             for d in all_dungeons:
                 cooldown = d.get("cooldown", 0)
