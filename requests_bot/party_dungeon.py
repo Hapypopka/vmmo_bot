@@ -436,6 +436,46 @@ class PartyDungeonClient:
         log_warning("[PARTY] Лидер: не удалось отправить приглашение")
         return False
 
+    def _find_feedback_url(self, html, action):
+        """Ищет URL feedbackAction в HTML и JS-контенте.
+
+        Уведомления рендерятся через JS (Ptx.Shadows.Notice.show),
+        поэтому URL лежит внутри escaped JSON: href=\"URL\"
+
+        Args:
+            html: HTML страницы
+            action: "accept", "decline", "enterDungeon"
+
+        Returns:
+            str|None: готовый URL или None
+        """
+        target = f"feedbackAction={action}"
+
+        # 1. Обычный HTML: href="...feedbackAction=accept..."
+        match = re.search(
+            rf'href="([^"]*{re.escape(target)}[^"]*)"',
+            html
+        )
+
+        # 2. JS-escaped (Notice.show JSON): href=\"...feedbackAction=accept...\"
+        if not match:
+            match = re.search(
+                rf'href=\\"([^"\\]*{re.escape(target)}[^"\\]*)\\"',
+                html
+            )
+
+        if not match:
+            return None
+
+        url = match.group(1).replace("&amp;", "&")
+        # Куки привязаны к vmmo.vten.ru, а уведомления содержат m.vten.ru
+        url = url.replace("https://m.vten.ru", self.base_url)
+
+        if not url.startswith("http"):
+            url = urljoin(self.client.current_url, url)
+
+        return url
+
     def enter_dungeon_feedback(self):
         """Нажимает 'Войти в подземелье' (feedbackAction=enterDungeon).
 
@@ -443,26 +483,18 @@ class PartyDungeonClient:
             bool: True если нажали
         """
         html = self.client.current_page or ""
-        match = re.search(
-            r'href="([^"]*feedbackAction=enterDungeon[^"]*)"',
-            html
-        )
-        if not match:
+        url = self._find_feedback_url(html, "enterDungeon")
+
+        if not url:
             # Пробуем обновить страницу
             self.client.get(self.client.current_url)
             time.sleep(0.5)
             html = self.client.current_page or ""
-            match = re.search(
-                r'href="([^"]*feedbackAction=enterDungeon[^"]*)"',
-                html
-            )
-        if not match:
+            url = self._find_feedback_url(html, "enterDungeon")
+
+        if not url:
             log_debug("[PARTY] Не найдена кнопка 'Войти в подземелье'")
             return False
-
-        url = match.group(1).replace("&amp;", "&")
-        if not url.startswith("http"):
-            url = urljoin(self.client.current_url, url)
 
         log_info("[PARTY] Клик 'Войти в подземелье'")
         self.client.get(url)
@@ -568,6 +600,9 @@ class PartyDungeonClient:
     def check_and_accept_invite(self, leader_username):
         """Мембер: проверяет приглашение в городе и принимает.
 
+        Уведомление рендерится через JS (Ptx.Shadows.Notice.show),
+        поэтому URL извлекается из escaped JSON в <script> теге.
+
         Returns:
             bool: True если приглашение принято
         """
@@ -576,22 +611,17 @@ class PartyDungeonClient:
         time.sleep(0.5)
         html = self.client.current_page or ""
 
-        # Ищем notice с приглашением
+        # Ищем notice с приглашением (текст есть в JS даже без рендеринга)
         if "приглашает тебя в банду" not in html:
             return False
 
-        # Ищем кнопку "Принять" (feedbackAction=accept)
-        match = re.search(
-            r'href="([^"]*feedbackAction=accept[^"]*)"',
-            html
-        )
-        if not match:
-            log_warning("[PARTY] Мембер: кнопка 'Принять' не найдена")
-            return False
+        log_info("[PARTY] Мембер: вижу приглашение!")
 
-        accept_url = match.group(1).replace("&amp;", "&")
-        if not accept_url.startswith("http"):
-            accept_url = urljoin(self.client.current_url, accept_url)
+        # Ищем URL принятия из HTML или JS-контента
+        accept_url = self._find_feedback_url(html, "accept")
+        if not accept_url:
+            log_warning("[PARTY] Мембер: URL 'Принять' не найден в HTML")
+            return False
 
         log_info(f"[PARTY] Мембер: принимаю приглашение от {leader_username}")
         self.client.get(accept_url)
