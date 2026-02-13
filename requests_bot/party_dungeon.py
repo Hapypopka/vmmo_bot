@@ -127,6 +127,35 @@ def is_in_party(profile):
     return False
 
 
+def cleanup_own_stale_party(profile):
+    """Если бот застрял в старой пати (не дошёл до лобби), выходим.
+
+    Ситуация: бот создал/вступил в пати, но был остановлен.
+    При перезапуске is_in_party() блокирует новую пати.
+    """
+    try:
+        with FileLock(PARTY_LOCK_FILE):
+            state = _load_state()
+            for p in state["parties"]:
+                if profile not in p.get("members", {}):
+                    continue
+                member = p["members"][profile]
+                status = member.get("status", "")
+                age = time.time() - member.get("joined_at", 0)
+
+                # Если бот в начальном статусе дольше 30с — зависшая пати
+                if status in ("creating", "waiting_invite") and age > 30:
+                    log_info(f"[PARTY] Очистка зависшей пати {p['id']} (status={status}, age={int(age)}с)")
+                    if p.get("leader") == profile:
+                        state["parties"] = [pp for pp in state["parties"] if pp["id"] != p["id"]]
+                    else:
+                        p["members"].pop(profile, None)
+                    _save_state(state)
+                    return
+    except Exception as e:
+        log_error(f"[PARTY] Ошибка cleanup_own_stale_party: {e}")
+
+
 def can_join_party(profile, dungeon_id):
     """Может ли бот участвовать в пати."""
     if is_on_cooldown(profile, dungeon_id):
@@ -680,6 +709,9 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
     """
     profile = get_profile_name()
     username = get_profile_username()
+
+    # Очистка зависших пати от предыдущих сессий
+    cleanup_own_stale_party(profile)
 
     if not can_join_party(profile, dungeon_id):
         return None
