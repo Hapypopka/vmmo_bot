@@ -19,7 +19,7 @@ from requests_bot.hell_games import HellGamesClient, fight_in_hell_games
 from requests_bot.survival_mines import SurvivalMinesClient, fight_in_survival_mines
 from requests_bot.arena import ArenaClient
 from requests_bot.mail import MailClient
-from requests_bot.daily_rewards import DailyRewardsClient
+from requests_bot.daily_rewards import DailyRewardsClient, LibraryClient
 from requests_bot.backpack import BackpackClient
 from requests_bot.popups import PopupsClient
 from requests_bot.pets import PetClient
@@ -127,6 +127,7 @@ class VMMOBot:
         self.dungeon_runner = DungeonRunner(self.client)
         self.mail_client = MailClient(self.client, profile=get_profile_name())
         self.daily_rewards_client = DailyRewardsClient(self.client)
+        self.library_client = LibraryClient(self.client)
         self.backpack_client = BackpackClient(self.client)
         self.popups_client = PopupsClient(self.client)
         self.pet_client = PetClient(self.client)
@@ -328,6 +329,16 @@ class VMMOBot:
             log_error(f"Ошибка ежедневных наград: {e}")
             log_debug(tb_module.format_exc())
             return None
+
+    def check_library(self):
+        """Проверяет и открывает бесплатную книгу в Великой Библиотеке"""
+        if not is_daily_rewards_enabled():
+            return None
+
+        try:
+            self.library_client.check_and_collect()
+        except Exception as e:
+            log_error(f"Ошибка библиотеки: {e}")
 
     def cleanup_backpack(self):
         """Очищает рюкзак если нужно"""
@@ -608,8 +619,9 @@ class VMMOBot:
         self.cleanup_backpack()
         self.check_and_collect_mail()
 
-        # 2.1. Проверяем ежедневные награды (если включены)
+        # 2.1. Проверяем ежедневные награды и библиотеку (если включены)
         self.check_and_collect_daily_rewards()
+        self.check_library()
 
         # 2.5. Проверяем крафт - используем единый метод
         self.check_craft()
