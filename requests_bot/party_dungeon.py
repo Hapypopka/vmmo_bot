@@ -12,7 +12,8 @@ import time
 from urllib.parse import urljoin
 
 from requests_bot.craft_prices import FileLock
-from requests_bot.config import get_profile_name, get_profile_username
+from requests_bot.config import get_profile_name, get_profile_username, get_party_dungeon_config
+from requests_bot.logger import log_info, log_debug, log_warning, log_error
 
 BASE_URL = "https://vmmo.vten.ru"
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -129,7 +130,7 @@ def can_join_party(profile, dungeon_id):
     return True
 
 
-def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossible"):
+def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossible", target_members=2):
     """Атомарно: найти FORMING пати и вступить, или создать новую.
 
     Returns:
@@ -138,8 +139,6 @@ def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossib
     dungeon_cfg = PARTY_DUNGEONS.get(dungeon_id)
     if not dungeon_cfg:
         return None
-
-    max_members = dungeon_cfg["max_members"]
 
     try:
         with FileLock(PARTY_LOCK_FILE):
@@ -155,7 +154,7 @@ def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossib
             for p in state["parties"]:
                 if (p.get("dungeon_id") == dungeon_id and
                         p.get("state") == "forming" and
-                        len(p.get("members", {})) < max_members):
+                        len(p.get("members", {})) < target_members):
                     p["members"][profile] = {
                         "role": "member",
                         "username": username,
@@ -185,13 +184,13 @@ def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossib
                 },
                 "created_at": time.time(),
                 "updated_at": time.time(),
-                "max_members": max_members,
+                "target_members": target_members,
             }
             state["parties"].append(new_party)
             _save_state(state)
             return {"id": party_id, "role": "leader", "party": new_party}
     except Exception as e:
-        print(f"[PARTY] Ошибка координации: {e}")
+        log_error(f"[PARTY] Ошибка координации: {e}")
         return None
 
 
@@ -206,7 +205,7 @@ def update_member_status(profile, party_id, status):
                 party["updated_at"] = time.time()
                 _save_state(state)
     except Exception as e:
-        print(f"[PARTY] Ошибка update_member_status: {e}")
+        log_error(f"[PARTY] Ошибка update_member_status: {e}")
 
 
 def update_party_state(party_id, new_state):
@@ -220,7 +219,7 @@ def update_party_state(party_id, new_state):
                 party["updated_at"] = time.time()
                 _save_state(state)
     except Exception as e:
-        print(f"[PARTY] Ошибка update_party_state: {e}")
+        log_error(f"[PARTY] Ошибка update_party_state: {e}")
 
 
 def get_party_members(party_id):
@@ -248,6 +247,9 @@ def wait_for_members(party_id, target_count, timeout=FORMING_TIMEOUT):
         members = get_party_members(party_id)
         if len(members) >= target_count:
             return "ready"
+        remaining = int(deadline - time.time())
+        if remaining % 15 == 0 and remaining > 0:
+            log_debug(f"[PARTY] Лидер: жду мемберов ({len(members)}/{target_count}), осталось {remaining}с")
         time.sleep(POLL_INTERVAL)
     return "timeout"
 
@@ -285,7 +287,7 @@ def leave_party(profile, party_id):
                 party["updated_at"] = time.time()
             _save_state(state)
     except Exception as e:
-        print(f"[PARTY] Ошибка leave_party: {e}")
+        log_error(f"[PARTY] Ошибка leave_party: {e}")
 
 
 def record_cooldown(profile, dungeon_id, seconds=4 * 3600):
@@ -297,7 +299,7 @@ def record_cooldown(profile, dungeon_id, seconds=4 * 3600):
             state.setdefault("cooldowns", {})[key] = time.time() + seconds
             _save_state(state)
     except Exception as e:
-        print(f"[PARTY] Ошибка record_cooldown: {e}")
+        log_error(f"[PARTY] Ошибка record_cooldown: {e}")
 
 
 def mark_completed(party_id):
@@ -329,7 +331,7 @@ class PartyDungeonClient:
         """
         # 1. Переходим на landing
         landing_url = f"{self.base_url}/dungeon/landing/{self.url_id}/{difficulty}"
-        print(f"[PARTY] Лидер: landing {landing_url}")
+        log_info(f"[PARTY] Лидер: landing {landing_url}")
         resp = self.client.get(landing_url)
         html = self.client.current_page or ""
 
@@ -339,24 +341,24 @@ class PartyDungeonClient:
             html
         )
         if not match:
-            print("[PARTY] Не найдена кнопка 'Войти' (createPartyOrEnterLink)")
+            log_warning("[PARTY] Не найдена кнопка 'Войти' (createPartyOrEnterLink)")
             return False
 
         enter_url = match.group(1).replace("&amp;", "&")
         if not enter_url.startswith("http"):
             enter_url = urljoin(self.client.current_url, enter_url)
 
-        print(f"[PARTY] Лидер: кликаю 'Войти'")
+        log_info("[PARTY] Лидер: кликаю 'Войти'")
         self.client.get(enter_url)
         time.sleep(0.5)
 
         # 3. Проверяем что в лобби
         current = self.client.current_url or ""
         if "/dungeon/lobby/" in current or "/dungeon/standby/" in current:
-            print(f"[PARTY] Лидер: в лобби!")
+            log_info("[PARTY] Лидер: в лобби!")
             return True
 
-        print(f"[PARTY] Лидер: не удалось попасть в лобби, URL: {current}")
+        log_warning(f"[PARTY] Лидер: не удалось попасть в лобби, URL: {current}")
         return False
 
     def invite_player(self, username):
@@ -370,14 +372,14 @@ class PartyDungeonClient:
         # 1. Ищем ссылку "Поиск игроков"
         match = re.search(r'href="([^"]*party/search[^"]*)"', html)
         if not match:
-            print("[PARTY] Не найдена кнопка 'Поиск игроков'")
+            log_warning("[PARTY] Не найдена кнопка 'Поиск игроков'")
             return False
 
         search_url = match.group(1).replace("&amp;", "&")
         if not search_url.startswith("http"):
             search_url = urljoin(self.client.current_url, search_url)
 
-        print(f"[PARTY] Лидер: 'Поиск игроков'")
+        log_info("[PARTY] Лидер: 'Поиск игроков'")
         self.client.get(search_url)
         time.sleep(0.5)
 
@@ -389,7 +391,7 @@ class PartyDungeonClient:
             html
         )
         if not form_match:
-            print("[PARTY] Не найдена форма inviteForm")
+            log_warning("[PARTY] Не найдена форма inviteForm")
             return False
 
         form_url = form_match.group(1).replace("&amp;", "&")
@@ -408,12 +410,7 @@ class PartyDungeonClient:
         if hidden_name:
             data[hidden_name] = ""
 
-        print(f"[PARTY] Лидер: приглашаю '{username}'")
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Wicket-Ajax": "true",
-            "Wicket-Ajax-BaseURL": self.client.current_url.replace(self.base_url, "").lstrip("/"),
-        }
+        log_info(f"[PARTY] Лидер: приглашаю '{username}'")
 
         resp = self.client.session.post(form_url, data=data, headers={
             **self.client.session.headers,
@@ -424,7 +421,7 @@ class PartyDungeonClient:
         # 4. Проверяем ответ
         resp_text = resp.text if resp else ""
         if "Приглашение отправлено" in resp_text:
-            print(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
+            log_info(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
             # Обновляем текущую страницу
             self.client.get(self.client.current_url)
             return True
@@ -433,10 +430,10 @@ class PartyDungeonClient:
         self.client.get(self.client.current_url)
         html = self.client.current_page or ""
         if "Приглашение отправлено" in html:
-            print(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
+            log_info(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
             return True
 
-        print(f"[PARTY] Лидер: не удалось отправить приглашение")
+        log_warning("[PARTY] Лидер: не удалось отправить приглашение")
         return False
 
     def enter_dungeon_feedback(self):
@@ -460,14 +457,14 @@ class PartyDungeonClient:
                 html
             )
         if not match:
-            print("[PARTY] Не найдена кнопка 'Войти в подземелье'")
+            log_debug("[PARTY] Не найдена кнопка 'Войти в подземелье'")
             return False
 
         url = match.group(1).replace("&amp;", "&")
         if not url.startswith("http"):
             url = urljoin(self.client.current_url, url)
 
-        print("[PARTY] Клик 'Войти в подземелье'")
+        log_info("[PARTY] Клик 'Войти в подземелье'")
         self.client.get(url)
         time.sleep(0.5)
         return True
@@ -491,7 +488,7 @@ class PartyDungeonClient:
             ajax_url = match.group(1).replace("\\", "")
             if not ajax_url.startswith("http"):
                 ajax_url = urljoin(self.client.current_url, ajax_url)
-            print(f"[PARTY] Лидер: 'Начать бой!' (AJAX)")
+            log_info("[PARTY] Лидер: 'Начать бой!' (AJAX)")
             headers = {
                 "Wicket-Ajax": "true",
                 "Wicket-Ajax-BaseURL": self.client.current_url.replace(self.base_url, "").lstrip("/"),
@@ -502,7 +499,7 @@ class PartyDungeonClient:
             # Проверяем редирект на combat
             self.client.get(self.client.current_url)
             if "/combat" in (self.client.current_url or ""):
-                print("[PARTY] Бой начался!")
+                log_info("[PARTY] Бой начался!")
                 return True
 
         # Фоллбек: ищем linkStartCombat в href
@@ -514,11 +511,11 @@ class PartyDungeonClient:
             url = match.group(1).replace("&amp;", "&")
             if not url.startswith("http"):
                 url = urljoin(self.client.current_url, url)
-            print(f"[PARTY] Лидер: 'Начать бой!' (href)")
+            log_info("[PARTY] Лидер: 'Начать бой!' (href)")
             self.client.get(url)
             time.sleep(1)
             if "/combat" in (self.client.current_url or ""):
-                print("[PARTY] Бой начался!")
+                log_info("[PARTY] Бой начался!")
                 return True
 
         # Фоллбек 2: строим URL из pageId
@@ -527,7 +524,7 @@ class PartyDungeonClient:
             page_id = page_match.group(1)
             lobby_base = self.client.current_url.split("?")[0]
             combat_url = f"{lobby_base}?{page_id}-1.IBehaviorListener.0-lobby-dungeon-blockStart-linkStartCombat&1={difficulty}"
-            print(f"[PARTY] Лидер: 'Начать бой!' (constructed URL)")
+            log_info("[PARTY] Лидер: 'Начать бой!' (constructed URL)")
             headers = {
                 "Wicket-Ajax": "true",
                 "Wicket-Ajax-BaseURL": self.client.current_url.replace(self.base_url, "").lstrip("/"),
@@ -537,10 +534,10 @@ class PartyDungeonClient:
             time.sleep(1)
             self.client.get(self.client.current_url)
             if "/combat" in (self.client.current_url or ""):
-                print("[PARTY] Бой начался!")
+                log_info("[PARTY] Бой начался!")
                 return True
 
-        print("[PARTY] Не удалось начать бой")
+        log_warning("[PARTY] Не удалось начать бой")
         return False
 
     def leave_lobby(self):
@@ -558,12 +555,12 @@ class PartyDungeonClient:
             url = match.group(1).replace("&amp;", "&")
             if not url.startswith("http"):
                 url = urljoin(self.client.current_url, url)
-            print("[PARTY] Покидаем банду")
+            log_info("[PARTY] Покидаем банду")
             self.client.get(url)
             time.sleep(0.5)
             return True
 
-        print("[PARTY] Кнопка 'Покинуть банду' не найдена")
+        log_debug("[PARTY] Кнопка 'Покинуть банду' не найдена")
         return False
 
     # === Мембер ===
@@ -581,7 +578,6 @@ class PartyDungeonClient:
 
         # Ищем notice с приглашением
         if "приглашает тебя в банду" not in html:
-            print("[PARTY] Мембер: приглашение не найдено")
             return False
 
         # Ищем кнопку "Принять" (feedbackAction=accept)
@@ -590,14 +586,14 @@ class PartyDungeonClient:
             html
         )
         if not match:
-            print("[PARTY] Мембер: кнопка 'Принять' не найдена")
+            log_warning("[PARTY] Мембер: кнопка 'Принять' не найдена")
             return False
 
         accept_url = match.group(1).replace("&amp;", "&")
         if not accept_url.startswith("http"):
             accept_url = urljoin(self.client.current_url, accept_url)
 
-        print(f"[PARTY] Мембер: принимаю приглашение от {leader_username}")
+        log_info(f"[PARTY] Мембер: принимаю приглашение от {leader_username}")
         self.client.get(accept_url)
         time.sleep(0.5)
 
@@ -611,12 +607,16 @@ class PartyDungeonClient:
             bool: True если приглашение принято и вошёл в данж
         """
         deadline = time.time() + timeout
+        attempt = 0
         while time.time() < deadline:
+            attempt += 1
+            if attempt == 1:
+                log_info(f"[PARTY] Мембер: жду инвайт от {leader_username} ({timeout}с)...")
             if self.check_and_accept_invite(leader_username):
                 return True
             time.sleep(POLL_INTERVAL)
 
-        print(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с)")
+        log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с)")
         return False
 
 
@@ -646,8 +646,12 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
     if not dungeon_cfg:
         return None
 
+    # Кол-во мемберов берём из конфига профиля (по умолчанию 2)
+    party_cfg = get_party_dungeon_config()
+    target_members = party_cfg.get("members", 2)
+
     # Пробуем вступить или создать
-    result = try_join_or_create_party(profile, username, dungeon_id, difficulty)
+    result = try_join_or_create_party(profile, username, dungeon_id, difficulty, target_members)
     if not result:
         return None
 
@@ -656,13 +660,13 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
     party = result["party"]
     party_client = PartyDungeonClient(client, dungeon_id)
 
-    print(f"[PARTY] {username}: role={role}, party={party_id}")
+    log_info(f"[PARTY] {username}: role={role}, party={party_id}")
 
     try:
         if role == "leader":
             return _run_as_leader(
                 profile, username, party_id, party_client,
-                dungeon_runner, dungeon_id, difficulty, dungeon_cfg
+                dungeon_runner, dungeon_id, difficulty, target_members
             )
         else:
             leader_username = party.get("leader_username", "")
@@ -671,7 +675,7 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
                 dungeon_runner, dungeon_id, leader_username
             )
     except Exception as e:
-        print(f"[PARTY] Ошибка: {e}")
+        log_error(f"[PARTY] Ошибка: {e}")
         import traceback
         traceback.print_exc()
         party_client.leave_lobby()
@@ -679,9 +683,8 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
         return "error"
 
 
-def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, dungeon_id, difficulty, dungeon_cfg):
+def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, dungeon_id, difficulty, target_members):
     """Логика лидера."""
-    max_members = dungeon_cfg["max_members"]
 
     # 1. Входим в данж (создаём пати в игре)
     if not party_client.enter_as_leader(difficulty):
@@ -692,11 +695,11 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
     update_party_state(party_id, "forming")
 
     # 2. Ждём пока мемберы появятся в JSON
-    print(f"[PARTY] Лидер: жду {max_members - 1} мемберов...")
-    wait_result = wait_for_members(party_id, max_members, timeout=FORMING_TIMEOUT)
+    log_info(f"[PARTY] Лидер: жду {target_members - 1} мемберов...")
+    wait_result = wait_for_members(party_id, target_members, timeout=FORMING_TIMEOUT)
 
     if wait_result != "ready":
-        print("[PARTY] Лидер: таймаут сбора, отменяю")
+        log_warning("[PARTY] Лидер: таймаут сбора, отменяю")
         party_client.leave_lobby()
         leave_party(profile, party_id)
         return "timeout"
@@ -712,19 +715,19 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
         if not mem_username:
             continue
 
-        print(f"[PARTY] Лидер: инвайчу {mem_username}")
+        log_info(f"[PARTY] Лидер: инвайчу {mem_username}")
 
         # Возвращаемся в лобби для инвайта (если ушли на /party/search)
         if not party_client.invite_player(mem_username):
-            print(f"[PARTY] Лидер: не удалось пригласить {mem_username}")
+            log_warning(f"[PARTY] Лидер: не удалось пригласить {mem_username}")
             # Продолжаем с остальными
 
     # 4. Ждём пока все мемберы зайдут в лобби (status=in_lobby)
-    print("[PARTY] Лидер: жду всех в лобби...")
+    log_info("[PARTY] Лидер: жду всех в лобби...")
     lobby_result = wait_for_all_in_lobby(party_id, timeout=LOBBY_TIMEOUT)
 
     if lobby_result != "ready":
-        print("[PARTY] Лидер: не все зашли в лобби, отменяю")
+        log_warning("[PARTY] Лидер: не все зашли в лобби, отменяю")
         party_client.leave_lobby()
         leave_party(profile, party_id)
         return "timeout"
@@ -735,10 +738,10 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
 
     # 6. Начинаем бой
     update_party_state(party_id, "ready")
-    print("[PARTY] Лидер: все в лобби, начинаю бой!")
+    log_info("[PARTY] Лидер: все в лобби, начинаю бой!")
 
     if not party_client.start_combat(difficulty):
-        print("[PARTY] Лидер: не удалось начать бой")
+        log_warning("[PARTY] Лидер: не удалось начать бой")
         party_client.leave_lobby()
         leave_party(profile, party_id)
         return "error"
@@ -752,16 +755,14 @@ def _run_as_member(profile, username, party_id, party_client, dungeon_runner, du
     """Логика мембера."""
 
     # 1. Ждём приглашение и принимаем
-    print(f"[PARTY] Мембер {username}: жду инвайт от {leader_username}")
-
     if not party_client.wait_and_accept_invite(leader_username, timeout=INVITE_TIMEOUT):
-        print("[PARTY] Мембер: не получил инвайт")
+        log_warning("[PARTY] Мембер: не получил инвайт")
         leave_party(profile, party_id)
         return "timeout"
 
     # 2. Обновляем статус — мы в лобби
     update_member_status(profile, party_id, "in_lobby")
-    print(f"[PARTY] Мембер {username}: в лобби!")
+    log_info(f"[PARTY] Мембер {username}: в лобби!")
 
     # 3. Ждём начала боя (лидер стартует)
     deadline = time.time() + LOBBY_TIMEOUT
@@ -774,13 +775,13 @@ def _run_as_member(profile, username, party_id, party_client, dungeon_runner, du
         party_client.client.get(party_client.client.current_url)
         time.sleep(POLL_INTERVAL)
     else:
-        print("[PARTY] Мембер: таймаут ожидания боя")
+        log_warning("[PARTY] Мембер: таймаут ожидания боя")
         party_client.leave_lobby()
         leave_party(profile, party_id)
         return "timeout"
 
     # 4. Бой
-    print(f"[PARTY] Мембер {username}: бой начался!")
+    log_info(f"[PARTY] Мембер {username}: бой начался!")
     return _fight_dungeon(profile, party_id, party_client, dungeon_runner, dungeon_id)
 
 
@@ -802,5 +803,5 @@ def _fight_dungeon(profile, party_id, party_client, dungeon_runner, dungeon_id):
     # Помечаем завершение
     mark_completed(party_id)
 
-    print(f"[PARTY] {profile}: бой окончен — {result}, {actions} действий")
+    log_info(f"[PARTY] {profile}: бой окончен — {result}, {actions} действий")
     return result

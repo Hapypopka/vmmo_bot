@@ -326,14 +326,16 @@ def get_party_dungeon_config():
     Формат в config.json:
     "party_dungeon_enabled": true,
     "party_dungeon_id": "dng:Underlight",
-    "party_dungeon_difficulty": "impossible"
+    "party_dungeon_difficulty": "impossible",
+    "party_dungeon_members": 2
 
     Returns:
-        dict: {"dungeon_id": str, "difficulty": str}
+        dict: {"dungeon_id": str, "difficulty": str, "members": int}
     """
     return {
         "dungeon_id": _profile_config.get("party_dungeon_id", "dng:Underlight"),
         "difficulty": _profile_config.get("party_dungeon_difficulty", "impossible"),
+        "members": _profile_config.get("party_dungeon_members", 2),
     }
 
 
