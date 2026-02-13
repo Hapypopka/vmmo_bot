@@ -14,6 +14,7 @@ from urllib.parse import urljoin
 
 from requests_bot.config import add_protected_item
 import requests_bot.config as config  # Для динамического доступа к PROFILE_DIR
+from requests_bot.logger import log_info, log_debug, log_error, log_warning
 
 BASE_URL = "https://vmmo.vten.ru"
 
@@ -526,10 +527,10 @@ class LibraryClient:
             bool: True если книга открыта
         """
         if is_library_collected_today():
-            print("[LIBRARY] Книга уже собрана сегодня (кэш)")
+            log_debug("[LIBRARY] Книга уже собрана сегодня (кэш)")
             return False
 
-        print("[LIBRARY] Проверяю Великую Библиотеку...")
+        log_info("[LIBRARY] Проверяю Великую Библиотеку...")
 
         # Переходим на страницу библиотеки
         resp = self.client.get(f"{BASE_URL}/dailygifts")
@@ -543,17 +544,17 @@ class LibraryClient:
         )
 
         if not key_match:
-            print("[LIBRARY] Счётчик ключей не найден, пропускаю")
+            log_warning("[LIBRARY] Счётчик ключей не найден, пропускаю")
             # Не помечаем как собранное — может страница не загрузилась
             return False
 
         keys = int(key_match.group(1))
         if keys < 1:
-            print("[LIBRARY] Ключей: 0, пропускаю (клик без ключа стоит 50 золота!)")
+            log_info("[LIBRARY] Ключей: 0, пропускаю (клик без ключа стоит 50 золота!)")
             mark_library_collected()
             return False
 
-        print(f"[LIBRARY] Ключей: {keys}")
+        log_info(f"[LIBRARY] Ключей: {keys}")
 
         # Ищем ссылки на книги
         book_links = re.findall(
@@ -561,7 +562,7 @@ class LibraryClient:
             html
         )
         if not book_links:
-            print("[LIBRARY] Книги не найдены на странице")
+            log_warning("[LIBRARY] Книги не найдены на странице")
             return False
 
         # Выбираем случайную книгу
@@ -572,11 +573,11 @@ class LibraryClient:
         num_match = re.search(r'num=(\d+)', book_href)
         book_num = num_match.group(1) if num_match else "?"
 
-        print(f"[LIBRARY] Открываю книгу #{book_num}...")
+        log_info(f"[LIBRARY] Открываю книгу #{book_num}...")
         self.client.get(book_href)
 
         mark_library_collected()
-        print(f"[LIBRARY] Книга #{book_num} открыта!")
+        log_info(f"[LIBRARY] Книга #{book_num} открыта!")
         return True
 
 
