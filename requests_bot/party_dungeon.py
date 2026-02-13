@@ -43,6 +43,12 @@ PARTY_DUNGEONS = {
         "max_members": 4,
         "tab": "tab2",
     },
+    "dng:CitadelHolding": {
+        "name": "Крепость Холдинг",
+        "url_id": "CitadelHolding",
+        "max_members": 4,
+        "tab": "tab2",
+    },
 }
 
 
@@ -627,7 +633,13 @@ class PartyDungeonClient:
         self.client.get(accept_url)
         time.sleep(0.5)
 
-        # После accept появляется "Войти в подземелье"
+        # После accept сервер может редиректить прямо в лобби
+        current = self.client.current_url or ""
+        if "/dungeon/lobby/" in current or "/dungeon/standby/" in current:
+            log_info("[PARTY] Мембер: уже в лобби после accept!")
+            return True
+
+        # Иначе ищем кнопку "Войти в подземелье"
         return self.enter_dungeon_feedback()
 
     def wait_and_accept_invite(self, leader_username, timeout=INVITE_TIMEOUT):
