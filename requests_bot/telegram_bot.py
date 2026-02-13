@@ -1066,6 +1066,7 @@ def toggle_setting(profile: str, setting: str) -> tuple:
         "arena_enabled": False,
         "hell_games_enabled": False,
         "valentine_event_enabled": False,
+        "party_dungeon_enabled": False,
         "survival_mines_enabled": False,
         "iron_craft_enabled": False,
         "pet_resurrection_enabled": False,
@@ -1102,6 +1103,7 @@ def format_user_settings(profile: str) -> str:
     hell = "✅" if cfg.get("hell_games_enabled", False) else "❌"
     arena = "✅" if cfg.get("arena_enabled", False) else "❌"
     valentine = "✅" if cfg.get("valentine_event_enabled", False) else "❌"
+    party_dng = "✅" if cfg.get("party_dungeon_enabled", False) else "❌"
     craft = "✅" if cfg.get("iron_craft_enabled", False) else "❌"
     mines = "✅" if cfg.get("survival_mines_enabled", False) else "❌"
 
@@ -1118,6 +1120,7 @@ def format_user_settings(profile: str) -> str:
         f"🔥 Адские игры: {hell}\n"
         f"⚔️ Арена: {arena}\n"
         f"💘 Валентин: {valentine}\n"
+        f"👥 Пати-данж: {party_dng}\n"
         f"⚒️ Крафт: {craft}\n"
         f"⛏️ Шахта: {mines}\n\n"
         f"⏱️ Кулдауны: {cd_list}"
@@ -1166,6 +1169,7 @@ def get_settings_keyboard(profile: str):
             InlineKeyboardButton(f"🎯 {arena_max} боёв", callback_data=f"arena_max_{profile}")
         ],
         [InlineKeyboardButton(f"{icon('valentine_event_enabled')} 💘 Валентин ивент", callback_data=f"toggle_{profile}_valentine_event_enabled")],
+        [InlineKeyboardButton(f"{icon('party_dungeon_enabled')} 👥 Пати-данж", callback_data=f"toggle_{profile}_party_dungeon_enabled")],
         [
             InlineKeyboardButton(f"{icon('iron_craft_enabled')} Крафт", callback_data=f"toggle_{profile}_iron_craft_enabled"),
             InlineKeyboardButton("⚙️ Настр.", callback_data=f"craft_settings_{profile}")
@@ -2137,6 +2141,7 @@ def create_new_profile(profile: str, username: str, password: str, cooldowns: di
             "only_dungeons": ["dng:dSanctuary", "dng:dHellRuins"],
             "arena_enabled": False,
             "valentine_event_enabled": False,
+            "party_dungeon_enabled": False,
             "hell_games_enabled": False,
             "survival_mines_enabled": False,
             "iron_craft_enabled": True,
