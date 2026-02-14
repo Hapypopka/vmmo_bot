@@ -713,7 +713,17 @@ class DungeonRunner:
         Используется для Порогов Шэдоу Гарда — после 2го этапа не нужно идти на 3й."""
         if not html:
             return False
-        return bool(re.search(r'class="stage\s+_list-el-last\s+cur"', html))
+        # Ищем все элементы с классом stage и логируем для отладки
+        stage_classes = re.findall(r'class="(stage[^"]*)"', html)
+        if stage_classes:
+            log_debug(f"[SHADOW] stage classes found: {stage_classes}")
+        # Гибкая проверка: элемент должен содержать ВСЕ три класса в ЛЮБОМ порядке
+        for classes_str in stage_classes:
+            classes = classes_str.split()
+            if 'stage' in classes and '_list-el-last' in classes and 'cur' in classes:
+                log_info("[SHADOW] Последний этап пройден (cur на _list-el-last)")
+                return True
+        return False
 
     def _find_leave_party_url(self):
         """Ищет URL для кнопки 'Покинуть банду' в лобби"""
@@ -1102,16 +1112,20 @@ class DungeonRunner:
         if "/dungeon/step/" in url:
             # Пороги Шэдоу Гарда: после последнего полезного этапа выходим
             # (3й этап бесконечный и бесполезный)
-            if self.current_dungeon_id == "dng:ShadowGuard" and self._is_last_stage_complete(html):
-                print("[*] ShadowGuard: последний полезный этап пройден, выходим")
-                self.client.get(f"{self.base_url}/city")
-                time.sleep(0.5)
-                leave_url = self._find_leave_party_url()
-                if leave_url:
-                    print("[*] Покидаем банду")
-                    self.client.get(leave_url)
+            if self.current_dungeon_id == "dng:ShadowGuard":
+                log_debug(f"[SHADOW] На step-странице, проверяю этапы... URL: {url}")
+                if self._is_last_stage_complete(html):
+                    log_info("[SHADOW] ShadowGuard: последний полезный этап пройден, выходим")
+                    self.client.get(f"{self.base_url}/city")
                     time.sleep(0.5)
-                return "completed"
+                    leave_url = self._find_leave_party_url()
+                    if leave_url:
+                        log_info("[SHADOW] Покидаем банду")
+                        self.client.get(leave_url)
+                        time.sleep(0.5)
+                    return "completed"
+                else:
+                    log_debug("[SHADOW] Ещё не последний этап, продолжаем")
 
             # Это интерстеп страница - сначала восстанавливаем ХП, потом продолжаем
             self.try_restore_health()
