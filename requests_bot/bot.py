@@ -42,6 +42,11 @@ from requests_bot.config import (
     is_party_dungeon_enabled, get_party_dungeon_config,
 )
 from requests_bot.valentine_event import run_valentine_dungeons, VALENTINE_DUNGEONS
+
+
+class AutoRestartException(Exception):
+    """Бросается когда бот должен перезапуститься (re-login + новая сессия)"""
+    pass
 from requests_bot.party_dungeon import run_party_dungeon
 from requests_bot.sell_resources import sell_resources
 from requests_bot.logger import (
@@ -1034,7 +1039,7 @@ class VMMOBot:
                 if check_auto_recovery():
                     username = get_profile_username()
                     telegram_notify(f"🔄 [{username}] Авторестарт: нет прогресса 20+ мин")
-                    trigger_auto_restart()
+                    raise AutoRestartException("Нет прогресса 20+ мин")
 
                 if max_cycles and cycle >= max_cycles:
                     log_info(f"Достигнут лимит циклов ({max_cycles})")
@@ -1114,27 +1119,37 @@ def main():
             pass
     atexit.register(cleanup)
 
-    bot = VMMOBot()
+    max_restarts = 10
+    restart_count = 0
 
-    try:
-        if args.test:
-            bot.run(max_cycles=1)
-        else:
-            bot.run(max_cycles=args.cycles)
-    except KeyboardInterrupt:
-        log_info("Бот остановлен пользователем (Ctrl+C)")
-    except Exception as e:
-        # Глобальный обработчик - ловит ВСЕ необработанные ошибки
-        log_error(f"FATAL ERROR: {e}")
-        log_error(tb_module.format_exc())
-
-        # Пробуем авторестарт при фатальной ошибке
+    while restart_count <= max_restarts:
+        bot = VMMOBot()
         try:
-            from requests_bot.watchdog import trigger_auto_restart
-            log_info("Пробую авторестарт после фатальной ошибки...")
-            trigger_auto_restart()
-        except Exception as restart_err:
-            log_error(f"Авторестарт не удался: {restart_err}")
+            if args.test:
+                bot.run(max_cycles=1)
+            else:
+                bot.run(max_cycles=args.cycles)
+            break  # Нормальный выход
+        except KeyboardInterrupt:
+            log_info("Бот остановлен пользователем (Ctrl+C)")
+            break
+        except AutoRestartException as e:
+            restart_count += 1
+            log_info(f"[AUTO-RESTART] {e} — перезапуск #{restart_count}/{max_restarts}")
+            time.sleep(5)
+            continue
+        except Exception as e:
+            # Глобальный обработчик - ловит ВСЕ необработанные ошибки
+            restart_count += 1
+            log_error(f"FATAL ERROR: {e}")
+            log_error(tb_module.format_exc())
+            if restart_count <= max_restarts:
+                log_info(f"[AUTO-RESTART] Перезапуск после ошибки #{restart_count}/{max_restarts}")
+                time.sleep(10)
+                continue
+            else:
+                log_error(f"Достигнут лимит рестартов ({max_restarts}), выход")
+                break
 
 
 if __name__ == "__main__":
