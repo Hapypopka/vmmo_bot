@@ -85,7 +85,7 @@ FINAL_RECIPES = [
 ]
 
 # Рецепты исключённые из автовыбора (слишком долгие/невыгодные)
-AUTO_SELECT_EXCLUDED = {"platinumBar", "bronze"}
+AUTO_SELECT_EXCLUDED = {"platinumBar", "bronze", "copperBar"}
 
 
 # ============================================
