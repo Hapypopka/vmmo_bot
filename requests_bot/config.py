@@ -35,7 +35,7 @@ LOGIN_URL = f"{BASE_URL}/login"
 WATCHDOG_TIMEOUT = 90  # Секунд без активности = застревание
 WATCHDOG_CYCLE_THRESHOLD = 5  # Срабатываний подряд = hard reset
 NO_PROGRESS_LIMIT = 240  # Атак без прогресса
-AUTO_RECOVERY_TIMEOUT = 1200  # 20 минут без прогресса = авторестарт бота
+AUTO_RECOVERY_TIMEOUT = 2400  # 40 минут без прогресса = авторестарт бота
 
 # Backpack
 BACKPACK_THRESHOLD = 18  # Порог для очистки рюкзака (из 28 слотов)
