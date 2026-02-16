@@ -51,7 +51,7 @@ CRAFT_CACHE_TTL = 14400  # 4 часа - кэш цен аукциона
 
 # Dungeon action limits (Brutal difficulty = longer fights)
 DUNGEON_ACTION_LIMITS = {
-    "dng:ShadowGuard": 500,
+    "dng:ShadowGuard": 700,
     "dng:Barony": 500,
     "dng:HighDungeon": 500,
     "default": 500,
