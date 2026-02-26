@@ -340,7 +340,7 @@ def get_party_dungeon_config():
 
 
 def is_valentine_event_enabled():
-    """Проверяет, включен ли ивент Дня Святого Валентина для текущего профиля"""
+    """Проверяет, включен ли февральский ивент-данж для текущего профиля"""
     return _profile_config.get("valentine_event_enabled", False)
 
 

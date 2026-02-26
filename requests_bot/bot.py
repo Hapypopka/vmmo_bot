@@ -443,15 +443,15 @@ class VMMOBot:
 
     def check_valentine_dungeons(self):
         """
-        Проверяет и проходит Valentine данжены если доступны.
+        Проверяет и проходит ивент-данжены если доступны.
         Вызывается как в начале цикла, так и во время ожидания КД обычных данжей.
 
         Returns:
             int: Количество пройденных данженов
         """
-        valentine_enabled = is_valentine_event_enabled()
-        log_debug(f"[VALENTINE] check_valentine_dungeons вызван, enabled={valentine_enabled}")
-        if not valentine_enabled:
+        event_enabled = is_valentine_event_enabled()
+        log_debug(f"[EVENT] check_valentine_dungeons вызван, enabled={event_enabled}")
+        if not event_enabled:
             return 0
 
         completed = 0
@@ -476,14 +476,14 @@ class VMMOBot:
                 result, cd = try_enter_dungeon(self.client, dungeon_id)
 
                 if result == "on_cooldown":
-                    log_debug(f"[VALENTINE] {name} на КД ({cd // 60}м)")
+                    log_debug(f"[EVENT] {name} на КД ({cd // 60}м)")
                     continue
                 elif result in ("error", "skipped"):
                     continue
                 elif result == "entered":
                     diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал"}.get(difficulty, difficulty)
-                    set_activity(f"💘 {name} ({diff_name})")
-                    log_info(f"[VALENTINE] Бой в {name} ({diff_name})...")
+                    set_activity(f"🌲 {name} ({diff_name})")
+                    log_info(f"[EVENT] Бой в {name} ({diff_name})...")
                     self.dungeon_runner.current_dungeon_id = dungeon_id
                     self.dungeon_runner.combat_url = self.client.current_url
                     fight_result, actions = self.dungeon_runner.fight_until_done()
@@ -492,7 +492,7 @@ class VMMOBot:
                     if fight_result == "completed":
                         self.stats["dungeons_completed"] += 1
                         mark_progress("dungeon")
-                        log_info(f"[VALENTINE] {name} пройден! ({actions} действий)")
+                        log_info(f"[EVENT] {name} пройден! ({actions} действий)")
                         set_cooldown_after_completion(self.client, dungeon_id)
                         completed += 1
                         self.check_craft()
@@ -501,10 +501,10 @@ class VMMOBot:
                         # Понижаем сложность
                         new_diff, should_skip = record_death(dungeon_id, name, difficulty)
                         if should_skip:
-                            log_warning(f"[VALENTINE] Смерть в {name} → СКИП")
+                            log_warning(f"[EVENT] Смерть в {name} → СКИП")
                         else:
                             new_diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал"}.get(new_diff, new_diff)
-                            log_warning(f"[VALENTINE] Смерть в {name} → {new_diff_name}")
+                            log_warning(f"[EVENT] Смерть в {name} → {new_diff_name}")
                         self.dungeon_runner.resurrect()
                         self.check_and_resurrect_pet()
                         try:
@@ -514,7 +514,7 @@ class VMMOBot:
                             log_debug(f"Ошибка ремонта: {e}")
                         self.check_craft()
         except Exception as e:
-            log_error(f"[VALENTINE] Ошибка: {e}")
+            log_error(f"[EVENT] Ошибка: {e}")
             self.stats["errors"] += 1
 
         return completed
@@ -631,7 +631,7 @@ class VMMOBot:
         # 2.5. Проверяем крафт - используем единый метод
         self.check_craft()
 
-        # 2.6. Ивент Дня Святого Валентина (если включен)
+        # 2.6. Ивент-данж Древний Лес (если включен)
         self.check_valentine_dungeons()
 
         # 2.7. Пати-данж (если включён)
@@ -651,10 +651,10 @@ class VMMOBot:
             log_debug("Данжены отключены для этого профиля")
 
         if not dungeons:
-            # Все на КД - проверяем Valentine ивент (может КД уже спал)
+            # Все на КД - проверяем ивент-данж (может КД уже спал)
             valentine_done = self.check_valentine_dungeons()
             if valentine_done > 0:
-                log_info(f"[VALENTINE] Пройдено {valentine_done} ивент-данженов во время КД")
+                log_info(f"[EVENT] Пройдено {valentine_done} ивент-данженов во время КД")
 
             # Выбираем чем заняться
             min_cd, _ = self.get_min_dungeon_cooldown()
@@ -678,7 +678,7 @@ class VMMOBot:
                 except Exception as e:
                     log_error(f"Ошибка Заброшенной Шахты: {e}")
                     self.stats["errors"] += 1
-                # После Survival Mines проверяем крафт и Valentine
+                # После Survival Mines проверяем крафт и ивент
                 self.check_craft()
                 self.check_valentine_dungeons()
 
@@ -718,7 +718,7 @@ class VMMOBot:
                             except Exception as e:
                                 log_error(f"Ошибка Hell Games: {e}")
                                 self.stats["errors"] += 1
-                            # После Hell Games проверяем крафт и Valentine
+                            # После Hell Games проверяем крафт и ивент
                             self.check_craft()
                             self.check_valentine_dungeons()
                 else:
@@ -747,7 +747,7 @@ class VMMOBot:
                 except Exception as e:
                     log_error(f"Ошибка Hell Games: {e}")
                     self.stats["errors"] += 1
-                # После Hell Games проверяем крафт и Valentine
+                # После Hell Games проверяем крафт и ивент
                 self.check_craft()
                 self.check_valentine_dungeons()
 
