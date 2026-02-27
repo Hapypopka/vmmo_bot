@@ -388,6 +388,11 @@ def is_daily_rewards_enabled():
     return _profile_config.get("daily_rewards_enabled", True)  # По умолчанию ВКЛ
 
 
+def is_admin_mail_enabled():
+    """Проверяет, включен ли автосбор писем от Администрации"""
+    return _profile_config.get("admin_mail_enabled", True)  # По умолчанию ВКЛ
+
+
 def is_iron_craft_enabled():
     """Проверяет, включен ли крафт железа для текущего профиля"""
     return _profile_config.get("iron_craft_enabled", False)

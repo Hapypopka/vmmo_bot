@@ -925,6 +925,7 @@ def create_profile(username, password):
         "hell_games_enabled": False,
         "survival_mines_enabled": False,
         "pet_resurrection_enabled": False,
+        "admin_mail_enabled": True,
         "iron_craft_enabled": False,
         "craft_mode": "iron",
         "iron_craft_targets": {"ore": 5, "iron": 5, "bars": 5},
@@ -1309,6 +1310,7 @@ def api_toggle_setting(profile, setting):
         "survival_mines_enabled": False,
         "iron_craft_enabled": False,
         "pet_resurrection_enabled": False,
+        "admin_mail_enabled": True,
         "is_light_side": False,
     }
     config = get_config(profile)

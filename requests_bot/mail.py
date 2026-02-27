@@ -11,13 +11,9 @@ from urllib.parse import urljoin
 from requests_bot.sales_tracker import record_sale, record_expired
 from requests_bot.backpack import add_to_auction_blacklist
 from requests_bot.auction import is_blacklist_exempt
+from requests_bot.config import is_admin_mail_enabled
 
 BASE_URL = "https://vmmo.vten.ru"
-
-# Игнорируемые отправители (сообщения остаются непрочитанными)
-IGNORED_SENDERS = [
-    "Администрация",
-]
 
 
 class MailClient:
@@ -58,7 +54,7 @@ class MailClient:
     def find_active_messages(self):
         """
         Находит активные (непрочитанные) письма.
-        Игнорирует письма от отправителей из IGNORED_SENDERS.
+        Пропускает письма от Администрации если admin_mail_enabled=False.
 
         Returns:
             list: Список словарей с информацией о письмах
@@ -66,6 +62,8 @@ class MailClient:
         soup = self.client.soup()
         if not soup:
             return []
+
+        skip_admin = not is_admin_mail_enabled()
 
         messages = []
         # Ищем все письма
@@ -81,10 +79,9 @@ class MailClient:
 
             # Проверяем отправителя - первый span содержит имя
             sender_span = link.select_one("span")
-            if sender_span:
+            if sender_span and skip_admin:
                 sender = sender_span.get_text(strip=True)
-                # Пропускаем игнорируемых отправителей
-                if sender in IGNORED_SENDERS:
+                if sender == "Администрация":
                     print(f"[MAIL] Пропускаю письмо от '{sender}'")
                     continue
 
@@ -250,7 +247,6 @@ class MailClient:
     def process_mailbox(self, on_backpack_full=None):
         """
         Обрабатывает все письма в почте.
-        Игнорирует письма от IGNORED_SENDERS.
 
         Args:
             on_backpack_full: Callback при переполнении рюкзака

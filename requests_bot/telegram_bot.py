@@ -1070,6 +1070,7 @@ def toggle_setting(profile: str, setting: str) -> tuple:
         "survival_mines_enabled": False,
         "iron_craft_enabled": False,
         "pet_resurrection_enabled": False,
+        "admin_mail_enabled": True,
         "is_light_side": False,
     }
     settings = get_user_settings(profile)
@@ -1179,6 +1180,7 @@ def get_settings_keyboard(profile: str):
             InlineKeyboardButton("⚙️ Настр.", callback_data=f"mines_settings_{profile}")
         ],
         [InlineKeyboardButton(f"{icon('pet_resurrection_enabled')} Воскр. питомца", callback_data=f"toggle_{profile}_pet_resurrection_enabled")],
+        [InlineKeyboardButton(f"{icon('admin_mail_enabled', True)} 📬 Почта админ.", callback_data=f"toggle_{profile}_admin_mail_enabled")],
         [InlineKeyboardButton("💎 Продажа ресурсов", callback_data=f"sell_resources_{profile}")],
         [InlineKeyboardButton(f"🎒 Рюкзак: {backpack_th} слотов", callback_data=f"backpack_th_{profile}")],
         [InlineKeyboardButton("⏱️ Кулдауны скиллов", callback_data=f"cooldowns_{profile}")],
