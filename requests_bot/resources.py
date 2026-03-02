@@ -208,8 +208,15 @@ def update_resources(resources):
         start_session(resources)
         return
 
-    # Обновляем текущие значения
-    data["current_session"]["current"] = resources.copy()
+    # Защита от неполного парса — не перезаписывать если новых ресурсов меньше
+    prev = data["current_session"].get("current", {})
+    if prev and len(resources) < len(prev):
+        # Мержим: обновляем только те ресурсы что пришли, остальные оставляем
+        merged = prev.copy()
+        merged.update(resources)
+        data["current_session"]["current"] = merged
+    else:
+        data["current_session"]["current"] = resources.copy()
     data["current_session"]["last_update"] = datetime.now().isoformat()
 
     _save_resources_data(data)
