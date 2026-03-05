@@ -151,6 +151,16 @@
     </div>
 </div>
 
+<!-- Пати-боты -->
+{% if party_bots %}
+<h2 class="section-title">👥 Пати</h2>
+<div class="grid grid-3">
+    {% for bot in party_bots %}
+    {{ render_bot_card(bot) }}
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Мулы - Сворачиваемая секция -->
 {% if mules %}
 <div class="mules-section">
@@ -262,16 +272,6 @@
         {{ render_bot_card(bot, rank) }}
         {% endfor %}
     </div>
-</div>
-{% endif %}
-
-<!-- Пати-боты -->
-{% if party_bots %}
-<h2 class="section-title mt-2">👥 Пати</h2>
-<div class="grid grid-3">
-    {% for bot in party_bots %}
-    {{ render_bot_card(bot) }}
-    {% endfor %}
 </div>
 {% endif %}
 
