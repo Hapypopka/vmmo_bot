@@ -545,8 +545,11 @@ class VMMOBot:
             log_info(f"[PARTY] Найдена forming пати {forming['id']} для {dungeon_id}, присоединяюсь")
         elif role == "leader":
             # 2. Только лидер создаёт новую пати — ищем данж без КД
+            target_members = cfg.get("members", 2)
             dungeon_id = None
-            for did in PARTY_DUNGEONS:
+            for did, dcfg in PARTY_DUNGEONS.items():
+                if dcfg.get("max_members", 5) < target_members:
+                    continue  # Данж на меньше участников чем в пати
                 if not is_on_cooldown(profile, did):
                     dungeon_id = did
                     break

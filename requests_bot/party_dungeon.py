@@ -31,17 +31,67 @@ POLL_INTERVAL = 5          # Интервал проверки файла
 
 # Пати-данжены
 PARTY_DUNGEONS = {
-    "dng:14feb_DungeonForest": {
-        "name": "Древний Лес",
-        "url_id": "14feb_DungeonForest",
+    # Tab2: 1-29 уровень (все данжи)
+    "dng:dSanctuary": {
+        "name": "Святилище Накрила",
+        "url_id": "dSanctuary",
         "max_members": 2,
-        "tab": "event",
+        "tab": "tab2",
+    },
+    "dng:dHellRuins": {
+        "name": "Адские Развалины",
+        "url_id": "dHellRuins",
+        "max_members": 3,
+        "tab": "tab2",
+    },
+    "dng:RestMonastery": {
+        "name": "Монастырь Покоя",
+        "url_id": "RestMonastery",
+        "max_members": 4,
+        "tab": "tab2",
+    },
+    "dng:Underlight": {
+        "name": "Логово Кобольдов",
+        "url_id": "Underlight",
+        "max_members": 4,
+        "tab": "tab2",
+    },
+    "dng:HighDungeon": {
+        "name": "Высокая Темница",
+        "url_id": "HighDungeon",
+        "max_members": 4,
+        "tab": "tab2",
+    },
+    "dng:CitadelHolding": {
+        "name": "Крепость Холдинг",
+        "url_id": "CitadelHolding",
+        "max_members": 4,
+        "tab": "tab2",
+    },
+    "dng:way2Baron": {
+        "name": "Путь к Барону",
+        "url_id": "way2Baron",
+        "max_members": 2,
+        "tab": "tab2",
+    },
+    "dng:Barony": {
+        "name": "Владения Барона",
+        "url_id": "Barony",
+        "max_members": 4,
+        "tab": "tab2",
     },
     "dng:ShadowGuard": {
         "name": "Пороги Шэдоу Гарда",
         "url_id": "ShadowGuard",
         "max_members": 5,
         "tab": "tab2",
+    },
+    # Ивент
+    "dng:14feb_DungeonForest": {
+        "name": "Древний Лес",
+        "url_id": "14feb_DungeonForest",
+        "max_members": 2,
+        "tab": "event",
     },
 }
 
