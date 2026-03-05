@@ -994,7 +994,7 @@ reload_profiles()
 def index():
     """Главная страница - обзор всех ботов"""
     grouped = get_grouped_stats()
-    all_stats = grouped["mains"] + grouped["mules"]
+    all_stats = grouped["party_bots"] + grouped["mains"] + grouped["mules"]
 
     # Расчёт total_stats для hero-панели
     total_stats = {
@@ -1026,6 +1026,7 @@ def index():
         total_stats["gold_per_hour"] = total_stats["gold_earned"] / total_stats["total_hours"]
 
     return render_template("index.html",
+                           party_bots=grouped["party_bots"],
                            mains=grouped["mains"],
                            mules=grouped["mules"],
                            mules_summary=grouped["mules_summary"],
