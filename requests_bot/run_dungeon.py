@@ -1242,10 +1242,32 @@ class DungeonRunner:
 
         # Проверяем URL - всё ещё в бою
         if "/combat" in url:
-            # Всё ещё на странице боя - возможно загрузка
-            time.sleep(1)
-            self.client.get(self.combat_url)
-            return "continue"
+            # Бой окончен, но URL не изменился (переход на step через JS в браузере)
+            # Пробуем перейти на step-страницу вручную
+            combat_path = (self.combat_url or url).split("?")[0]
+            dungeon_url_match = re.search(r"/dungeon/combat/(\w+)", combat_path)
+            if dungeon_url_match:
+                dungeon_url_id = dungeon_url_match.group(1)
+                difficulty_match = re.search(r"1=(normal|hard|impossible)", self.combat_url or url)
+                diff_param = difficulty_match.group(1) if difficulty_match else "impossible"
+                step_url = f"{self.base_url}/dungeon/step/{dungeon_url_id}?1={diff_param}"
+                print(f"[*] Бой окончен на /combat, перехожу на step: {step_url}")
+                self.client.get(step_url)
+                new_url = self.client.current_url or ""
+                if "/dungeon/step/" in new_url:
+                    # Успешно на step-странице — вызовемся заново для interstep обработки
+                    return "continue"
+                elif "/combat" in new_url:
+                    # Ещё в бою или перекинуло обратно
+                    self.combat_url = new_url
+                    self._save_loot_url_from_combat_page()
+                    return "continue"
+                elif "dungeoncompleted" in new_url.lower() or "/city" in new_url:
+                    return "completed"
+            else:
+                time.sleep(1)
+                self.client.get(self.combat_url)
+                return "continue"
 
         # Пробуем восстановить здоровье перед продолжением боя
         self.try_restore_health()
