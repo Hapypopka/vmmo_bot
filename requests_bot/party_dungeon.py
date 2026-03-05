@@ -895,7 +895,7 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
     # 1. Входим в данж (создаём пати в игре)
     if not party_client.enter_as_leader(difficulty):
         # Не удалось войти — КД в игре или ещё в банде
-        record_cooldown(profile, dungeon_id)
+        record_cooldown(profile, dungeon_id, seconds=600)  # 10 мин при ошибке входа
         leave_party(profile, party_id)
         # Возвращаемся в город
         party_client.client.get(f"{party_client.base_url}/city")
