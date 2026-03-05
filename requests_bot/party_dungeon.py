@@ -137,8 +137,8 @@ def cleanup_own_stale_party(profile):
                 status = member.get("status", "")
                 age = time.time() - member.get("joined_at", 0)
 
-                # Если бот в начальном статусе дольше 30с — зависшая пати
-                if status in ("creating", "waiting_invite") and age > 30:
+                # Если бот не в бою и завис дольше 30с — зависшая пати
+                if status not in ("in_combat",) and age > 30:
                     log_info(f"[PARTY] Очистка зависшей пати {p['id']} (status={status}, age={int(age)}с)")
                     if p.get("leader") == profile:
                         state["parties"] = [pp for pp in state["parties"] if pp["id"] != p["id"]]
