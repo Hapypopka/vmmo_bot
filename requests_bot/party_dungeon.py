@@ -626,11 +626,32 @@ class PartyDungeonClient:
 
     # === Мембер ===
 
+    def _extract_inviter_name(self, html):
+        """Извлекает имя пригласившего из notice HTML.
+
+        Формат: <span>ИМЯ</span> приглашает тебя в банду
+        Или escaped: <span>ИМЯ<\\/span> приглашает тебя в банду
+        """
+        # Обычный HTML
+        m = re.search(r'<span>([^<]+)</span>\s*приглашает тебя в банду', html)
+        if m:
+            return m.group(1).strip()
+        # JS-escaped
+        m = re.search(r'<span>([^<]+)<\\/span>\s*приглашает тебя в банду', html)
+        if m:
+            return m.group(1).strip()
+        # Ещё вариант escaped
+        m = re.search(r'<span>([^<]+)<\\\/span>\s*приглашает тебя в банду', html)
+        if m:
+            return m.group(1).strip()
+        return None
+
     def check_and_accept_invite(self, leader_username, page="city"):
         """Мембер: проверяет приглашение на странице и принимает.
 
         Уведомление рендерится через JS (Ptx.Shadows.Notice.show),
         поэтому URL извлекается из escaped JSON в <script> теге.
+        Принимает ТОЛЬКО приглашение от своего лидера.
 
         Returns:
             bool: True если приглашение принято
@@ -647,7 +668,18 @@ class PartyDungeonClient:
         if not has_invite and not has_feedback:
             return False
 
-        log_info(f"[PARTY] Мембер: вижу приглашение! (invite_text={has_invite}, feedback_url={has_feedback}, page=/{page})")
+        # Проверяем что приглашение от нашего лидера
+        inviter = self._extract_inviter_name(html)
+        if inviter and inviter != leader_username:
+            log_warning(f"[PARTY] Мембер: приглашение от '{inviter}', а ждём от '{leader_username}' — отклоняю")
+            # Отклоняем чужое приглашение
+            decline_url = self._find_feedback_url(html, "decline")
+            if decline_url:
+                self.client.get(decline_url)
+                time.sleep(0.5)
+            return False
+
+        log_info(f"[PARTY] Мембер: вижу приглашение от {inviter or '?'}! (page=/{page})")
 
         # Ищем URL принятия из HTML или JS-контента
         accept_url = self._find_feedback_url(html, "accept")
@@ -655,7 +687,7 @@ class PartyDungeonClient:
             log_warning("[PARTY] Мембер: URL 'Принять' не найден в HTML")
             # Логируем фрагменты для отладки
             for i, line in enumerate(html.split('\n')):
-                if 'feedback' in line.lower() or 'приглашает' in line.lower() or 'notice' in line.lower():
+                if 'feedback' in line.lower() or 'приглашает' in line.lower():
                     log_debug(f"[PARTY] HTML[{i}]: {line[:200]}")
             return False
 
@@ -811,10 +843,35 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
             # Продолжаем с остальными
 
     # 4. Ждём пока все мемберы зайдут в лобби (status=in_lobby)
+    #    Каждые 30с переотправляем инвайт тем, кто ещё не в лобби
     log_info("[PARTY] Лидер: жду всех в лобби...")
-    lobby_result = wait_for_all_in_lobby(party_id, timeout=LOBBY_TIMEOUT)
+    lobby_deadline = time.time() + LOBBY_TIMEOUT
+    reinvite_interval = 30
+    last_reinvite = time.time()
 
-    if lobby_result != "ready":
+    while time.time() < lobby_deadline:
+        members = get_party_members(party_id)
+        if members and all(m.get("status") == "in_lobby" for m in members.values()):
+            break
+
+        # Переотправляем инвайт каждые 30с
+        if time.time() - last_reinvite >= reinvite_interval:
+            for mem_profile, mem_info in members.items():
+                if mem_profile == profile:
+                    continue
+                if mem_info.get("status") == "in_lobby":
+                    continue
+                mem_username = mem_info.get("username", "")
+                if mem_username:
+                    log_info(f"[PARTY] Лидер: повторный инвайт {mem_username}")
+                    # Возвращаемся в лобби перед инвайтом
+                    party_client.client.get(f"{party_client.base_url}/dungeon/lobby/{party_client.url_id}")
+                    time.sleep(0.5)
+                    party_client.invite_player(mem_username)
+            last_reinvite = time.time()
+
+        time.sleep(POLL_INTERVAL)
+    else:
         log_warning("[PARTY] Лидер: не все зашли в лобби, отменяю")
         party_client.leave_lobby()
         leave_party(profile, party_id)
