@@ -873,7 +873,10 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
 
         log_info(f"[PARTY] Лидер: инвайчу {mem_username}")
 
-        # Возвращаемся в лобби для инвайта (если ушли на /party/search)
+        # Возвращаемся в лобби перед каждым инвайтом
+        party_client.client.get(f"{party_client.base_url}/dungeon/lobby/{party_client.url_id}")
+        time.sleep(0.5)
+
         if not party_client.invite_player(mem_username):
             log_warning(f"[PARTY] Лидер: не удалось пригласить {mem_username}")
             # Продолжаем с остальными
