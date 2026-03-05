@@ -1170,7 +1170,31 @@ class DungeonRunner:
 
                 # Ищем кнопку "Продолжить бой"
                 if soup:
-                    for btn in soup.select("a.go-btn"):
+                    all_go_btns = soup.select("a.go-btn")
+                    if all_go_btns and poll_i == 0:
+                        for b in all_go_btns:
+                            print(f"[*] Interstep: go-btn: text='{b.get_text(strip=True)}' href='{b.get('href', '')[:80]}'")
+
+                    # Также ищем по ppAction=combat напрямую
+                    combat_link = soup.select_one("a[href*='ppAction=combat']")
+                    if combat_link:
+                        href = combat_link.get("href", "")
+                        print(f"[*] Interstep: нашёл ppAction=combat напрямую, кликаю")
+                        href = href.replace("&amp;", "&")
+                        if not href.startswith("http"):
+                            href = self.base_url + href
+                        resp = self.client.get(href)
+                        if "/combat" in resp.url:
+                            self.combat_url = resp.url
+                            self._save_loot_url_from_combat_page()
+                            return "next_stage"
+                        result = self._start_combat()
+                        if result == "completed":
+                            return "completed"
+                        if result:
+                            return "next_stage"
+
+                    for btn in all_go_btns:
                         btn_text = btn.get_text(strip=True)
                         href = btn.get("href", "")
                         if "Продолжить бой" in btn_text and href and not href.startswith("javascript"):
