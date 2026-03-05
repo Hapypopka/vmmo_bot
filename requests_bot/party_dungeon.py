@@ -31,29 +31,11 @@ POLL_INTERVAL = 5          # Интервал проверки файла
 
 # Пати-данжены
 PARTY_DUNGEONS = {
-    "dng:dSanctuary": {
-        "name": "Святилище Накрила",
-        "url_id": "dSanctuary",
+    "dng:14feb_DungeonForest": {
+        "name": "Древний Лес",
+        "url_id": "14feb_DungeonForest",
         "max_members": 2,
-        "tab": "tab3",
-    },
-    "dng:ShadowGuard": {
-        "name": "Пороги Шэдоу Гарда",
-        "url_id": "ShadowGuard",
-        "max_members": 5,
-        "tab": "tab2",
-    },
-    "dng:Underlight": {
-        "name": "Логово Кобольдов",
-        "url_id": "Underlight",
-        "max_members": 4,
-        "tab": "tab2",
-    },
-    "dng:CitadelHolding": {
-        "name": "Крепость Холдинг",
-        "url_id": "CitadelHolding",
-        "max_members": 4,
-        "tab": "tab2",
+        "tab": "event",
     },
 }
 
