@@ -12,7 +12,7 @@ import time
 from urllib.parse import urljoin
 
 from requests_bot.craft_prices import FileLock
-from requests_bot.config import get_profile_name, get_profile_username, get_party_dungeon_config
+from requests_bot.config import get_profile_name, get_profile_username, get_game_nickname, get_party_dungeon_config
 from requests_bot.logger import log_info, log_debug, log_warning, log_error
 
 BASE_URL = "https://vmmo.vten.ru"
@@ -715,6 +715,7 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
     """
     profile = get_profile_name()
     username = get_profile_username()
+    nickname = get_game_nickname()  # Игровой ник (для инвайтов)
 
     # Очистка зависших пати от предыдущих сессий
     cleanup_own_stale_party(profile)
@@ -730,8 +731,8 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
     party_cfg = get_party_dungeon_config()
     target_members = party_cfg.get("members", 2)
 
-    # Пробуем вступить или создать
-    result = try_join_or_create_party(profile, username, dungeon_id, difficulty, target_members)
+    # Пробуем вступить или создать (nickname для инвайтов)
+    result = try_join_or_create_party(profile, nickname, dungeon_id, difficulty, target_members)
     if not result:
         return None
 

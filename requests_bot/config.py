@@ -308,6 +308,11 @@ def get_profile_username():
     return _profile_config.get("username", _current_profile or "unknown")
 
 
+def get_game_nickname():
+    """Возвращает игровой ник (для инвайтов в пати). Фоллбек на username."""
+    return _profile_config.get("game_nickname") or _profile_config.get("username", _current_profile or "unknown")
+
+
 def is_dungeons_enabled():
     """Проверяет, включены ли обычные данжены для текущего профиля"""
     return _profile_config.get("dungeons_enabled", True)
