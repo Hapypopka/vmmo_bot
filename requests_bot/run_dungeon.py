@@ -1131,11 +1131,13 @@ class DungeonRunner:
             self.try_restore_health()
 
             # Ищем кнопку "Продолжить бой"
+            found_continue = False
             if soup:
                 for btn in soup.select("a.go-btn"):
                     btn_text = btn.get_text(strip=True)
                     href = btn.get("href", "")
                     if "Продолжить бой" in btn_text and href and not href.startswith("javascript"):
+                        found_continue = True
                         print(f"[*] Interstep: clicking 'Продолжить бой'")
                         resp = self.client.get(href)
                         if "/combat" in resp.url:
@@ -1148,6 +1150,18 @@ class DungeonRunner:
                             return "completed"
                         if result:
                             return "next_stage"
+
+            # Пати-данж: у мембера нет кнопки — ждём пока лидер продолжит
+            if not found_continue:
+                print("[*] Interstep: нет кнопки 'Продолжить бой', жду 65с (ролл шмоток)...")
+                time.sleep(65)
+                self.client.get(self.client.current_url)
+                new_url = self.client.current_url or ""
+                if "/combat" in new_url:
+                    self.combat_url = new_url
+                    self._save_loot_url_from_combat_page()
+                    return "next_stage"
+                return "continue"
 
         # Проверяем URL - всё ещё в бою
         if "/combat" in url:
