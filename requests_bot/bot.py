@@ -683,7 +683,7 @@ class VMMOBot:
             # Все на КД - пробуем пати-данж ещё раз (мембер мог пропустить forming пати)
             party_result = self.check_party_dungeon()
             if party_result:
-                return  # Прошли пати-данж, вернуться в главный цикл
+                return True  # Прошли пати-данж, вернуться в главный цикл
 
             # Все на КД - проверяем ивент-данж (может КД уже спал)
             valentine_done = self.check_valentine_dungeons()

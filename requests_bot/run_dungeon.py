@@ -982,8 +982,11 @@ class DungeonRunner:
                 elif result == "died":
                     print(f"\n[X] DIED after {actions} actions!")
                     return "died", actions
+                elif result == "continue":
+                    # Interstep: ещё ждём (ролл/продолжение) — повторяем проверку
+                    continue
                 else:
-                    print(f"\n[?] Unknown state after {actions} actions")
+                    print(f"\n[?] Unknown state '{result}' after {actions} actions")
                     return "unknown", actions
 
             # Проверяем Печать Сталкера (в ивенте)
