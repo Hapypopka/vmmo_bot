@@ -1127,41 +1127,91 @@ class DungeonRunner:
                 else:
                     log_debug("[SHADOW] Ещё не последний этап, продолжаем")
 
-            # Это интерстеп страница - сначала восстанавливаем ХП, потом продолжаем
+            # Это интерстеп страница - сначала роллим лут, восстанавливаем ХП, потом продолжаем
+
+            # Ролл лута: нажимаем "не откажусь" (roll=2) на все предметы
+            if soup:
+                roll_links = []
+                for a in soup.select("a.btn.btn-brown-new"):
+                    href = a.get("href", "")
+                    if "ppAction=roll" in href and "roll=2" in href:
+                        roll_links.append(href)
+                if roll_links:
+                    print(f"[*] Interstep: роллю {len(roll_links)} предметов (не откажусь)")
+                    for href in roll_links:
+                        if not href.startswith("http"):
+                            href = self.base_url + href
+                        href = href.replace("&amp;", "&")
+                        self.client.get(href)
+                        time.sleep(0.5)
+                    print(f"[*] Interstep: ролл завершён, обновляю страницу")
+
             self.try_restore_health()
 
-            # Ищем кнопку "Продолжить бой"
-            found_continue = False
-            if soup:
-                for btn in soup.select("a.go-btn"):
-                    btn_text = btn.get_text(strip=True)
-                    href = btn.get("href", "")
-                    if "Продолжить бой" in btn_text and href and not href.startswith("javascript"):
-                        found_continue = True
-                        print(f"[*] Interstep: clicking 'Продолжить бой'")
-                        resp = self.client.get(href)
-                        if "/combat" in resp.url:
-                            self.combat_url = resp.url
-                            self._save_loot_url_from_combat_page()
-                            return "next_stage"
-                        # Может потребоваться запустить бой
-                        result = self._start_combat()
-                        if result == "completed":
-                            return "completed"
-                        if result:
-                            return "next_stage"
-
-            # Пати-данж: у мембера нет кнопки — ждём пока лидер продолжит
-            if not found_continue:
-                print("[*] Interstep: нет кнопки 'Продолжить бой', жду 65с (ролл шмоток)...")
-                time.sleep(65)
+            # Поллим страницу: ждём "Продолжить бой" (появится когда ВСЕ проголосуют)
+            max_poll = 12  # 12 * 5с = 60с макс
+            for poll_i in range(max_poll):
+                # Обновляем страницу
                 self.client.get(self.client.current_url)
-                new_url = self.client.current_url or ""
-                if "/combat" in new_url:
-                    self.combat_url = new_url
+                time.sleep(1)
+                html = self.client.current_page or ""
+                soup = self._make_soup(html)
+
+                # Если нас перекинуло в бой — лидер уже нажал
+                cur_url = self.client.current_url or ""
+                if "/combat" in cur_url:
+                    print(f"[*] Interstep: уже в бою после обновления")
+                    self.combat_url = cur_url
                     self._save_loot_url_from_combat_page()
                     return "next_stage"
-                return "continue"
+
+                # Ищем кнопку "Продолжить бой"
+                if soup:
+                    for btn in soup.select("a.go-btn"):
+                        btn_text = btn.get_text(strip=True)
+                        href = btn.get("href", "")
+                        if "Продолжить бой" in btn_text and href and not href.startswith("javascript"):
+                            print(f"[*] Interstep: нашёл 'Продолжить бой', кликаю")
+                            href = href.replace("&amp;", "&")
+                            if not href.startswith("http"):
+                                href = self.base_url + href
+                            resp = self.client.get(href)
+                            if "/combat" in resp.url:
+                                self.combat_url = resp.url
+                                self._save_loot_url_from_combat_page()
+                                return "next_stage"
+                            result = self._start_combat()
+                            if result == "completed":
+                                return "completed"
+                            if result:
+                                return "next_stage"
+
+                    # Проверяем: может ещё есть кнопки ролла (кто-то не нажал)
+                    remaining_rolls = [a for a in soup.select("a.btn.btn-brown-new")
+                                       if "ppAction=roll" in a.get("href", "") and "roll=2" in a.get("href", "")]
+                    if remaining_rolls:
+                        print(f"[*] Interstep: ещё {len(remaining_rolls)} роллов, нажимаю")
+                        for a in remaining_rolls:
+                            href = a.get("href", "")
+                            if not href.startswith("http"):
+                                href = self.base_url + href
+                            href = href.replace("&amp;", "&")
+                            self.client.get(href)
+                            time.sleep(0.5)
+
+                if poll_i < max_poll - 1:
+                    print(f"[*] Interstep: жду ролл/продолжение... ({poll_i+1}/{max_poll})")
+                    time.sleep(4)
+
+            # Таймаут — проверим ещё раз, может нас перекинуло
+            print("[*] Interstep: таймаут ожидания 'Продолжить бой'")
+            self.client.get(self.client.current_url)
+            cur_url = self.client.current_url or ""
+            if "/combat" in cur_url:
+                self.combat_url = cur_url
+                self._save_loot_url_from_combat_page()
+                return "next_stage"
+            return "continue"
 
         # Проверяем URL - всё ещё в бою
         if "/combat" in url:
