@@ -37,6 +37,12 @@ PARTY_DUNGEONS = {
         "max_members": 2,
         "tab": "event",
     },
+    "dng:ShadowGuard": {
+        "name": "Пороги Шэдоу Гарда",
+        "url_id": "ShadowGuard",
+        "max_members": 5,
+        "tab": "tab2",
+    },
 }
 
 
@@ -620,8 +626,8 @@ class PartyDungeonClient:
 
     # === Мембер ===
 
-    def check_and_accept_invite(self, leader_username):
-        """Мембер: проверяет приглашение в городе и принимает.
+    def check_and_accept_invite(self, leader_username, page="city"):
+        """Мембер: проверяет приглашение на странице и принимает.
 
         Уведомление рендерится через JS (Ptx.Shadows.Notice.show),
         поэтому URL извлекается из escaped JSON в <script> теге.
@@ -629,29 +635,38 @@ class PartyDungeonClient:
         Returns:
             bool: True если приглашение принято
         """
-        # Переходим в город чтобы увидеть уведомление
-        self.client.get(f"{self.base_url}/city")
+        # Переходим на указанную страницу чтобы увидеть уведомление
+        self.client.get(f"{self.base_url}/{page}")
         time.sleep(0.5)
         html = self.client.current_page or ""
 
         # Ищем notice с приглашением (текст есть в JS даже без рендеринга)
-        if "приглашает тебя в банду" not in html:
+        has_invite = "приглашает тебя в банду" in html
+        has_feedback = "feedbackAction=accept" in html
+
+        if not has_invite and not has_feedback:
             return False
 
-        log_info("[PARTY] Мембер: вижу приглашение!")
+        log_info(f"[PARTY] Мембер: вижу приглашение! (invite_text={has_invite}, feedback_url={has_feedback}, page=/{page})")
 
         # Ищем URL принятия из HTML или JS-контента
         accept_url = self._find_feedback_url(html, "accept")
         if not accept_url:
             log_warning("[PARTY] Мембер: URL 'Принять' не найден в HTML")
+            # Логируем фрагменты для отладки
+            for i, line in enumerate(html.split('\n')):
+                if 'feedback' in line.lower() or 'приглашает' in line.lower() or 'notice' in line.lower():
+                    log_debug(f"[PARTY] HTML[{i}]: {line[:200]}")
             return False
 
         log_info(f"[PARTY] Мембер: принимаю приглашение от {leader_username}")
+        log_debug(f"[PARTY] Accept URL: {accept_url}")
         self.client.get(accept_url)
         time.sleep(0.5)
 
         # После accept сервер может редиректить прямо в лобби
         current = self.client.current_url or ""
+        log_debug(f"[PARTY] После accept URL: {current}")
         if "/dungeon/lobby/" in current or "/dungeon/standby/" in current:
             log_info("[PARTY] Мембер: уже в лобби после accept!")
             return True
@@ -660,22 +675,32 @@ class PartyDungeonClient:
         return self.enter_dungeon_feedback()
 
     def wait_and_accept_invite(self, leader_username, timeout=INVITE_TIMEOUT):
-        """Мембер: поллит город ожидая приглашение.
+        """Мембер: поллит разные страницы ожидая приглашение.
+
+        Навигирует между /city и /backpack чтобы триггерить обновление notice.
 
         Returns:
             bool: True если приглашение принято и вошёл в данж
         """
         deadline = time.time() + timeout
         attempt = 0
+        # Чередуем страницы для обновления notice
+        pages = ["city", "backpack", "city", "dungeons"]
+        log_info(f"[PARTY] Мембер: жду инвайт от {leader_username} ({timeout}с)...")
+
         while time.time() < deadline:
+            page = pages[attempt % len(pages)]
             attempt += 1
-            if attempt == 1:
-                log_info(f"[PARTY] Мембер: жду инвайт от {leader_username} ({timeout}с)...")
-            if self.check_and_accept_invite(leader_username):
+
+            if attempt % 4 == 0:
+                remaining = int(deadline - time.time())
+                log_debug(f"[PARTY] Мембер: поллинг #{attempt}, /{page}, осталось {remaining}с")
+
+            if self.check_and_accept_invite(leader_username, page=page):
                 return True
             time.sleep(POLL_INTERVAL)
 
-        log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с)")
+        log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с), {attempt} попыток")
         return False
 
 

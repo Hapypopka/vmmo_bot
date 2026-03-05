@@ -522,15 +522,30 @@ class VMMOBot:
     def check_party_dungeon(self):
         """Пробует пройти пати-данж (координация с другими ботами).
 
+        Перебирает все данжи из PARTY_DUNGEONS, идёт в первый без КД.
+
         Returns:
             str or None: результат ("completed", "died", "timeout", "error") или None
         """
         if not is_party_dungeon_enabled():
             return None
 
+        from requests_bot.party_dungeon import PARTY_DUNGEONS
+
         cfg = get_party_dungeon_config()
-        dungeon_id = cfg["dungeon_id"]
         difficulty = cfg["difficulty"]
+
+        # Перебираем все пати-данжи, ищем без КД
+        dungeon_id = None
+        for did in PARTY_DUNGEONS:
+            from requests_bot.party_dungeon import is_on_cooldown
+            if not is_on_cooldown(get_profile_name(), did):
+                dungeon_id = did
+                break
+
+        if not dungeon_id:
+            log_debug("[PARTY] Все пати-данжи на КД")
+            return None
 
         log_info(f"[PARTY] Проверяю пати-данж {dungeon_id}...")
 
