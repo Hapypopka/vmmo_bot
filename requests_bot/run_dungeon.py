@@ -1129,15 +1129,15 @@ class DungeonRunner:
 
             # Это интерстеп страница - сначала роллим лут, восстанавливаем ХП, потом продолжаем
 
-            # Ролл лута: нажимаем "не откажусь" (roll=2) на все предметы
+            # Ролл лута: нажимаем "надо" (roll=1) или "не откажусь" (roll=2) на все предметы
             if soup:
                 roll_links = []
                 for a in soup.select("a.btn.btn-brown-new"):
                     href = a.get("href", "")
-                    if "ppAction=roll" in href and "roll=2" in href:
+                    if "ppAction=roll" in href and ("roll=1" in href or "roll=2" in href):
                         roll_links.append(href)
                 if roll_links:
-                    print(f"[*] Interstep: роллю {len(roll_links)} предметов (не откажусь)")
+                    print(f"[*] Interstep: роллю {len(roll_links)} предметов")
                     for href in roll_links:
                         if not href.startswith("http"):
                             href = self.base_url + href
@@ -1188,7 +1188,7 @@ class DungeonRunner:
 
                     # Проверяем: может ещё есть кнопки ролла (кто-то не нажал)
                     remaining_rolls = [a for a in soup.select("a.btn.btn-brown-new")
-                                       if "ppAction=roll" in a.get("href", "") and "roll=2" in a.get("href", "")]
+                                       if "ppAction=roll" in a.get("href", "") and ("roll=1" in a.get("href", "") or "roll=2" in a.get("href", ""))]
                     if remaining_rolls:
                         print(f"[*] Interstep: ещё {len(remaining_rolls)} роллов, нажимаю")
                         for a in remaining_rolls:

@@ -894,8 +894,8 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
 
     # 1. Входим в данж (создаём пати в игре)
     if not party_client.enter_as_leader(difficulty):
-        # Скорее всего КД в игре — записываем чтобы не повторять
-        record_cooldown(profile, dungeon_id)
+        # Не удалось войти — КД в игре или данж недоступен по уровню
+        record_cooldown(profile, dungeon_id, seconds=24 * 3600)
         leave_party(profile, party_id)
         return "error"
 
