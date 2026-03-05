@@ -31,6 +31,12 @@ POLL_INTERVAL = 5          # Интервал проверки файла
 
 # Пати-данжены
 PARTY_DUNGEONS = {
+    "dng:dSanctuary": {
+        "name": "Святилище Накрила",
+        "url_id": "dSanctuary",
+        "max_members": 2,
+        "tab": "tab3",
+    },
     "dng:ShadowGuard": {
         "name": "Пороги Шэдоу Гарда",
         "url_id": "ShadowGuard",
