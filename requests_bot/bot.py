@@ -536,21 +536,26 @@ class VMMOBot:
         difficulty = cfg["difficulty"]
         profile = get_profile_name()
 
+        role = cfg.get("role", "member")
+
         # 1. Сначала проверяем — есть ли уже forming пати, к которой можно присоединиться
         forming = find_forming_party(profile)
         if forming:
             dungeon_id = forming["dungeon_id"]
             log_info(f"[PARTY] Найдена forming пати {forming['id']} для {dungeon_id}, присоединяюсь")
-        else:
-            # 2. Нет forming пати — ищем данж без КД и создаём новую
+        elif role == "leader":
+            # 2. Только лидер создаёт новую пати — ищем данж без КД
             dungeon_id = None
             for did in PARTY_DUNGEONS:
                 if not is_on_cooldown(profile, did):
                     dungeon_id = did
                     break
+        else:
+            # Мембер — только присоединяется, не создаёт
+            dungeon_id = None
 
         if not dungeon_id:
-            log_debug("[PARTY] Все пати-данжи на КД и нет forming пати")
+            log_debug("[PARTY] Нет подходящей пати" + (" (мембер ждёт лидера)" if role == "member" else " (все на КД)"))
             return None
 
         log_info(f"[PARTY] Проверяю пати-данж {dungeon_id}...")

@@ -341,6 +341,7 @@ def get_party_dungeon_config():
         "dungeon_id": _profile_config.get("party_dungeon_id", "dng:CitadelHolding"),
         "difficulty": _profile_config.get("party_dungeon_difficulty", "impossible"),
         "members": _profile_config.get("party_dungeon_members", 2),
+        "role": _profile_config.get("party_dungeon_role", "member"),
     }
 
 
