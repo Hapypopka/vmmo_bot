@@ -150,6 +150,36 @@ def cleanup_own_stale_party(profile):
         log_error(f"[PARTY] Ошибка cleanup_own_stale_party: {e}")
 
 
+def find_forming_party(profile):
+    """Ищет FORMING пати, к которой бот может присоединиться.
+
+    Возвращает пати dict или None. Бот присоединяется к существующей
+    пати даже если данж на КД у него — чтобы все шли вместе.
+    """
+    try:
+        with FileLock(PARTY_LOCK_FILE):
+            state = _load_state()
+            _cleanup_stale(state)
+
+            # Уже в пати?
+            for p in state["parties"]:
+                if profile in p.get("members", {}):
+                    return None
+
+            # Ищем forming пати с местом
+            for p in state["parties"]:
+                if p.get("state") != "forming":
+                    continue
+                target = p.get("target_members", 2)
+                if len(p.get("members", {})) >= target:
+                    continue
+                if profile not in p.get("members", {}):
+                    return dict(p)
+    except Exception:
+        pass
+    return None
+
+
 def can_join_party(profile, dungeon_id):
     """Может ли бот участвовать в пати."""
     if is_on_cooldown(profile, dungeon_id):
@@ -759,7 +789,7 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
     # Очистка зависших пати от предыдущих сессий
     cleanup_own_stale_party(profile)
 
-    if not can_join_party(profile, dungeon_id):
+    if is_in_party(profile):
         return None
 
     dungeon_cfg = PARTY_DUNGEONS.get(dungeon_id)

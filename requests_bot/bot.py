@@ -530,21 +530,27 @@ class VMMOBot:
         if not is_party_dungeon_enabled():
             return None
 
-        from requests_bot.party_dungeon import PARTY_DUNGEONS
+        from requests_bot.party_dungeon import PARTY_DUNGEONS, is_on_cooldown, find_forming_party
 
         cfg = get_party_dungeon_config()
         difficulty = cfg["difficulty"]
+        profile = get_profile_name()
 
-        # Перебираем все пати-данжи, ищем без КД
-        dungeon_id = None
-        for did in PARTY_DUNGEONS:
-            from requests_bot.party_dungeon import is_on_cooldown
-            if not is_on_cooldown(get_profile_name(), did):
-                dungeon_id = did
-                break
+        # 1. Сначала проверяем — есть ли уже forming пати, к которой можно присоединиться
+        forming = find_forming_party(profile)
+        if forming:
+            dungeon_id = forming["dungeon_id"]
+            log_info(f"[PARTY] Найдена forming пати {forming['id']} для {dungeon_id}, присоединяюсь")
+        else:
+            # 2. Нет forming пати — ищем данж без КД и создаём новую
+            dungeon_id = None
+            for did in PARTY_DUNGEONS:
+                if not is_on_cooldown(profile, did):
+                    dungeon_id = did
+                    break
 
         if not dungeon_id:
-            log_debug("[PARTY] Все пати-данжи на КД")
+            log_debug("[PARTY] Все пати-данжи на КД и нет forming пати")
             return None
 
         log_info(f"[PARTY] Проверяю пати-данж {dungeon_id}...")
