@@ -265,6 +265,16 @@
 </div>
 {% endif %}
 
+<!-- Пати-боты -->
+{% if party_bots %}
+<h2 class="section-title mt-2">👥 Пати</h2>
+<div class="grid grid-3">
+    {% for bot in party_bots %}
+    {{ render_bot_card(bot) }}
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Мейны -->
 {% if mains %}
 <h2 class="section-title mt-2">⚔️ Мейны</h2>

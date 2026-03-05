@@ -494,8 +494,16 @@ def get_grouped_stats():
     """Собирает статистику с группировкой: мейны отдельно, мулы сгруппированы"""
     all_stats = get_all_stats()
 
-    mains = [s for s in all_stats if s.get("is_main", False)]
-    mules = [s for s in all_stats if not s.get("is_main", False)]
+    # Пати-боты — отдельная группа сверху
+    party_profiles = set()
+    for s in all_stats:
+        cfg = s.get("config", {})
+        if cfg.get("party_dungeon_enabled"):
+            party_profiles.add(s["profile"])
+
+    party_bots = [s for s in all_stats if s["profile"] in party_profiles]
+    mains = [s for s in all_stats if s.get("is_main", False) and s["profile"] not in party_profiles]
+    mules = [s for s in all_stats if not s.get("is_main", False) and s["profile"] not in party_profiles]
 
     # Суммарная статистика мулов
     mules_summary = {
@@ -528,6 +536,7 @@ def get_grouped_stats():
     best_mule = mules_sorted[0] if mules_sorted else None
 
     return {
+        "party_bots": party_bots,
         "mains": mains,
         "mules": mules,
         "mules_summary": mules_summary,
