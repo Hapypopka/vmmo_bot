@@ -894,9 +894,12 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
 
     # 1. Входим в данж (создаём пати в игре)
     if not party_client.enter_as_leader(difficulty):
-        # Не удалось войти — КД в игре или данж недоступен по уровню
-        record_cooldown(profile, dungeon_id, seconds=24 * 3600)
+        # Не удалось войти — КД в игре или ещё в банде
+        record_cooldown(profile, dungeon_id)
         leave_party(profile, party_id)
+        # Возвращаемся в город
+        party_client.client.get(f"{party_client.base_url}/city")
+        time.sleep(1)
         return "error"
 
     update_member_status(profile, party_id, "in_lobby")
@@ -1035,6 +1038,10 @@ def _fight_dungeon(profile, party_id, party_client, dungeon_runner, dungeon_id):
     # Покидаем банду
     party_client.leave_lobby()
     leave_party(profile, party_id)
+
+    # Возвращаемся в город (чтобы не застрять в данже)
+    party_client.client.get(f"{party_client.base_url}/city")
+    time.sleep(1)
 
     # Помечаем завершение
     mark_completed(party_id)
