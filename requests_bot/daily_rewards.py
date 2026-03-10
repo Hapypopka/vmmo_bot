@@ -518,6 +518,10 @@ class LibraryClient:
     def __init__(self, client):
         self.client = client
 
+    def _is_library_page(self, html):
+        """Проверяет что HTML — это реально страница библиотеки"""
+        return "dailygifts" in (self.client.current_url or "") and "Библиотек" in html
+
     def check_and_collect(self):
         """Проверяет и открывает бесплатную книгу.
 
@@ -536,6 +540,20 @@ class LibraryClient:
         resp = self.client.get(f"{BASE_URL}/dailygifts")
         html = self.client.current_page or ""
 
+        # Проверяем что реально попали на страницу библиотеки
+        # (если персонаж в бою/арене — сервер редиректит на страницу боя)
+        if not self._is_library_page(html):
+            current_url = self.client.current_url or "?"
+            log_warning(f"[LIBRARY] Не попали на страницу библиотеки (URL: {current_url}), пробую через город...")
+            # Пробуем выйти в город и зайти заново
+            self.client.get(f"{BASE_URL}/city")
+            resp = self.client.get(f"{BASE_URL}/dailygifts")
+            html = self.client.current_page or ""
+            if not self._is_library_page(html):
+                current_url = self.client.current_url or "?"
+                log_warning(f"[LIBRARY] Повторно не попали на библиотеку (URL: {current_url}), пропускаю до следующего цикла")
+                return False
+
         # Проверяем количество ключей
         # Паттерн: "У тебя <span class="i_book_key"></span> N"
         key_match = re.search(
@@ -544,8 +562,8 @@ class LibraryClient:
         )
 
         if not key_match:
-            log_warning("[LIBRARY] Счётчик ключей не найден, пропускаю")
-            # Не помечаем как собранное — может страница не загрузилась
+            log_warning("[LIBRARY] Счётчик ключей не найден на странице библиотеки, помечаю как собранное")
+            mark_library_collected()
             return False
 
         keys = int(key_match.group(1))
