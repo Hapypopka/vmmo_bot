@@ -122,8 +122,37 @@ def reset_session_time():
     now = datetime.now().isoformat()
 
     if data.get("current_session"):
-        data["current_session"]["start_time"] = now
-        data["current_session"]["last_update"] = now
+        # Сохраняем старую сессию в историю (если есть данные)
+        old_session = data["current_session"]
+        if old_session.get("start"):
+            start_res = old_session.get("start", {})
+            current_res = old_session.get("current", start_res)
+            earned = {}
+            for key in current_res:
+                diff = current_res.get(key, 0) - start_res.get(key, 0)
+                if diff != 0:
+                    earned[key] = diff
+            history_entry = {
+                "start_time": old_session.get("start_time"),
+                "end_time": old_session.get("last_update", now),
+                "earned": earned,
+                "duration_hours": _calc_duration_hours(
+                    old_session.get("start_time"),
+                    old_session.get("last_update", now)
+                )
+            }
+            data["history"].insert(0, history_entry)
+            data["history"] = data["history"][:MAX_HISTORY]
+
+        # Обнуляем сессию — start=current чтобы дельта была 0
+        # start_session() перезапишет когда распарсит ресурсы
+        current_res = old_session.get("current", {})
+        data["current_session"] = {
+            "start_time": now,
+            "last_update": now,
+            "start": current_res.copy(),
+            "current": current_res.copy(),
+        }
     else:
         # Создаём пустую сессию
         data["current_session"] = {
@@ -152,6 +181,7 @@ def start_session(resources):
     now = datetime.now().isoformat()
 
     # Если была предыдущая сессия - сохраняем в историю
+    # (пропускаем если дельта пустая — значит reset_session_time уже сохранил)
     if data.get("current_session") and data["current_session"].get("start"):
         old_session = data["current_session"]
         start_res = old_session.get("start", {})
@@ -164,20 +194,20 @@ def start_session(resources):
             if diff != 0:
                 earned[key] = diff
 
-        # Добавляем в историю
-        history_entry = {
-            "start_time": old_session.get("start_time"),
-            "end_time": old_session.get("last_update", now),
-            "earned": earned,
-            "duration_hours": _calc_duration_hours(
-                old_session.get("start_time"),
-                old_session.get("last_update", now)
-            )
-        }
+        # Сохраняем только если есть реальные изменения
+        if earned:
+            history_entry = {
+                "start_time": old_session.get("start_time"),
+                "end_time": old_session.get("last_update", now),
+                "earned": earned,
+                "duration_hours": _calc_duration_hours(
+                    old_session.get("start_time"),
+                    old_session.get("last_update", now)
+                )
+            }
 
-        data["history"].insert(0, history_entry)
-        # Ограничиваем историю
-        data["history"] = data["history"][:MAX_HISTORY]
+            data["history"].insert(0, history_entry)
+            data["history"] = data["history"][:MAX_HISTORY]
 
     # Создаём новую сессию
     data["current_session"] = {
