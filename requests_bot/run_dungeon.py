@@ -1290,9 +1290,20 @@ class DungeonRunner:
                         print("[*] Dungeon completed after clicking 'Продолжить бой'")
                         return "completed"
                     new_html = self.client.current_page.lower() if self.client.current_page else ""
+                    # Проверяем завершение данжа, но НЕ этапа
+                    # "этап подземелья пройден" — это промежуточный этап, не конец!
                     if any(text in new_html for text in ["подземелье пройдено", "подземелье зачищено"]):
-                        print("[*] Dungeon completed (text)")
-                        return "completed"
+                        if "этап подземелья" not in new_html and "этап" not in new_html.split("пройден")[0][-30:]:
+                            print("[*] Dungeon completed (text)")
+                            return "completed"
+                        else:
+                            print("[*] Stage complete (not dungeon) — continuing")
+                            result = self._start_combat(retry=2)
+                            if result == "completed":
+                                return "completed"
+                            if result:
+                                return "next_stage"
+                            return "continue"
                     # Пробуем запустить бой (один раз, без рекурсии)
                     result = self._start_combat(retry=2)  # retry=2 чтобы не было глубокой рекурсии
                     if result == "completed":

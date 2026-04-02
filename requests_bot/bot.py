@@ -464,6 +464,9 @@ class VMMOBot:
             for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
                 name = dungeon_config["name"]
                 difficulty = get_dungeon_difficulty(dungeon_id)
+                # Ивент только на нормале
+                if difficulty in ("brutal", "hero"):
+                    difficulty = "normal"
 
                 if difficulty == "skip":
                     continue
