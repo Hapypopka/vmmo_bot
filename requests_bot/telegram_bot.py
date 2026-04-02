@@ -1120,7 +1120,7 @@ def format_user_settings(profile: str) -> str:
         f"🏰 Данжи: {dungeons}\n"
         f"🔥 Адские игры: {hell}\n"
         f"⚔️ Арена: {arena}\n"
-        f"🌲 Ивент-данж: {event_dng}\n"
+        f"☄️ Ивент-данж: {event_dng}\n"
         f"👥 Пати-данж: {party_dng}\n"
         f"⚒️ Крафт: {craft}\n"
         f"⛏️ Шахта: {mines}\n\n"
@@ -1169,7 +1169,7 @@ def get_settings_keyboard(profile: str):
             InlineKeyboardButton(f"{icon('arena_enabled')} Арена", callback_data=f"toggle_{profile}_arena_enabled"),
             InlineKeyboardButton(f"🎯 {arena_max} боёв", callback_data=f"arena_max_{profile}")
         ],
-        [InlineKeyboardButton(f"{icon('valentine_event_enabled')} 🌲 Ивент-данж", callback_data=f"toggle_{profile}_valentine_event_enabled")],
+        [InlineKeyboardButton(f"{icon('valentine_event_enabled')} ☄️ Ивент-данж", callback_data=f"toggle_{profile}_valentine_event_enabled")],
         [InlineKeyboardButton(f"{icon('party_dungeon_enabled')} 👥 Пати-данж", callback_data=f"toggle_{profile}_party_dungeon_enabled")],
         [
             InlineKeyboardButton(f"{icon('iron_craft_enabled')} Крафт", callback_data=f"toggle_{profile}_iron_craft_enabled"),

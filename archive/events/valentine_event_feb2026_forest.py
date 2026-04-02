@@ -1,9 +1,9 @@
 # ============================================
-# VMMO Bot - April Event Dungeons
+# VMMO Bot - February Event Dungeon
 # ============================================
-# Ивент Апрель 2026 — Комета Ностромо
-# Данжи: mirrormaze, Apr2023-ReturnCometNostromo
-# Дефолтная сложность: normal (нормал)
+# Ивент Февраль 2026 — Древний Лес
+# Один данж: 14feb_DungeonForest
+# Дефолтная сложность: hero (героик)
 # ============================================
 
 import time
@@ -22,11 +22,11 @@ DIFFICULTY_URL_MAP = {
     "normal": "normal",
 }
 
-# Ивент-данжен
+# Ивент-данжен (один)
 VALENTINE_DUNGEONS = {
-    "Apr2023-ReturnCometNostromo": {
-        "id": "Apr2023-ReturnCometNostromo",
-        "name": "Комета Ностромо",
+    "14feb_DungeonForest": {
+        "id": "14feb_DungeonForest",
+        "name": "Древний Лес",
     },
 }
 
@@ -122,13 +122,13 @@ def update_cooldowns_from_server(client):
             log_info(f"[EVENT] {name}: КД {cd_seconds // 3600}ч {(cd_seconds % 3600) // 60}м")
 
 
-def get_landing_url(dungeon_id: str, difficulty: str = "normal") -> str:
+def get_landing_url(dungeon_id: str, difficulty: str = "hero") -> str:
     """Возвращает URL посадочной страницы данжена"""
     url_diff = DIFFICULTY_URL_MAP.get(difficulty, difficulty)
     return f"{BASE_URL}/dungeon/landing/{dungeon_id}/{url_diff}"
 
 
-def get_lobby_url(dungeon_id: str, difficulty: str = "normal") -> str:
+def get_lobby_url(dungeon_id: str, difficulty: str = "hero") -> str:
     """Возвращает URL лобби данжена"""
     url_diff = DIFFICULTY_URL_MAP.get(difficulty, difficulty)
     return f"{BASE_URL}/dungeon/lobby/{dungeon_id}?1={url_diff}"
@@ -176,11 +176,11 @@ def try_enter_dungeon(client, dungeon_id: str) -> tuple[str, int]:
     dungeon = VALENTINE_DUNGEONS[dungeon_id]
     name = dungeon["name"]
 
-    # Получаем сложность из deaths.json (дефолт normal для этого ивента)
+    # Получаем сложность из deaths.json (дефолт hero для этого ивента)
     difficulty = get_dungeon_difficulty(dungeon_id)
-    # Ивент только на нормале — понижаем любую сложность
-    if difficulty in ("brutal", "hero"):
-        difficulty = "normal"
+    # Если brutal — понижаем до hero (ивент начинается с героика)
+    if difficulty == "brutal":
+        difficulty = "hero"
 
     if difficulty == "skip":
         log_debug(f"[EVENT] {name} в скипе (слишком много смертей)")
@@ -335,7 +335,7 @@ def set_cooldown_after_completion(client, dungeon_id: str):
 
 def run_valentine_dungeons(client, dungeon_runner) -> dict:
     """
-    Проходит ивент-данж Комета Ностромо.
+    Проходит ивент-данж Древний Лес.
 
     Args:
         client: VMMOClient
@@ -353,9 +353,9 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
         name = dungeon_config["name"]
 
         difficulty = get_dungeon_difficulty(dungeon_id)
-        # Ивент только на нормале
-        if difficulty in ("brutal", "hero"):
-            difficulty = "normal"
+        # Ивент начинается с героика
+        if difficulty == "brutal":
+            difficulty = "hero"
         diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал", "skip": "скип"}.get(difficulty, difficulty)
 
         log_debug(f"[EVENT] Проверяю: {name} ({diff_name})...")

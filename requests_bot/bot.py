@@ -482,7 +482,7 @@ class VMMOBot:
                     continue
                 elif result == "entered":
                     diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал"}.get(difficulty, difficulty)
-                    set_activity(f"🌲 {name} ({diff_name})")
+                    set_activity(f"☄️ {name} ({diff_name})")
                     log_info(f"[EVENT] Бой в {name} ({diff_name})...")
                     self.dungeon_runner.current_dungeon_id = dungeon_id
                     self.dungeon_runner.combat_url = self.client.current_url
