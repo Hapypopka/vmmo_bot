@@ -8,7 +8,13 @@ import os
 import sys
 import time
 import traceback as tb_module  # Alias чтобы избежать конфликтов
+from datetime import datetime, timezone, timedelta
 from requests.exceptions import ConnectionError as RequestsConnectionError
+
+# Московское время (UTC+3)
+MSK = timezone(timedelta(hours=3))
+NIGHT_START = 0   # 00:00 МСК
+NIGHT_END = 8     # 08:00 МСК
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1011,6 +1017,17 @@ class VMMOBot:
         cycle = 0
         try:
             while True:
+                # Ночной режим: 00:00-08:00 МСК — спим
+                now_msk = datetime.now(MSK)
+                if NIGHT_START <= now_msk.hour < NIGHT_END:
+                    wake_up = now_msk.replace(hour=NIGHT_END, minute=0, second=0, microsecond=0)
+                    sleep_seconds = int((wake_up - now_msk).total_seconds())
+                    log_info(f"🌙 Ночной режим: сплю до 08:00 МСК ({sleep_seconds // 3600}ч {(sleep_seconds % 3600) // 60}м)")
+                    set_activity("🌙 Сон до 08:00")
+                    time.sleep(sleep_seconds)
+                    log_info("☀️ Просыпаюсь!")
+                    set_activity("☀️ Просыпаюсь")
+
                 cycle += 1
                 log_cycle_start(cycle)
 
