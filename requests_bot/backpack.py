@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from requests_bot.config import (
-    BASE_URL, AUCTION_BLACKLIST_FILE, BACKPACK_THRESHOLD, get_protected_items
+    BASE_URL, AUCTION_BLACKLIST_FILE, BACKPACK_THRESHOLD, get_protected_items, is_unprotected_override
 )
 
 # Чёрный список аукциона - вечный (без TTL)
@@ -27,7 +27,15 @@ except ImportError:
 
 
 def is_protected_item(item_name):
-    """Проверяет, защищён ли предмет от продажи/разборки (динамически загружает список)"""
+    """Проверяет, защищён ли предмет от продажи/разборки (динамически загружает список).
+
+    Список исключений (unprotected) переопределяет защиту:
+    если предмет в исключениях — вернём False даже если он матчит protected.
+    """
+    # Сначала проверяем исключения — они главнее
+    if is_unprotected_override(item_name):
+        return False
+
     protected_items = get_protected_items()
     for protected in protected_items:
         if protected.lower() in item_name.lower():
@@ -279,7 +287,8 @@ class BackpackClient:
                 "count": count,
                 "is_green": is_green,
                 "is_legendary": is_legendary,
-                "is_protected": is_protected_item(name) or is_legendary,  # Легендарные = защищены
+                # Легендарные = защищены, но список исключений переопределяет
+                "is_protected": False if is_unprotected_override(name) else (is_protected_item(name) or is_legendary),
                 "difficulty": difficulty,  # None, "normal", "heroic", "brutal"
                 "buttons": buttons,
             })

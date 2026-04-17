@@ -622,6 +622,30 @@ def save_protected_items(items):
         return False
 
 
+UNPROTECTED_ITEMS_FILE = os.path.join(SCRIPT_DIR, "unprotected_items.json")
+
+
+def load_unprotected_items():
+    """Загружает список исключений (можно разбирать/продавать)"""
+    if os.path.exists(UNPROTECTED_ITEMS_FILE):
+        try:
+            with open(UNPROTECTED_ITEMS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def save_unprotected_items(items):
+    """Сохраняет список исключений"""
+    try:
+        with open(UNPROTECTED_ITEMS_FILE, "w", encoding="utf-8") as f:
+            json.dump(items, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+
 def reset_all_skips():
     """Сбрасывает все скипы данжей у всех персонажей"""
     results = []
@@ -1511,9 +1535,15 @@ def api_delete_profile(profile):
 @app.route("/protected")
 @login_required
 def protected_page():
-    """Страница защищённых предметов"""
+    """Страница защищённых предметов + исключений"""
     items = load_protected_items()
-    return render_template("protected.html", items=items, default_items=DEFAULT_PROTECTED_ITEMS)
+    unprotected = load_unprotected_items()
+    return render_template(
+        "protected.html",
+        items=items,
+        unprotected=unprotected,
+        default_items=DEFAULT_PROTECTED_ITEMS,
+    )
 
 
 @app.route("/api/protected", methods=["GET"])
@@ -1559,6 +1589,47 @@ def api_reset_protected():
     """API: Сбросить к дефолту"""
     save_protected_items(DEFAULT_PROTECTED_ITEMS.copy())
     return jsonify({"success": True, "items": DEFAULT_PROTECTED_ITEMS})
+
+
+# ============================================
+# Список ИСКЛЮЧЕНИЙ (можно разбирать/продавать)
+# ============================================
+
+@app.route("/api/unprotected", methods=["GET"])
+@login_required
+def api_get_unprotected():
+    """API: Список исключений"""
+    return jsonify(load_unprotected_items())
+
+
+@app.route("/api/unprotected/add", methods=["POST"])
+@login_required
+def api_add_unprotected():
+    """API: Добавить в исключения"""
+    data = request.json
+    item = data.get("item", "").strip()
+    if not item:
+        return jsonify({"success": False, "error": "Введите название предмета"})
+
+    items = load_unprotected_items()
+    if item not in items:
+        items.append(item)
+        save_unprotected_items(items)
+    return jsonify({"success": True, "items": items})
+
+
+@app.route("/api/unprotected/remove", methods=["POST"])
+@login_required
+def api_remove_unprotected():
+    """API: Удалить из исключений"""
+    data = request.json
+    item = data.get("item", "").strip()
+
+    items = load_unprotected_items()
+    if item in items:
+        items.remove(item)
+        save_unprotected_items(items)
+    return jsonify({"success": True, "items": items})
 
 
 # ============================================

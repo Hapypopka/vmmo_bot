@@ -187,6 +187,58 @@ def get_protected_items():
 _protected_items_mtime = os.path.getmtime(PROTECTED_ITEMS_FILE) if os.path.exists(PROTECTED_ITEMS_FILE) else 0
 
 
+# ============================================
+# Список ИСКЛЮЧЕНИЙ (можно разбирать/продавать)
+# ============================================
+# Переопределяет защиту: даже если предмет легендарный
+# или матчит PROTECTED_ITEMS — если он здесь, его МОЖНО трогать.
+# Пример: "Зуб Падшего Дракона" (легендарка, но мусор)
+
+UNPROTECTED_ITEMS_FILE = os.path.join(SCRIPT_DIR, "unprotected_items.json")
+UNPROTECTED_ITEMS = []
+_unprotected_items_mtime = 0
+
+
+def _load_unprotected_items():
+    """Загружает список исключений из файла"""
+    if os.path.exists(UNPROTECTED_ITEMS_FILE):
+        try:
+            with open(UNPROTECTED_ITEMS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"[CONFIG] Ошибка загрузки unprotected_items: {e}")
+    return []
+
+
+UNPROTECTED_ITEMS = _load_unprotected_items()
+_unprotected_items_mtime = os.path.getmtime(UNPROTECTED_ITEMS_FILE) if os.path.exists(UNPROTECTED_ITEMS_FILE) else 0
+
+
+def get_unprotected_items():
+    """Возвращает актуальный список исключений (перезагружает если файл изменился)"""
+    global UNPROTECTED_ITEMS, _unprotected_items_mtime
+
+    try:
+        current_mtime = os.path.getmtime(UNPROTECTED_ITEMS_FILE) if os.path.exists(UNPROTECTED_ITEMS_FILE) else 0
+        if current_mtime != _unprotected_items_mtime:
+            UNPROTECTED_ITEMS = _load_unprotected_items()
+            _unprotected_items_mtime = current_mtime
+    except OSError:
+        pass
+
+    return UNPROTECTED_ITEMS
+
+
+def is_unprotected_override(item_name):
+    """Проверяет, есть ли предмет в списке исключений (можно разбирать/продавать)"""
+    unprotected = get_unprotected_items()
+    item_lower = item_name.lower()
+    for allowed in unprotected:
+        if allowed.lower() in item_lower:
+            return True
+    return False
+
+
 # HTTP headers
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",

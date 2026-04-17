@@ -27,6 +27,49 @@
     </div>
 </div>
 
+<div class="flex flex-between flex-center mb-2" style="margin-top: 1.5rem;">
+    <h2 class="page-title">Исключения (можно разбирать/продавать)</h2>
+    <div class="btn-group">
+        <button class="btn btn-success" onclick="showAddUnprotectedModal()">+ Добавить</button>
+    </div>
+</div>
+
+<div class="card">
+    <p class="text-muted mb-2">
+        Предметы из этого списка МОЖНО разбирать/продавать, даже если они легендарные или матчат защищённый список.
+        Пример: "Зуб Падшего Дракона" — легендарка, но мусор.
+    </p>
+
+    <div id="unprotectedList" class="items-grid">
+        {% for item in unprotected %}
+        <div class="item-tag" data-item="{{ item }}" style="border-color: var(--green, #4caf50);">
+            <span>{{ item }}</span>
+            <button class="item-remove" onclick="removeUnprotected('{{ item }}')">&times;</button>
+        </div>
+        {% endfor %}
+        {% if not unprotected %}
+        <span class="text-muted" style="font-size: 12px;">Список пуст</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Модальное окно исключений -->
+<div id="addUnprotectedModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; overscroll-behavior: contain;">
+    <div class="card" style="width: 400px; max-width: 90%;">
+        <h3 class="card-title">Добавить исключение</h3>
+
+        <div class="form-group">
+            <label class="form-label">Название предмета</label>
+            <input type="text" class="form-input" id="new_unprotected" placeholder="Например: Зуб Падшего Дракона" aria-label="Название предмета">
+        </div>
+
+        <div class="flex gap-1">
+            <button class="btn btn-success" onclick="addUnprotected()">Добавить</button>
+            <button class="btn btn-dark" onclick="hideAddUnprotectedModal()">Отмена</button>
+        </div>
+    </div>
+</div>
+
 <!-- Модальное окно добавления -->
 <div id="addModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; overscroll-behavior: contain;">
     <div class="card" style="width: 400px; max-width: 90%;">
@@ -119,14 +162,61 @@
         }
     }
 
-    // Закрытие модалки
+    // === Исключения ===
+    function showAddUnprotectedModal() {
+        document.getElementById('addUnprotectedModal').style.display = 'flex';
+        document.getElementById('new_unprotected').focus();
+    }
+
+    function hideAddUnprotectedModal() {
+        document.getElementById('addUnprotectedModal').style.display = 'none';
+        document.getElementById('new_unprotected').value = '';
+    }
+
+    async function addUnprotected() {
+        const item = document.getElementById('new_unprotected').value.trim();
+        if (!item) {
+            alert('Введите название предмета');
+            return;
+        }
+
+        const result = await apiCall('/api/unprotected/add', 'POST', { item });
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    }
+
+    async function removeUnprotected(item) {
+        if (!confirm(`Удалить "${item}" из исключений?`)) return;
+
+        const result = await apiCall('/api/unprotected/remove', 'POST', { item });
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    }
+
+    // Закрытие модалок
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') hideAddModal();
-        if (e.key === 'Enter' && document.getElementById('addModal').style.display === 'flex') addItem();
+        if (e.key === 'Escape') {
+            hideAddModal();
+            hideAddUnprotectedModal();
+        }
+        if (e.key === 'Enter') {
+            if (document.getElementById('addModal').style.display === 'flex') addItem();
+            if (document.getElementById('addUnprotectedModal').style.display === 'flex') addUnprotected();
+        }
     });
 
     document.getElementById('addModal').addEventListener('click', (e) => {
         if (e.target.id === 'addModal') hideAddModal();
+    });
+
+    document.getElementById('addUnprotectedModal').addEventListener('click', (e) => {
+        if (e.target.id === 'addUnprotectedModal') hideAddUnprotectedModal();
     });
 </script>
 {% endblock %}
