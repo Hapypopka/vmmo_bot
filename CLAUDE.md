@@ -308,6 +308,41 @@ ssh -i ~/.ssh/id_ed25519_vmmo root@45.131.187.128 "fuser -k 5000/tcp; sleep 1; c
 - `POST /api/reset_skips` - сброс скипов данжей
 - `POST /api/ai/ask` - запрос к Claude
 
+## Debug CLI (быстрый дебаг без браузера)
+
+**Файл:** `requests_bot/debug_cli.py`
+**Принцип:** использует тот же `VMMOClient` что и боты — чистый HTTP + lxml, никаких скриншотов.
+**Скорость:** ~1-1.5 сек на запрос (включая SSH).
+
+### Когда использовать что
+| Сценарий | Инструмент |
+|----------|-----------|
+| Обычный HTML, AJAX-endpoints, /basin/combat, /auction, /backpack, /mail | **debug_cli** ⚡ |
+| JS-рендеренные страницы (/dungeons со списком, /city динамика) | `vmmo-browser` MCP (browser_get_html) |
+| Нужно **только** посмотреть как выглядит — скриншот | Playwright MCP (медленно) |
+
+### Команды
+```bash
+ssh -i ~/.ssh/id_ed25519_vmmo root@45.131.187.128 \
+  "cd /home/claude/vmmo_bot && python3 -m requests_bot.debug_cli <cmd> ..."
+```
+
+| Команда | Что делает |
+|---------|-----------|
+| `get <url>` | HTML страницы (обрезается `--limit 2000` по умолчанию) |
+| `select <url> <css>` | Совпадения CSS-селектора (text + attrs) |
+| `text <url> <css>` | Чистый текст селектора |
+| `ajax-urls <url> [substr]` | Все Wicket AJAX c/u пары (опц. фильтр) |
+| `wicket <url> <element_id>` | Конкретный AJAX URL по c-id |
+| `links <url> [substr]` | Все `<a href>` ссылки (опц. фильтр) |
+| `find <url> <regex>` | Произвольный regex по HTML |
+| `title <url>` | `<title>` страницы |
+| `url <url>` | Финальный URL после редиректов |
+
+**Флаги:** `--profile <name>` (default: char3), `--limit <n>`, `--raw` (без обрезки).
+
+**ВАЖНО:** CLI использует куки работающих ботов и НЕ вызывает login/logout — безопасно, не ломает сессии ботов.
+
 ## MCP Browser (mcp_browser/)
 
 MCP сервер для управления браузером через Claude Code.
