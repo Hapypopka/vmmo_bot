@@ -21,6 +21,9 @@ Debug CLI для VMMO Bot.
     url <url>                        — финальный URL после редиректов
     check-entry <dungeon_id>         — проверить почему не работает вход в данж
                                         (запустит логику бота и скажет причину)
+    last-requests [N] [filter]       — последние N HTTP-запросов работающего бота
+                                        (читает logs/requests/<profile>.jsonl)
+    tail-requests                    — live-tail запросов работающего бота (follow)
 
 Опции:
     --profile <name>   Профиль для куков (default: char3)
@@ -32,6 +35,7 @@ import json
 import re
 import sys
 import os
+import time
 
 # Путь к проекту — чтобы запуск работал и из корня, и из requests_bot/
 _here = os.path.dirname(os.path.abspath(__file__))
@@ -42,11 +46,22 @@ from requests_bot.constants import Patterns
 
 
 def _make_client(profile: str) -> VMMOClient:
-    """Создаёт клиент с куками указанного профиля (без логина)."""
+    """Создаёт клиент с куками указанного профиля (без логина).
+
+    Важно: вызываем config.set_profile чтобы VMMOClient мог открыть корректный
+    request log файл (<profile>.jsonl) — без этого get_profile_name() вернёт None
+    и файл будет называться unknown.jsonl.
+    """
     from requests_bot import config as cfg
-    # Явно указываем профиль через env — config.py читает VMMO_PROFILE
-    os.environ["VMMO_PROFILE"] = profile
-    # Перечитываем конфиг (на случай если он уже кешировал профиль)
+    # КРИТИЧНО: отключаем file-logging в клиенте debug_cli, чтобы не затереть
+    # JSONL работающего бота (он открывается с truncate при старте).
+    os.environ["VMMO_LOG_REQUESTS"] = "0"
+
+    try:
+        cfg.set_profile(profile)
+    except Exception as e:
+        print(f"[WARN] set_profile({profile}) failed: {e}", file=sys.stderr)
+
     cookies_path = os.path.join(_here, "..", "profiles", profile, "cookies.json")
     cookies_path = os.path.normpath(cookies_path)
 
@@ -54,7 +69,6 @@ def _make_client(profile: str) -> VMMOClient:
     if not os.path.exists(cookies_path):
         print(f"[ERR] Куки не найдены: {cookies_path}", file=sys.stderr)
         sys.exit(2)
-    # Напрямую передаём путь — не полагаемся на config.COOKIES_FILE
     client.load_cookies(cookies_path)
     return client
 
@@ -156,6 +170,77 @@ def cmd_title(client, args):
 def cmd_url(client, args):
     _fetch(client, args.url)
     print(client.current_url)
+
+
+def _log_path(profile):
+    """Путь к JSONL-логу HTTP запросов работающего бота."""
+    return os.path.join(os.path.dirname(_here), "logs", "requests", f"{profile}.jsonl")
+
+
+def _format_log_entry(entry):
+    """Одна строка лога для человека."""
+    status = entry.get("status", "?")
+    ms = entry.get("ms", 0)
+    size = entry.get("size", 0)
+    method = entry.get("method", "?")
+    url = entry.get("url", "")[:100]
+    # Сокращаем полный URL (убираем base + query, оставляем path)
+    url_short = url.replace("https://vmmo.vten.ru", "").replace("https://m.vten.ru", "")
+    ts = entry.get("ts", "")
+    return f"  {ts}  {method:4} {status} {ms:4}ms {size:6}B  {url_short}"
+
+
+def cmd_last_requests(client, args):
+    """Показывает последние N запросов работающего бота из JSONL."""
+    path = _log_path(args.profile)
+    if not os.path.exists(path):
+        print(f"[ERR] Лог не найден: {path}")
+        print("[HINT] Бот должен быть запущен с включённым VMMO_LOG_REQUESTS (по умолчанию on).")
+        return
+
+    n = int(args.n) if args.n else 50
+    filter_sub = args.filter
+
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    entries = []
+    for line in lines:
+        try:
+            e = json.loads(line)
+            if filter_sub and filter_sub not in e.get("url", ""):
+                continue
+            entries.append(e)
+        except Exception:
+            continue
+
+    entries = entries[-n:]
+    print(f"[*] Последние {len(entries)} запросов{' (фильтр: ' + filter_sub + ')' if filter_sub else ''}:")
+    for e in entries:
+        print(_format_log_entry(e))
+
+
+def cmd_tail_requests(client, args):
+    """Live-tail запросов: читает файл построчно по мере появления."""
+    path = _log_path(args.profile)
+    if not os.path.exists(path):
+        print(f"[ERR] Лог не найден: {path}")
+        return
+
+    # Открываем, seek в конец, читаем новые строки
+    print(f"[*] Tail {path} (Ctrl+C для выхода)")
+    with open(path, "r", encoding="utf-8") as f:
+        f.seek(0, 2)  # в конец
+        while True:
+            line = f.readline()
+            if not line:
+                time.sleep(0.5)
+                continue
+            try:
+                e = json.loads(line)
+                print(_format_log_entry(e))
+            except Exception:
+                pass
 
 
 def cmd_check_entry(client, args):
@@ -263,6 +348,11 @@ COMMANDS = {
     "title": (cmd_title, [("url", {})]),
     "url": (cmd_url, [("url", {})]),
     "check-entry": (cmd_check_entry, [("dungeon_id", {})]),
+    "last-requests": (cmd_last_requests, [
+        ("n", {"nargs": "?", "default": None}),
+        ("filter", {"nargs": "?", "default": None}),
+    ]),
+    "tail-requests": (cmd_tail_requests, []),
 }
 
 
@@ -283,7 +373,9 @@ def main():
             sp.add_argument(arg_name, **arg_opts)
 
     args = parser.parse_args()
-    client = _make_client(args.profile)
+    # File-only команды не требуют HTTP-клиента и куков
+    file_only = {"last-requests", "tail-requests"}
+    client = None if args.cmd in file_only else _make_client(args.profile)
     handler, _ = COMMANDS[args.cmd]
     handler(client, args)
 

@@ -10,6 +10,7 @@ import re
 import json
 import os
 import time
+from collections import deque
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 
@@ -21,6 +22,17 @@ import requests_bot.config as config  # Для динамического дос
 # Максимум попыток при обновлении сервера
 SERVER_UPDATE_MAX_RETRIES = 30
 SERVER_UPDATE_RETRY_DELAY = 10  # секунд
+
+# HTTP request logging — кольцевой буфер для дебага.
+# Через requests.Session.hooks['response'] ловим ВСЕ ответы (в т.ч. прямые
+# self.session.get() из других модулей). Используется debug_cli last-requests
+# для post-mortem когда бот странно себя ведёт.
+# Промежуточное решение; долгосрочная цель — mitmproxy MCP (см. project memory).
+REQUEST_LOG_SIZE = 200  # запросов в памяти
+# По умолчанию ВКЛЮЧЁН (нужен для дебага через debug_cli last-requests).
+# Выключить: VMMO_LOG_REQUESTS=0. Выключить на конкретном боте при отладке и т.п.
+REQUEST_LOG_FILE_ENABLED = os.environ.get("VMMO_LOG_REQUESTS", "1").lower() in ("1", "true", "yes")
+REQUEST_LOG_MAX_LINES = 2000  # макс. строк в JSONL перед rotate
 
 class VMMOClient:
     """HTTP клиент для VMMO на requests"""
@@ -34,6 +46,79 @@ class VMMOClient:
         # Кэш soup: ловим identity current_page (новый resp.text = новый object)
         self._cached_soup = None
         self._cached_soup_for = None
+
+        # Кольцевой буфер HTTP-запросов для дебага
+        self.request_log = deque(maxlen=REQUEST_LOG_SIZE)
+        self._req_start_times = {}  # id(request) -> monotonic start
+        self.session.hooks['response'] = [self._on_response]
+        self._log_file = None
+        if REQUEST_LOG_FILE_ENABLED:
+            self._open_log_file()
+
+    def _open_log_file(self):
+        """Открывает JSONL-файл для дампа запросов.
+
+        Стратегия: один файл на профиль (не на сессию), перезаписывается при
+        старте бота, обрезается при достижении REQUEST_LOG_MAX_LINES.
+        Это позволяет debug_cli last-requests всегда читать актуальный файл
+        по известному имени.
+        """
+        try:
+            profile = config.get_profile_name() or "unknown"
+            log_dir = os.path.join(SCRIPT_DIR, "logs", "requests")
+            os.makedirs(log_dir, exist_ok=True)
+            self._log_path = os.path.join(log_dir, f"{profile}.jsonl")
+            # Truncate при старте — прошлая сессия уже не нужна
+            self._log_file = open(self._log_path, "w", encoding="utf-8", buffering=1)
+            self._log_lines = 0
+        except Exception:
+            self._log_file = None
+            self._log_path = None
+            self._log_lines = 0
+
+    def _on_response(self, resp, *args, **kwargs):
+        """Hook: вызывается requests для каждого ответа через session."""
+        try:
+            req = resp.request
+            elapsed_ms = int(resp.elapsed.total_seconds() * 1000) if resp.elapsed else 0
+            entry = {
+                "ts": time.strftime("%H:%M:%S"),
+                "method": req.method,
+                "url": req.url[:500],
+                "status": resp.status_code,
+                "ms": elapsed_ms,
+                "size": len(resp.content),
+                "body_start": resp.text[:200] if resp.text else "",
+            }
+            self.request_log.append(entry)
+            if self._log_file:
+                self._log_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                self._log_lines += 1
+                # Rotate: если превысили лимит, переоткрываем (старые записи теряем)
+                if self._log_lines >= REQUEST_LOG_MAX_LINES:
+                    self._log_file.close()
+                    # Сохраняем последние 500 строк как "previous"
+                    try:
+                        with open(self._log_path, "r", encoding="utf-8") as f:
+                            tail = f.readlines()[-500:]
+                        self._log_file = open(self._log_path, "w", encoding="utf-8", buffering=1)
+                        self._log_file.writelines(tail)
+                        self._log_lines = len(tail)
+                    except Exception:
+                        self._log_file = open(self._log_path, "w", encoding="utf-8", buffering=1)
+                        self._log_lines = 0
+        except Exception:
+            pass  # лог дебага не должен ронять боевой трафик
+        return resp
+
+    def get_request_log(self, n=50, url_filter=None, status_filter=None):
+        """Возвращает последние N запросов из буфера, опционально с фильтром."""
+        entries = list(self.request_log)
+        if url_filter:
+            entries = [e for e in entries if url_filter in e["url"]]
+        if status_filter is not None:
+            entries = [e for e in entries if e["status"] == status_filter]
+        return entries[-n:]
 
 
     def load_cookies(self, cookies_path=None):
