@@ -95,6 +95,21 @@ class Patterns:
     # Цена на аукционе
     AUCTION_PRICE = re.compile(r'(\d[\d\s]*)\s*(?:за\s*шт|each)?', re.IGNORECASE)
 
+    # Combat internals (CombatParser)
+    SKILL_POS_IN_URL = re.compile(r'skills-(\d+)-skillBlock')
+    UNIT_POS_IN_URL = re.compile(r'entities-(\d+)-entityPanel')
+    SOURCE_POS_IN_URL = re.compile(r'sources-(\d+)-link')
+    ENEMY_HP_TEXT = re.compile(r'([\d.,]+)(K)?')
+    LOOT_TAKE_URL = re.compile(r"lootTakeUrl\s*=\s*['\"]([^'\"]+)['\"]")
+    LOOT_ID_HTML = re.compile(r'id="loot_box_(\d+)"')
+    LOOT_ID_JS = re.compile(r"dropLoot\s*\(\s*\{[^}]*id:\s*'(\d+)'")
+    LOOT_ID_IN_REFRESHER = re.compile(r"id:\s*'(\d+)'")
+    PAGE_RENDERED_PING = re.compile(r"ptxPageRenderedPingUrl\s*=\s*'([^']+)'")
+    REPORT_BACK_URL = re.compile(r'"u":"([^"]*lnkReportBack[^"]*)"')
+    DIFFICULTY_PARAM = re.compile(r"1=(normal|hard|impossible)")
+    DUNGEON_COMBAT_PATH = re.compile(r'(dungeon/combat/[^?]+)')
+    DEVICE_LINK = re.compile(r'"u":"([^"]*devices-0-deviceBlock[^"]*deviceLink[^"]*)"')
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # COMBAT CONSTANTS

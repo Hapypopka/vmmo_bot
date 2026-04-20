@@ -8,6 +8,10 @@ import re
 import time
 from bs4 import BeautifulSoup
 from requests_bot.config import LOOT_COLLECT_INTERVAL
+from requests_bot.constants import Patterns
+
+# Предкомпилированный паттерн для альт-порядка (c,u) — специфичен для combat
+_AJAX_CU_ALT = re.compile(r'"c":"([^"]+)","u":"([^"]+)"')
 
 
 class CombatParser:
@@ -23,15 +27,11 @@ class CombatParser:
     def _parse_ajax_urls(self):
         """Извлекает все Wicket AJAX URLs из скриптов"""
         # Паттерн 1: Wicket.Ajax.ajax({"c":"element_id","u":"url"...})
-        pattern1 = r'Wicket\.Ajax\.ajax\(\{[^}]*"c":"([^"]+)"[^}]*"u":"([^"]+)"'
-        matches = re.findall(pattern1, self.html)
-        for element_id, url in matches:
+        for element_id, url in Patterns.WICKET_AJAX.findall(self.html):
             self._ajax_urls[element_id] = url
 
         # Паттерн 2: "c":"element_id","u":"url" (в массивах обработчиков)
-        pattern2 = r'"c":"([^"]+)","u":"([^"]+)"'
-        matches2 = re.findall(pattern2, self.html)
-        for element_id, url in matches2:
+        for element_id, url in _AJAX_CU_ALT.findall(self.html):
             if element_id not in self._ajax_urls:
                 self._ajax_urls[element_id] = url
 
@@ -45,8 +45,7 @@ class CombatParser:
         # Скиллы имеют паттерн: skills-N-skillBlock
         for element_id, url in self._ajax_urls.items():
             if "skillBlock" in url and "skillLink" in url:
-                # Извлекаем номер скилла из URL
-                match = re.search(r'skills-(\d+)-skillBlock', url)
+                match = Patterns.SKILL_POS_IN_URL.search(url)
                 if match:
                     skill_pos = int(match.group(1)) + 1  # 0-indexed -> 1-indexed
                     skills[skill_pos] = url
@@ -57,8 +56,7 @@ class CombatParser:
         units = {}
         for element_id, url in self._ajax_urls.items():
             if "actOnLink" in url:
-                # Извлекаем позицию
-                match = re.search(r'entities-(\d+)-entityPanel', url)
+                match = Patterns.UNIT_POS_IN_URL.search(url)
                 if match:
                     units[element_id] = url
         return units
@@ -68,7 +66,7 @@ class CombatParser:
         sources = {}
         for element_id, url in self._ajax_urls.items():
             if "sources-sources" in url:
-                match = re.search(r'sources-(\d+)-link', url)
+                match = Patterns.SOURCE_POS_IN_URL.search(url)
                 if match:
                     source_idx = int(match.group(1))
                     sources[source_idx] = {"id": element_id, "url": url}
@@ -150,7 +148,7 @@ class CombatParser:
         hp_text = hp_text_el.get_text(strip=True)
         # Формат: "197.8K / 264.3K" или "640 / 640"
         # Берём первое число (текущий HP)
-        match = re.match(r'([\d.,]+)(K)?', hp_text)
+        match = Patterns.ENEMY_HP_TEXT.match(hp_text)
         if not match:
             return 0
 
@@ -169,7 +167,7 @@ class CombatParser:
 
         Формат: Ptx.Shadows.Combat.lootTakeUrl = 'URL'
         """
-        match = re.search(r"lootTakeUrl\s*=\s*['\"]([^'\"]+)['\"]", self.html)
+        match = Patterns.LOOT_TAKE_URL.search(self.html)
         return match.group(1) if match else None
 
     def find_loot_ids(self):
@@ -183,15 +181,8 @@ class CombatParser:
             set: Множество ID лута (строки)
         """
         loot_ids = set()
-
-        # Способ 1: HTML лут-боксы
-        html_loot = re.findall(r'id="loot_box_(\d+)"', self.html)
-        loot_ids.update(html_loot)
-
-        # Способ 2: JS dropLoot вызовы
-        js_loot = re.findall(r"dropLoot\s*\(\s*\{[^}]*id:\s*'(\d+)'", self.html)
-        loot_ids.update(js_loot)
-
+        loot_ids.update(Patterns.LOOT_ID_HTML.findall(self.html))
+        loot_ids.update(Patterns.LOOT_ID_JS.findall(self.html))
         return loot_ids
 
     def check_skill_cooldown(self, skill_pos):
@@ -248,13 +239,11 @@ class CombatClient:
         # URL формат: https://vmmo.vten.ru/dungeon/combat/dSanctuary?6&1=normal
         current_url = resp.url
         if "/dungeon/combat/" in current_url:
-            # Извлекаем путь: dungeon/combat/dSanctuary
-            path_match = re.search(r'(dungeon/combat/[^?]+)', current_url)
+            path_match = Patterns.DUNGEON_COMBAT_PATH.search(current_url)
             if path_match:
                 self.dungeon_path = path_match.group(1)
 
-            # Извлекаем параметр сложности: 1=normal, 1=hard, 1=impossible
-            diff_match = re.search(r'1=(normal|hard|impossible)', current_url)
+            diff_match = Patterns.DIFFICULTY_PARAM.search(current_url)
             if diff_match:
                 self.difficulty_param = f"1={diff_match.group(1)}"
 

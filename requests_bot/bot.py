@@ -77,8 +77,17 @@ except ImportError:
 import json
 from datetime import datetime
 
+# Дебаунс записи status.json: если активность та же — пишем не чаще 1 раза в 3 сек.
+# Смена активности пишется сразу.
+_activity_last_value = None
+_activity_last_write = 0.0
+
 def set_activity(activity: str):
     """Записывает текущую активность бота в status.json"""
+    global _activity_last_value, _activity_last_write
+    now = time.time()
+    if activity == _activity_last_value and (now - _activity_last_write) < 3.0:
+        return
     try:
         from requests_bot.config import PROFILE_DIR
         status_file = os.path.join(PROFILE_DIR, "status.json")
@@ -86,8 +95,13 @@ def set_activity(activity: str):
             "activity": activity,
             "updated": datetime.now().isoformat()
         }
-        with open(status_file, "w", encoding="utf-8") as f:
+        # Атомарная запись через temp+replace — веб-панель не прочитает полуфайл.
+        tmp_file = status_file + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp_file, status_file)
+        _activity_last_value = activity
+        _activity_last_write = now
     except Exception:
         pass  # Не критично
 

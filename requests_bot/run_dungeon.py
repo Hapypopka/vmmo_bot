@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from requests_bot.client import VMMOClient
 from requests_bot.combat import CombatParser
+from requests_bot.constants import Patterns
 from requests_bot.watchdog import reset_watchdog, is_watchdog_triggered, check_watchdog
 from requests_bot.config import (
     BASE_URL, SKIP_DUNGEONS, DUNGEON_ACTION_LIMITS, SCRIPT_DIR,
@@ -44,6 +45,24 @@ class DungeonRunner:
         self.metronome_count = 0  # Счётчик пульсов metronome (dls параметр)
         self.refresher_url = None  # URL для refresher (сбор лута)
         self.attack_count = 0  # Счётчик атак для периодического сбора лута
+
+        # Кэш CombatParser — пересоздаётся только когда обновляется current_page.
+        # Ловим identity (is not) — requests возвращает новую строку на каждый resp.text.
+        self._cached_parser = None
+        self._cached_parser_html = None
+
+    def _get_combat_parser(self):
+        """Возвращает CombatParser, кэширован по identity client.current_page.
+
+        Главный performance-win: раньше BeautifulSoup парсил полный HTML
+        страницы боя на каждой итерации цикла (500-1500 раз за данж).
+        Теперь — только когда страница действительно обновилась.
+        """
+        page = self.client.current_page
+        if self._cached_parser is None or self._cached_parser_html is not page:
+            self._cached_parser = CombatParser(page, self.client.current_url)
+            self._cached_parser_html = page
+        return self._cached_parser
 
     def _save_loot_url_from_combat_page(self):
         """Сохраняет lootTakeUrl из страницы боя"""
@@ -124,7 +143,7 @@ class DungeonRunner:
             response_text = resp.text
 
             # Ищем lootTakeUrl в ответе refresher (он там есть!)
-            loot_url_match = re.search(r"lootTakeUrl\s*=\s*'([^']+)'", response_text)
+            loot_url_match = Patterns.LOOT_TAKE_URL.search(response_text)
             if loot_url_match:
                 self.loot_take_url = loot_url_match.group(1)
 
@@ -133,7 +152,7 @@ class DungeonRunner:
                 return 0
 
             # Парсим ID лута
-            loot_ids = re.findall(r"id:\s*'(\d+)'", response_text)
+            loot_ids = Patterns.LOOT_ID_IN_REFRESHER.findall(response_text)
             if not loot_ids or not self.loot_take_url:
                 return 0
 
@@ -813,8 +832,8 @@ class DungeonRunner:
             return
 
         now = time.time()
-        # Отправляем каждые 1.5 секунды (браузер шлёт каждые 1-2 сек)
-        if now - self.last_metronome_time < 1.5:
+        # Браузер шлёт каждые 1-2 сек. Держимся у верхней границы — экономит ~25% запросов.
+        if now - self.last_metronome_time < 2.0:
             return
 
         try:
@@ -956,8 +975,8 @@ class DungeonRunner:
                 watchdog_result = check_watchdog(self.client)
                 return "watchdog", actions
 
-            # Парсим текущую страницу
-            parser = CombatParser(self.client.current_page, self.client.current_url)
+            # Парсим текущую страницу (кэш — пересоздаётся только при смене current_page)
+            parser = self._get_combat_parser()
 
             # Проверяем смерть
             if self.check_death():

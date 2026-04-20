@@ -38,9 +38,15 @@ def init_logger(name="vmmo_bot"):
     except Exception:
         _profile_name = "default"
 
+    # Уровень файлового лога: по умолчанию INFO.
+    # Для отладки — VMMO_DEBUG_LOG=1 (вернёт полный DEBUG вывод).
+    # DEBUG писался в 2 файла на каждую строку → лишний синхронный IO в горячих путях.
+    debug_enabled = os.environ.get("VMMO_DEBUG_LOG", "").lower() in ("1", "true", "yes")
+    file_level = logging.DEBUG if debug_enabled else logging.INFO
+
     # Создаём логгер
     _logger = logging.getLogger(name)
-    _logger.setLevel(logging.DEBUG)
+    _logger.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
 
     # Формат для консоли: [время] [профиль] [уровень] сообщение
     console_formatter = logging.Formatter(
@@ -58,9 +64,9 @@ def init_logger(name="vmmo_bot"):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     _log_file = os.path.join(LOGS_DIR, f"bot_{_profile_name}_{timestamp}.log")
 
-    # Handler для файла (DEBUG и выше)
+    # Handler для файла (уровень контролируется через VMMO_DEBUG_LOG)
     file_handler = logging.FileHandler(_log_file, encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(file_level)
     file_handler.setFormatter(file_formatter)
 
     # Handler для консоли (INFO и выше)
