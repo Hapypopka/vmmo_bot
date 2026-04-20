@@ -23,7 +23,7 @@ from requests_bot.config import (
     is_party_dungeon_enabled, get_party_dungeon_config,
 )
 from requests_bot import config as config_module  # Для доступа к ONLY_DUNGEONS
-from requests_bot.logger import log_info, log_debug, log_error
+from requests_bot.logger import log_info, log_debug, log_error, log_warning
 
 
 class DungeonRunner:
@@ -50,6 +50,14 @@ class DungeonRunner:
         # Ловим identity (is not) — requests возвращает новую строку на каждый resp.text.
         self._cached_parser = None
         self._cached_parser_html = None
+
+        # Защита от зацикливания входа в данж: если API говорит "готов",
+        # но landing-страница не даёт кнопку Войти — бот может крутиться бесконечно.
+        # После N фейлов — in-memory cooldown (до следующего рестарта бота).
+        # dungeon_id -> {"count": int, "skip_until": timestamp}
+        self._entry_failures = {}
+        self._entry_fail_threshold = 3          # фейлов подряд до скипа
+        self._entry_skip_duration = 30 * 60     # 30 минут in-memory cooldown
 
     def _get_combat_parser(self):
         """Возвращает CombatParser, кэширован по identity client.current_page.
@@ -467,6 +475,42 @@ class DungeonRunner:
         except Exception:
             pass
 
+    # Паттерны блокировок на landing-странице.
+    # Нашли эмпирически через debug_cli: для Barony у char13 текст
+    # "Сначала тебе надо пройти подземелье <Путь к Барону>" + ссылка на way2Baron.
+    _RE_PREREQ_TEXT = re.compile(r'Сначала тебе надо пройти подземелье')
+    _RE_PREREQ_LINK = re.compile(r'href="[^"]*dungeon/landing/([a-zA-Z0-9_]+)"')
+    _RE_LEVEL_LOCK = re.compile(r'(?:требует[а-я]*|нужен)[^<]{0,40}(\d+)\s*ур')
+
+    def _diagnose_no_entry(self, html):
+        """Определяет почему на landing нет кнопки входа.
+
+        Вместо безликого 'Не удалось войти' возвращаем конкретную причину
+        чтобы bot.py мог принять решение (скипнуть навсегда vs попробовать позже).
+
+        Returns: (reason, detail) или (None, None) если причина неясна.
+          reason ∈ {'prerequisite', 'level'}
+          detail — имя prerequisite-данжа или мин-уровень
+        """
+        if not html:
+            return None, None
+
+        # 1. Prerequisite: "Сначала тебе надо пройти подземелье X"
+        if self._RE_PREREQ_TEXT.search(html):
+            # Находим контекст — ссылку рядом с текстом
+            pos = self._RE_PREREQ_TEXT.search(html).end()
+            window = html[pos:pos + 500]  # первые 500 символов после текста
+            link_match = self._RE_PREREQ_LINK.search(window)
+            prereq_id = f"dng:{link_match.group(1)}" if link_match else "unknown"
+            return "prerequisite", prereq_id
+
+        # 2. Level-lock: "требуется N уровень"
+        level_match = self._RE_LEVEL_LOCK.search(html)
+        if level_match:
+            return "level", int(level_match.group(1))
+
+        return None, None
+
     def enter_dungeon(self, dungeon_id, api_link_url):
         """Входит в данжен и начинает бой"""
         print(f"\n[*] Entering dungeon: {dungeon_id}")
@@ -552,12 +596,23 @@ class DungeonRunner:
                         break
 
         if not enter_btn_url:
-            print("[ERR] Enter button not found")
-            # Debug: save HTML
+            # Self-diagnostic: почему нет кнопки входа?
+            # Определяем конкретную причину вместо безликого "не удалось войти".
+            reason, detail = self._diagnose_no_entry(html)
+
+            if reason == "prerequisite":
+                log_warning(f"[ENTRY] {dungeon_id}: нужно сначала пройти '{detail}'")
+                return "locked_prerequisite"
+            if reason == "level":
+                log_warning(f"[ENTRY] {dungeon_id}: требуется уровень {detail}")
+                return "locked_level"
+
+            # Неизвестная причина — сохраняем HTML для анализа
+            log_warning(f"[ENTRY] {dungeon_id}: кнопка входа не найдена (unknown)")
             debug_path = os.path.join(SCRIPT_DIR, "debug_no_enter.html")
             with open(debug_path, "w", encoding="utf-8") as f:
                 f.write(html)
-            print(f"[DEBUG] Saved to {debug_path}")
+            log_debug(f"[ENTRY] HTML dump: {debug_path}")
             return False
 
         print(f"[*] Clicking enter button...")

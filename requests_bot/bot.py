@@ -37,7 +37,7 @@ from requests_bot.watchdog import (
 from requests_bot.config import (
     DUNGEONS_URL, BACKPACK_THRESHOLD, load_settings,
     set_profile, get_profile_name, get_profile_username, get_credentials,
-    is_pet_resurrection_enabled, record_death, is_survival_mines_enabled, get_survival_mines_max_wave,
+    is_pet_resurrection_enabled, record_death, record_lock, is_survival_mines_enabled, get_survival_mines_max_wave,
     get_skill_cooldowns, get_survival_mines_max_level, is_dungeons_enabled,
     is_hell_games_enabled, is_light_side,
     is_iron_craft_enabled, get_craft_items, is_sell_crafts_on_startup,
@@ -860,6 +860,18 @@ class VMMOBot:
                         log_warning(f"💀 [{username}] Умер в {dungeon_name} (normal) - данж скипается!")
                     else:
                         log_warning(f"💀 [{username}] Умер в {dungeon_name} ({current_diff} -> {new_diff})")
+                    continue
+                if enter_result == "locked_prerequisite":
+                    # Игра требует пройти другой данж первым — скипаем навсегда.
+                    # Реальный кейс: char13 не прошёл 'Путь к Барону', поэтому
+                    # 'Владения Барона' всегда недоступен → бот зациклился.
+                    # Без скипа он так и будет пробовать каждые 5 сек.
+                    record_lock(dungeon_id, dungeon_name, reason="prerequisite")
+                    log_warning(f"{dungeon_name}: заблокирован (prerequisite) — скипаем навсегда")
+                    continue
+                if enter_result == "locked_level":
+                    record_lock(dungeon_id, dungeon_name, reason="level")
+                    log_warning(f"{dungeon_name}: заблокирован (level) — скипаем навсегда")
                     continue
                 if not enter_result:
                     log_warning(f"Не удалось войти в {dungeon_name}")

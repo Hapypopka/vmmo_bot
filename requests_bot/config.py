@@ -913,6 +913,38 @@ def save_deaths(deaths):
         print(f"[CONFIG] Ошибка сохранения deaths.json: {e}")
 
 
+def record_lock(dungeon_id, dungeon_name, reason, detail=None):
+    """Помечает данж как постоянно заблокированный (prerequisite, level).
+
+    В отличие от record_death (для смертей), это не "мы проиграли", а
+    "игра не даёт войти". Записываем в deaths.json + SKIP_DUNGEONS.
+
+    Args:
+        dungeon_id: 'dng:Barony'
+        dungeon_name: 'Владения Барона'
+        reason: 'prerequisite' | 'level'
+        detail: имя prerequisite или мин-уровень
+    """
+    global SKIP_DUNGEONS
+    from datetime import datetime
+    deaths = load_deaths()
+
+    if dungeon_id not in deaths:
+        deaths[dungeon_id] = {"name": dungeon_name, "deaths": []}
+
+    deaths[dungeon_id]["skipped"] = True
+    deaths[dungeon_id]["current_difficulty"] = "skip"
+    deaths[dungeon_id]["lock_reason"] = reason
+    deaths[dungeon_id]["lock_detail"] = detail
+    deaths[dungeon_id]["locked_at"] = datetime.now().isoformat()
+
+    if dungeon_id not in SKIP_DUNGEONS:
+        SKIP_DUNGEONS.append(dungeon_id)
+
+    save_deaths(deaths)
+    print(f"[CONFIG] {dungeon_name}: заблокирован игрой ({reason}: {detail}), скипаем")
+
+
 def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
     """
     Записывает смерть в данжене.

@@ -19,6 +19,8 @@ Debug CLI для VMMO Bot.
     find <url> <regex>               — произвольный regex по HTML
     title <url>                      — <title> страницы
     url <url>                        — финальный URL после редиректов
+    check-entry <dungeon_id>         — проверить почему не работает вход в данж
+                                        (запустит логику бота и скажет причину)
 
 Опции:
     --profile <name>   Профиль для куков (default: char3)
@@ -156,6 +158,100 @@ def cmd_url(client, args):
     print(client.current_url)
 
 
+def cmd_check_entry(client, args):
+    """Прогоняет логику входа в данж и объясняет почему не вышло.
+
+    Это главный debug-инструмент для кейсов типа 'char13 зациклился на Barony'.
+    Делает всё что делает бот, но вместо попытки войти — печатает диагноз.
+    """
+    from requests_bot.run_dungeon import DungeonRunner
+    import re
+
+    dungeon_id = args.dungeon_id
+    # Извлекаем короткое имя из 'dng:Barony' → 'Barony'
+    short_name = dungeon_id.split(":", 1)[1] if ":" in dungeon_id else dungeon_id
+
+    print(f"[*] Проверяю вход в {dungeon_id} (профиль: {args.profile})")
+    print()
+
+    # 1. Получаем API link как это делает бот
+    resp = client.get("/dungeons?52")
+    api_link_match = re.search(r"apiLinkUrl:\s*'([^']+)'", client.current_page or "")
+    if not api_link_match:
+        print("[ERR] apiLinkUrl не найден — возможно не залогинен")
+        return
+    api_link_url = api_link_match.group(1)
+
+    # 2. Запрашиваем redirect
+    import requests as _rq
+    enter_url = f"{api_link_url}&link_id={dungeon_id}"
+    headers = {"Accept": "application/json, text/javascript, */*; q=0.01",
+               "X-Requested-With": "XMLHttpRequest"}
+    try:
+        data = client.session.get(enter_url, headers=headers, timeout=10).json()
+    except Exception as e:
+        print(f"[ERR] API enter: {e}")
+        return
+
+    if data.get("status") != "redirect":
+        print(f"[FAIL] API вернул не redirect: {data}")
+        return
+
+    landing_url = data["url"]
+    if not landing_url.endswith("/normal"):
+        landing_url += "/normal"
+    print(f"[OK] Landing URL: {landing_url}")
+
+    # 3. Загружаем landing и диагностируем
+    client.get(landing_url)
+    print(f"[OK] Loaded: {client.current_url}")
+    print()
+
+    # 4. Прогоняем через ту же логику что enter_dungeon
+    runner = DungeonRunner(client)
+    html = client.current_page or ""
+
+    # Копия логики поиска кнопки входа из enter_dungeon
+    enter_btn = None
+    for pat_name, pat in [
+        ("standby", r'href="([^"]*dungeon/standby/[^"?]+)"'),
+        ("ILinkListener", r'href=["\']([^"\']*ILinkListener[^"\']*enterLinksPanel[^"\']*)["\']'),
+    ]:
+        m = re.search(pat, html)
+        if m:
+            enter_btn = (pat_name, m.group(1))
+            break
+    if not enter_btn:
+        soup = client.soup()
+        if soup:
+            for btn in soup.select("a.go-btn"):
+                txt = btn.get_text(strip=True)
+                href = btn.get("href", "")
+                if "Войти" in txt and href and href != "#":
+                    enter_btn = ("go-btn_Войти", href)
+                    break
+
+    if enter_btn:
+        print(f"[OK] Кнопка входа найдена ({enter_btn[0]}): {enter_btn[1][:100]}")
+        print("[RESULT] Вход возможен — бот должен пройти.")
+        return
+
+    # 5. Нет кнопки — диагностируем причину
+    reason, detail = runner._diagnose_no_entry(html)
+    print(f"[FAIL] Кнопка входа не найдена!")
+    print(f"[DIAGNOSIS] reason={reason!r}, detail={detail!r}")
+
+    if reason == "prerequisite":
+        print(f"\n[ROOT CAUSE] Игра требует сначала пройти: {detail}")
+        print(f"→ Bot.py теперь скипнет '{dungeon_id}' через record_lock(reason='prerequisite')")
+    elif reason == "level":
+        print(f"\n[ROOT CAUSE] Недостаточный уровень (нужен {detail})")
+    else:
+        print(f"\n[ROOT CAUSE] Неизвестно. HTML-фрагменты рядом с 'Сначала'/'уровен':")
+        for m in re.finditer(r'.{0,80}(?:Сначала|уровен|заблок|недоступ).{0,80}', html, re.IGNORECASE):
+            print(f"  > {m.group(0)[:200]}")
+
+
 COMMANDS = {
     "get": (cmd_get, [("url", {})]),
     "select": (cmd_select, [("url", {}), ("css", {})]),
@@ -166,6 +262,7 @@ COMMANDS = {
     "find": (cmd_find, [("url", {}), ("regex", {})]),
     "title": (cmd_title, [("url", {})]),
     "url": (cmd_url, [("url", {})]),
+    "check-entry": (cmd_check_entry, [("dungeon_id", {})]),
 }
 
 
