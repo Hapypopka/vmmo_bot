@@ -139,7 +139,7 @@ class CharacterCreator:
             return False
 
         # Ищем ссылку "Начать игру" с классом landing-btn-start
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
 
         # Вариант 1: Ищем по классу (может быть в списке классов)
         start_btn = None
@@ -387,7 +387,7 @@ class CharacterCreator:
             return True
 
         # Проверяем ошибки
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
         error = soup.find("span", class_="feedbackPanelERROR")
         if error:
             error_text = error.get_text(strip=True)
@@ -410,7 +410,7 @@ class CharacterCreator:
             return None
 
         # Ищем span с классом customize-roleName
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
         role_name = soup.find("span", class_="customize-roleName")
 
         if role_name:

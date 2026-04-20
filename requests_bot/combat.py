@@ -20,7 +20,7 @@ class CombatParser:
     def __init__(self, html, base_url):
         self.html = html
         self.base_url = base_url
-        self.soup = BeautifulSoup(html, "html.parser")
+        self.soup = BeautifulSoup(html, "lxml")
         self._ajax_urls = {}
         self._parse_ajax_urls()
 

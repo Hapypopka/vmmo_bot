@@ -31,6 +31,9 @@ class VMMOClient:
         self.current_page = None  # Последний загруженный HTML
         self.current_url = None
         self.base_url = BASE_URL  # Для использования в других модулях
+        # Кэш soup: ловим identity current_page (новый resp.text = новый object)
+        self._cached_soup = None
+        self._cached_soup_for = None
 
 
     def load_cookies(self, cookies_path=None):
@@ -204,10 +207,18 @@ class VMMOClient:
         return None
 
     def soup(self):
-        """Возвращает BeautifulSoup текущей страницы"""
-        if self.current_page:
-            return BeautifulSoup(self.current_page, "html.parser")
-        return None
+        """Возвращает BeautifulSoup текущей страницы.
+
+        Кэшируется по identity self.current_page — пересоздаётся только когда
+        страница реально сменилась. lxml быстрее html.parser в ~3-5 раз.
+        """
+        page = self.current_page
+        if not page:
+            return None
+        if self._cached_soup is None or self._cached_soup_for is not page:
+            self._cached_soup = BeautifulSoup(page, "lxml")
+            self._cached_soup_for = page
+        return self._cached_soup
 
     def ajax_get(self, url, base_url=None, **kwargs):
         """

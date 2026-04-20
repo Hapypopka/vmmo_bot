@@ -781,7 +781,7 @@ class TutorialRunner:
 
         # Кнопка "Продолжить" появляется после победы
         if "btn-rich3-content" in self.current_page:
-            soup = BeautifulSoup(self.current_page, "html.parser")
+            soup = BeautifulSoup(self.current_page, "lxml")
             for btn in soup.select(".btn-rich3-content"):
                 if "Продолжить" in btn.get_text():
                     return True
@@ -828,7 +828,7 @@ class TutorialRunner:
 
             if not match:
                 # Ищем в HTML ссылку с классом btn-rich3
-                soup = BeautifulSoup(self.current_page, "html.parser")
+                soup = BeautifulSoup(self.current_page, "lxml")
                 for btn in soup.select("a.btn-rich3, a.btn-rich3-content, .btn-rich3 a, a[id*=proceed]"):
                     text = btn.get_text()
                     if "Продолжить" in text or "продолжить" in text.lower():
@@ -886,7 +886,7 @@ class TutorialRunner:
         if not self.current_page:
             return False
 
-        soup = BeautifulSoup(self.current_page, "html.parser")
+        soup = BeautifulSoup(self.current_page, "lxml")
 
         # Враги находятся на позициях 21-25
         for pos in range(21, 26):
@@ -1284,7 +1284,7 @@ class TutorialRunner:
         print(f"[TUTORIAL] Страница changelogin загружена: {resp3.url}")
 
         # Шаг 6: Парсим форму
-        soup = BeautifulSoup(self.current_page or "", "html.parser")
+        soup = BeautifulSoup(self.current_page or "", "lxml")
 
         # Ищем форму
         form = soup.find("form", id=re.compile(r"id\w+"))
@@ -1338,7 +1338,7 @@ class TutorialRunner:
             print(f"[TUTORIAL] Ответ: статус {resp4.status_code}")
             # Проверяем ответ на ошибки
             if "feedbackPanelERROR" in resp4.text:
-                error_soup = BeautifulSoup(resp4.text, "html.parser")
+                error_soup = BeautifulSoup(resp4.text, "lxml")
                 error_span = error_soup.find("span", class_="feedbackPanelERROR")
                 if error_span:
                     print(f"[TUTORIAL] Ошибка сервера: {error_span.get_text(strip=True)}")

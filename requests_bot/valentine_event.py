@@ -232,7 +232,7 @@ def try_enter_dungeon(client, dungeon_id: str) -> tuple[str, int]:
         log_debug(f"[EVENT] На landing, ищу href 'Войти'...")
 
         from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, 'lxml')
 
         enter_url = None
         for link in soup.select('a'):

@@ -79,7 +79,7 @@ def parse_resources(html):
     if not html:
         return None
 
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, "lxml")
 
     # Ищем блок ресурсов
     resources_label = soup.find("span", class_="text-gold", string=re.compile(r"Ресурсы"))

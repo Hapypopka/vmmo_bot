@@ -400,7 +400,7 @@ class DungeonRunner:
             return False
 
         from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
 
         # Ищем кнопку "Продолжить" (не "Продолжить бой"!)
         for btn in soup.select("a.go-btn"):
