@@ -865,13 +865,14 @@ class VMMOBot:
                     # Игра требует пройти другой данж первым — скипаем навсегда.
                     # Реальный кейс: char13 не прошёл 'Путь к Барону', поэтому
                     # 'Владения Барона' всегда недоступен → бот зациклился.
-                    # Без скипа он так и будет пробовать каждые 5 сек.
-                    record_lock(dungeon_id, dungeon_name, reason="prerequisite")
-                    log_warning(f"{dungeon_name}: заблокирован (prerequisite) — скипаем навсегда")
+                    detail = self.dungeon_runner.last_lock_detail
+                    record_lock(dungeon_id, dungeon_name, reason="prerequisite", detail=detail)
+                    log_warning(f"{dungeon_name}: заблокирован (нужно пройти {detail}) — скипаем")
                     continue
                 if enter_result == "locked_level":
-                    record_lock(dungeon_id, dungeon_name, reason="level")
-                    log_warning(f"{dungeon_name}: заблокирован (level) — скипаем навсегда")
+                    detail = self.dungeon_runner.last_lock_detail
+                    record_lock(dungeon_id, dungeon_name, reason="level", detail=detail)
+                    log_warning(f"{dungeon_name}: заблокирован (нужен {detail} ур.) — скипаем")
                     continue
                 if not enter_result:
                     log_warning(f"Не удалось войти в {dungeon_name}")

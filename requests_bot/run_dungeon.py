@@ -59,6 +59,10 @@ class DungeonRunner:
         self._entry_fail_threshold = 3          # фейлов подряд до скипа
         self._entry_skip_duration = 30 * 60     # 30 минут in-memory cooldown
 
+        # Detail последней lock-блокировки (имя prereq-данжа или мин-уровень).
+        # Читает bot.py чтобы прокинуть в record_lock для deaths.json.
+        self.last_lock_detail = None
+
     def _get_combat_parser(self):
         """Возвращает CombatParser, кэширован по identity client.current_page.
 
@@ -599,6 +603,9 @@ class DungeonRunner:
             # Self-diagnostic: почему нет кнопки входа?
             # Определяем конкретную причину вместо безликого "не удалось войти".
             reason, detail = self._diagnose_no_entry(html)
+            # Сохраняем detail как атрибут — bot.py читает его для record_lock
+            # (возвращаем строковый статус чтобы не ломать существующие сравнения)
+            self.last_lock_detail = detail
 
             if reason == "prerequisite":
                 log_warning(f"[ENTRY] {dungeon_id}: нужно сначала пройти '{detail}'")
