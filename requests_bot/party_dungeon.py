@@ -93,6 +93,18 @@ PARTY_DUNGEONS = {
         "max_members": 2,
         "tab": "event",
     },
+    # Текущий ивент Май 2026 — Огненная Башня (event-party).
+    # Используется через run_event_party для координации Пупупу+Полюби.
+    "dng:FireTower": {
+        "name": "Огненная Башня",
+        "url_id": "FireTower",
+        "max_members": 2,
+        "tab": "event",
+        "is_event": True,
+        # КД проверяется через valentine_event.is_dungeon_on_cooldown_for_profile
+        # (shared state) — а не через is_on_cooldown (которое читает party cooldowns).
+        "event_dungeon_key": "FireTower",  # ключ в VALENTINE_DUNGEONS
+    },
 }
 
 
@@ -1106,3 +1118,174 @@ def _fight_dungeon(profile, party_id, party_client, dungeon_runner, dungeon_id):
 
     log_info(f"[PARTY] {profile}: бой окончен — {result}, {actions} действий")
     return result
+
+
+# ============================================
+# Event-party (ивент-данж в пати)
+# ============================================
+
+def cleanup_before_party(client) -> bool:
+    """Готовит бота к пати: возвращает в город, выходит из банды/данжа.
+
+    Вызывается перед началом пати-логики чтобы избежать ситуации когда бот
+    застрял где-то ещё (в обычном данже, в банде с прошлой сессии и т.д.).
+    Без этого инвайт лидера может не дойти, или мембер не сможет принять.
+
+    Returns:
+        bool: True если cleanup успешен (бот в /city и не в банде)
+    """
+    log_info("[EVENT-PARTY] Cleanup: возврат в город и выход из банды...")
+
+    # 1. Идём в /city
+    try:
+        client.get(f"{BASE_URL}/city")
+        time.sleep(0.5)
+    except Exception as e:
+        log_error(f"[EVENT-PARTY] Не удалось перейти в /city: {e}")
+        return False
+
+    # 2. Если есть кнопка "Покинуть банду" — нажимаем
+    html = client.current_page or ""
+    leave_match = re.search(r'href="([^"]*ppAction=leaveParty[^"]*)"', html)
+    if leave_match:
+        leave_url = leave_match.group(1).replace("&amp;", "&")
+        if not leave_url.startswith("http"):
+            leave_url = urljoin(client.current_url, leave_url)
+        log_info("[EVENT-PARTY] В банде — покидаем")
+        try:
+            client.get(leave_url)
+            time.sleep(0.5)
+            # Возвращаемся в город после выхода
+            client.get(f"{BASE_URL}/city")
+            time.sleep(0.3)
+        except Exception as e:
+            log_warning(f"[EVENT-PARTY] Не удалось покинуть банду: {e}")
+            return False
+
+    # 3. Финальная проверка — в /city ли мы (не в данже/комбате)
+    cur = client.current_url or ""
+    if "/dungeon/" in cur or "/combat" in cur:
+        log_warning(f"[EVENT-PARTY] После cleanup всё ещё в данже: {cur}")
+        return False
+
+    return True
+
+
+def run_event_party(client, dungeon_runner, dungeon_id, role):
+    """Координация event-party (ивент-данж только когда у обоих нет КД).
+
+    Отличия от run_party_dungeon:
+    - cleanup перед стартом (выход из обычного данжа/банды)
+    - Лидер дополнительно проверяет КД мембера в shared state перед созданием пати
+    - Мембер: если у себя есть КД — не вступает (не должен идти в ивент один)
+
+    Args:
+        dungeon_id: 'dng:FireTower' и т.п. (с префиксом dng:)
+        role: 'leader' | 'member'
+
+    Returns:
+        same as run_party_dungeon
+    """
+    from requests_bot.config import get_profile_name, get_profile_username, get_game_nickname
+    from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile, VALENTINE_DUNGEONS
+
+    profile = get_profile_name()
+    username = get_profile_username()
+    nickname = get_game_nickname()
+
+    dungeon_cfg = PARTY_DUNGEONS.get(dungeon_id)
+    if not dungeon_cfg or not dungeon_cfg.get("is_event"):
+        log_error(f"[EVENT-PARTY] {dungeon_id} не помечен is_event")
+        return None
+
+    # Маппинг dng:FireTower → FireTower (ключ в VALENTINE_DUNGEONS)
+    event_key = dungeon_cfg.get("event_dungeon_key", dungeon_id.replace("dng:", ""))
+
+    # 1. Проверяем КД у себя
+    if is_dungeon_on_cooldown_for_profile(profile, event_key):
+        log_debug(f"[EVENT-PARTY] У меня КД на {event_key}, пропускаем")
+        return None
+
+    # 2. Лидер: проверяем КД у потенциальных мемберов
+    #    Мы не знаем заранее кто мембер — проверяем всех ботов с записью в event_cooldowns.
+    #    Если хотя бы у одного нет КД — можно пробовать (он подхватит forming).
+    #    Если у всех КД — не создаём пати.
+    if role == "leader":
+        try:
+            with FileLock(PARTY_LOCK_FILE):
+                state = _load_state()
+            event_cd = state.get("event_cooldowns", {})
+
+            # Список потенциальных мемберов (все кроме меня) — те у кого нет КД на этот данж
+            potential_members = []
+            for other_profile, cooldowns in event_cd.items():
+                if other_profile == profile:
+                    continue
+                cd_until = cooldowns.get(event_key, 0)
+                if time.time() >= cd_until:
+                    potential_members.append(other_profile)
+
+            # Также проверяем ботов которые ВООБЩЕ нет в event_cooldowns —
+            # они либо ещё не запускались, либо на них КД=0. Их не учитываем
+            # пока они не пропишут себя — иначе можем создать пати, в которую
+            # никто не вступит.
+            if not potential_members:
+                log_info(f"[EVENT-PARTY] Лидер: нет доступных мемберов (все на КД или не публиковали)")
+                return None
+
+            log_info(f"[EVENT-PARTY] Лидер: доступные мемберы: {potential_members}")
+        except Exception as e:
+            log_error(f"[EVENT-PARTY] Ошибка проверки КД мемберов: {e}")
+            return None
+
+    # 3. Cleanup ДО try_join_or_create_party (раньше была проблема — бот пытался
+    #    стать лидером пока сидел в обычной банде с прошлого данжа)
+    if not cleanup_before_party(client):
+        log_warning("[EVENT-PARTY] Cleanup не удался, пропускаем цикл")
+        return None
+
+    # 4. Очистка зависшей пати
+    cleanup_own_stale_party(profile)
+
+    # 5. Защита от уже-в-пати
+    if is_in_party(profile):
+        log_debug(f"[EVENT-PARTY] Уже в пати, пропускаем")
+        return None
+
+    # 6. Координация через try_join_or_create_party (как в обычной пати)
+    target_members = 2  # ивент-пати всегда 2 для нашего юзкейса
+    result = try_join_or_create_party(
+        profile, nickname, dungeon_id, "impossible", target_members,
+        only_join=(role == "member"),
+    )
+    if not result:
+        if role == "member":
+            log_debug(f"[EVENT-PARTY] Мембер {profile}: forming пати нет, ждём")
+        return None
+
+    party_id = result["id"]
+    actual_role = result["role"]
+    party = result["party"]
+    party_client = PartyDungeonClient(client, dungeon_id)
+
+    log_info(f"[EVENT-PARTY] {username}: role={actual_role}, party={party_id}")
+
+    try:
+        if actual_role == "leader":
+            return _run_as_leader(
+                profile, username, party_id, party_client,
+                dungeon_runner, dungeon_id, "impossible", target_members,
+            )
+        else:
+            leader_username = party.get("leader_username", "")
+            return _run_as_member(
+                profile, username, party_id, party_client,
+                dungeon_runner, dungeon_id, leader_username,
+            )
+    except Exception as e:
+        log_error(f"[EVENT-PARTY] Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+        party_client.leave_lobby()
+        leave_party(profile, party_id)
+        return "error"

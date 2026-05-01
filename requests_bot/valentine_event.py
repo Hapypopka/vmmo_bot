@@ -105,7 +105,11 @@ def fetch_cooldowns_from_api(client) -> dict:
 
 
 def update_cooldowns_from_server(client):
-    """Обновляет кэш КД из данных сервера."""
+    """Обновляет кэш КД из данных сервера + публикует в shared state.
+
+    Публикация в shared state нужна чтобы пати-лидер мог проверить КД мембера
+    перед инвайтом (event-party координация).
+    """
     cooldowns = fetch_cooldowns_from_api(client)
 
     log_info(f"[EVENT] API вернул КД для {len(cooldowns)} данженов: {list(cooldowns.keys())}")
@@ -126,6 +130,83 @@ def update_cooldowns_from_server(client):
             set_cooldown(dungeon_id, cd_seconds)
             name = VALENTINE_DUNGEONS[dungeon_id]["name"]
             log_info(f"[EVENT] {name}: КД {cd_seconds // 3600}ч {(cd_seconds % 3600) // 60}м")
+
+    # Публикуем КД в shared state для event-party координации
+    _publish_event_cooldowns_to_shared_state(cooldowns)
+
+
+def _publish_event_cooldowns_to_shared_state(cooldowns_ms: dict):
+    """Записывает КД ивент-данжей в shared_party_state.json под ключом event_cooldowns.
+
+    Структура:
+        event_cooldowns: {profile: {dungeon_id: cd_until_unix_ts}}
+
+    Используется лидером пати чтобы проверить КД мембера перед инвайтом.
+    Если у бота КД=0 — он удаляет свою запись (доступен).
+    """
+    try:
+        from requests_bot.party_dungeon import PARTY_STATE_FILE, PARTY_LOCK_FILE
+        from requests_bot.craft_prices import FileLock
+        from requests_bot.config import get_profile_name
+        import json
+        import os
+
+        profile = get_profile_name()
+        if not profile:
+            return
+
+        with FileLock(PARTY_LOCK_FILE):
+            # Читаем
+            if os.path.exists(PARTY_STATE_FILE):
+                with open(PARTY_STATE_FILE, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+            else:
+                state = {"parties": [], "cooldowns": {}}
+
+            event_cooldowns = state.setdefault("event_cooldowns", {})
+            my_cooldowns = event_cooldowns.setdefault(profile, {})
+
+            # Обновляем по всем известным ивент-данжам
+            for dungeon_id in VALENTINE_DUNGEONS:
+                if dungeon_id in cooldowns_ms:
+                    cd_seconds = cooldowns_ms[dungeon_id] // 1000
+                    my_cooldowns[dungeon_id] = time.time() + cd_seconds
+                else:
+                    # Нет КД — удаляем запись (значит данж доступен)
+                    my_cooldowns.pop(dungeon_id, None)
+
+            # Чистим если все КД истекли
+            if not my_cooldowns:
+                event_cooldowns.pop(profile, None)
+
+            with open(PARTY_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_debug(f"[EVENT] Ошибка публикации КД в shared state: {e}")
+
+
+def is_dungeon_on_cooldown_for_profile(profile: str, dungeon_id: str) -> bool:
+    """Проверяет КД ивент-данжа для произвольного профиля через shared state.
+
+    Используется лидером пати чтобы убедиться что у мембера тоже нет КД
+    перед созданием пати на ивент.
+    """
+    try:
+        from requests_bot.party_dungeon import PARTY_STATE_FILE, PARTY_LOCK_FILE
+        from requests_bot.craft_prices import FileLock
+        import json
+        import os
+
+        with FileLock(PARTY_LOCK_FILE):
+            if not os.path.exists(PARTY_STATE_FILE):
+                return False
+            with open(PARTY_STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+
+        cd_until = state.get("event_cooldowns", {}).get(profile, {}).get(dungeon_id, 0)
+        return time.time() < cd_until
+    except Exception:
+        return False
 
 
 def get_landing_url(dungeon_id: str, difficulty: str = "normal") -> str:

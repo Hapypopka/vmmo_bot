@@ -1216,22 +1216,82 @@ class DungeonRunner:
 
             # Это интерстеп страница - сначала роллим лут, восстанавливаем ХП, потом продолжаем
 
-            # Ролл лута: нажимаем "надо" (roll=1) или "не откажусь" (roll=2) на все предметы
+            # Ролл лута: учитываем стратегию профиля
+            #   primary  → нажимаем roll=1 (нужно)
+            #   secondary → нажимаем roll=2 (не откажусь)
+            #   exceptions → инвертируют стратегию для конкретного предмета по имени
+            #
+            # Структура HTML предмета (наблюдена в Underlight):
+            #   <div class="loot-item">
+            #     <a href="/itemtemplate/...">Имя Предмета</a>
+            #     <a href="...ppAction=roll&roll=1">Нужно</a>
+            #     <a href="...ppAction=roll&roll=2">Не откажусь</a>
+            #   </div>
+            # Извлекаем имя из ссылки на itemtemplate в том же блоке (loot-item).
             if soup:
-                roll_links = []
-                for a in soup.select("a.btn.btn-brown-new"):
-                    href = a.get("href", "")
-                    if "ppAction=roll" in href and ("roll=1" in href or "roll=2" in href):
-                        roll_links.append(href)
-                if roll_links:
-                    print(f"[*] Interstep: роллю {len(roll_links)} предметов")
-                    for href in roll_links:
+                from requests_bot.config import get_party_roll_strategy, get_party_roll_exceptions
+                strategy = get_party_roll_strategy()  # 'primary' | 'secondary' | None
+                exceptions = set(get_party_roll_exceptions())  # имена предметов
+
+                rolled_count = 0
+                # Ищем контейнеры предметов с обеими кнопками ролла
+                # Сначала пробуем структурный селектор, потом fallback по всему HTML
+                item_containers = soup.select(".loot-item, .step-loot-item, .roll-item, [class*='item']")
+                if not item_containers:
+                    # Fallback: все .btn.btn-brown-new и группируем по контексту parent
+                    item_containers = list({a.parent.parent for a in soup.select("a.btn.btn-brown-new")
+                                            if a.parent and a.parent.parent})
+
+                for container in item_containers:
+                    # Кнопки ролла внутри контейнера
+                    roll_buttons = {}
+                    for a in container.select("a.btn.btn-brown-new"):
+                        href = a.get("href", "")
+                        if "ppAction=roll" not in href:
+                            continue
+                        if "roll=1" in href:
+                            roll_buttons[1] = href
+                        elif "roll=2" in href:
+                            roll_buttons[2] = href
+
+                    if not roll_buttons:
+                        continue
+
+                    # Имя предмета — из ссылки на itemtemplate
+                    item_name = ""
+                    for a in container.select("a"):
+                        if "/itemtemplate/" in a.get("href", ""):
+                            item_name = a.get_text(strip=True)
+                            break
+
+                    # Определяем эффективную стратегию (с учётом исключений)
+                    is_exception = item_name in exceptions
+                    eff_strategy = strategy
+                    if is_exception and strategy:
+                        eff_strategy = "secondary" if strategy == "primary" else "primary"
+
+                    # Выбираем какую кнопку нажать
+                    target_roll = None
+                    if eff_strategy == "primary" and 1 in roll_buttons:
+                        target_roll = 1
+                    elif eff_strategy == "secondary" and 2 in roll_buttons:
+                        target_roll = 2
+                    elif eff_strategy is None:
+                        # Стратегия не задана — старое поведение: нажимаем что нашли первым (roll=1 приоритет)
+                        target_roll = 1 if 1 in roll_buttons else 2
+
+                    if target_roll:
+                        href = roll_buttons[target_roll].replace("&amp;", "&")
                         if not href.startswith("http"):
                             href = self.base_url + href
-                        href = href.replace("&amp;", "&")
+                        suffix = " (искл.)" if is_exception else ""
+                        log_info(f"[*] Interstep: ролл {item_name or '?'} → roll={target_roll}{suffix}")
                         self.client.get(href)
                         time.sleep(0.5)
-                    print(f"[*] Interstep: ролл завершён, обновляю страницу")
+                        rolled_count += 1
+
+                if rolled_count:
+                    log_info(f"[*] Interstep: проролили {rolled_count} предметов (стратегия: {strategy or 'дефолт'})")
 
             self.try_restore_health()
 

@@ -402,6 +402,44 @@ def is_valentine_event_enabled():
     return _profile_config.get("valentine_event_enabled", False)
 
 
+def is_event_party_enabled():
+    """Включена ли координированная пати на ивент-данж (Пупупу+Полюби в FireTower)."""
+    return _profile_config.get("event_party_enabled", False)
+
+
+def get_event_party_config():
+    """Конфиг event-пати из профиля.
+
+    Формат в config.json:
+        "event_party_enabled": true,
+        "event_party_role": "leader" | "member",
+        "event_party_dungeon_id": "dng:FireTower"  // опционально
+    """
+    return {
+        "role": _profile_config.get("event_party_role", "member"),
+        "dungeon_id": _profile_config.get("event_party_dungeon_id", "dng:FireTower"),
+    }
+
+
+def get_party_roll_strategy():
+    """Стратегия ролла для пати.
+
+    'primary'   — нажимаем roll=1 (нужно)
+    'secondary' — нажимаем roll=2 (не откажусь)
+    None        — нет конфига, дефолт (нажмём roll=1 если есть)
+    """
+    return _profile_config.get("party_roll_strategy")
+
+
+def get_party_roll_exceptions():
+    """Список имён предметов для которых стратегия инвертируется.
+
+    Пример: ['Компас Дегура'] — для primary роллера это будет roll=2,
+    для secondary — roll=1.
+    """
+    return _profile_config.get("party_roll_exceptions", [])
+
+
 def is_arena_enabled():
     """Проверяет, включена ли арена для текущего профиля"""
     return _profile_config.get("arena_enabled", False)

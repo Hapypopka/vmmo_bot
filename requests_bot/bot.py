@@ -46,8 +46,9 @@ from requests_bot.config import (
     is_daily_rewards_enabled,
     is_valentine_event_enabled,
     is_party_dungeon_enabled, get_party_dungeon_config,
+    is_event_party_enabled, get_event_party_config,
 )
-from requests_bot.valentine_event import run_valentine_dungeons, VALENTINE_DUNGEONS
+from requests_bot.valentine_event import run_valentine_dungeons, VALENTINE_DUNGEONS, update_cooldowns_from_server as update_event_cooldowns
 
 
 class AutoRestartException(Exception):
@@ -545,6 +546,47 @@ class VMMOBot:
 
         return completed
 
+    def check_event_party(self):
+        """Координированная пати в ивент-данж (Пупупу+Полюби в FireTower).
+
+        Идём только когда у обоих КД=0. Лидер и мембер обновляют свои КД в
+        shared state перед проверкой. Если ни у одного из ботов нет КД —
+        пати создаётся; иначе ждём.
+
+        Returns:
+            "completed"/"died"/"error"/"timeout" — результат боя
+            "member_waiting" — мембер ждёт лидера, обычные данжи пропускаем
+            None — нет смысла пробовать (КД, выкл, и т.д.)
+        """
+        if not is_event_party_enabled():
+            return None
+
+        from requests_bot.party_dungeon import run_event_party
+
+        cfg = get_event_party_config()
+        role = cfg.get("role", "member")
+        dungeon_id = cfg.get("dungeon_id", "dng:FireTower")
+
+        # Сначала обновляем КД ивент-данжей с сервера → публикуется в shared state.
+        # Это нужно ДО любой проверки чтобы лидер и мембер видели актуальный КД.
+        try:
+            update_event_cooldowns(self.client)
+        except Exception as e:
+            log_warning(f"[EVENT-PARTY] Не удалось обновить КД с сервера: {e}")
+
+        try:
+            result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
+        except Exception as e:
+            log_error(f"[EVENT-PARTY] Ошибка: {e}")
+            import traceback
+            traceback.print_exc()
+            return "error"
+
+        # Если result=None и роль member — значит ждём пати (не идём в обычные данжи)
+        if result is None and role == "member":
+            return "member_waiting"
+        return result
+
     def check_party_dungeon(self):
         """Пробует пройти пати-данж (координация с другими ботами).
 
@@ -713,7 +755,16 @@ class VMMOBot:
         # 2.6. Ивент-данж Древний Лес (если включен)
         self.check_valentine_dungeons()
 
-        # 2.7. Пати-данж (если включён)
+        # 2.7. Event-party (Пупупу+Полюби в ивент когда у обоих КД=0)
+        event_party_result = self.check_event_party()
+        if event_party_result == "member_waiting":
+            log_debug("[EVENT-PARTY] Мембер: жду лидера, цикл закончил")
+            return True
+        if event_party_result == "completed":
+            log_info("[EVENT-PARTY] Ивент-данж пройден в пати!")
+            return True
+
+        # 2.8. Обычная пати-данж (если включён)
         party_result = self.check_party_dungeon()
         if party_result == "member_waiting":
             # Мембер ждёт лидера — НЕ идём в обычные данжи (упустит инвайт).
