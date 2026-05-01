@@ -47,6 +47,7 @@ from requests_bot.config import (
     is_valentine_event_enabled,
     is_party_dungeon_enabled, get_party_dungeon_config,
     is_event_party_enabled, get_event_party_config,
+    is_wake_for_event_party_at_night,
 )
 from requests_bot.valentine_event import run_valentine_dungeons, VALENTINE_DUNGEONS, update_cooldowns_from_server as update_event_cooldowns
 
@@ -557,6 +558,78 @@ class VMMOBot:
         """Включена ли event-party у этого бота — если да, одиночный ивент-режим
         должен быть выключен (иначе бот пройдёт ивент в одиночку и сломает координацию)."""
         return is_event_party_enabled()
+
+    def _sleep_with_event_party_wakeup(self):
+        """Ночной режим с пробуждениями для ивент-пати.
+
+        Спим короткими интервалами (~60с с джиттером), каждый раз СНАЧАЛА
+        делаем дешёвую проверку через shared_party_state.json (без HTTP):
+        - Свой КД истёк? Партнёр не на КД? — будимся, делаем ensure_logged_in,
+          вызываем check_event_party (он внутри проверит шаред-state партнёра).
+
+        Никаких обычных данжей/крафта/арены ночью не делаем.
+        Ждём NIGHT_END (08:00 МСК) и выходим обратно в основной цикл.
+        """
+        import random
+        from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile
+
+        cfg = get_event_party_config()
+        event_key = cfg.get("dungeon_id", "dng:FireTower").replace("dng:", "")
+        my_profile = get_profile_name()
+
+        log_info("🌙 Ночной режим (event-party wake-up): сплю до 08:00 МСК, проснусь только на ивент-пати")
+        set_activity("🌙 Сон (event-party wake)")
+
+        last_wake_attempt = 0  # Чтобы не спамить ensure_logged_in
+        while True:
+            # Сначала спим — джиттер 50-75с чтобы лидер и мембер не били в одну секунду
+            jitter = random.randint(50, 75)
+            time.sleep(jitter)
+
+            # Проверка — настало ли утро
+            now_msk = datetime.now(MSK)
+            if not (NIGHT_START <= now_msk.hour < NIGHT_END):
+                log_info("☀️ Утро — выхожу из ночного цикла")
+                set_activity("☀️ Просыпаюсь")
+                return
+
+            # Дешёвая проверка: свой КД через shared state (только чтение, без HTTP)
+            if is_dungeon_on_cooldown_for_profile(my_profile, event_key):
+                continue  # На КД — спим дальше
+
+            # Свой КД=0. Не дёргаем сервер чаще раз в 4 минуты подряд (если уже проснулись
+            # и не нашли партнёра — нет смысла спамить login каждую минуту).
+            if time.time() - last_wake_attempt < 240:
+                continue
+            last_wake_attempt = time.time()
+
+            log_info("⚡ КД ивент-данжа истёк, проверяю готовность партнёра...")
+            set_activity("⚡ Проверка ивент-пати")
+
+            try:
+                # Логинимся (сессия за ночь могла протухнуть)
+                if not self.client.ensure_logged_in():
+                    log_warning("Не удалось залогиниться ночью — спим дальше")
+                    continue
+
+                # Запускаем check_event_party — она сама обновит КД с сервера и
+                # проверит партнёра через shared state.
+                result = self.check_event_party()
+
+                if result in ("completed", "died"):
+                    log_info(f"🌙 Ивент-пати ночью завершён: {result}, возвращаюсь в сон")
+                elif result == "member_waiting":
+                    log_debug("🌙 Мембер ждёт лидера, продолжаю проверки")
+                elif result is None:
+                    # Партнёр ещё на КД или одиночник
+                    log_debug("🌙 Ивент-пати не готов, продолжаю спать")
+                else:
+                    log_debug(f"🌙 Ивент-пати: {result}")
+            except Exception as e:
+                log_error(f"Ошибка ночного ивент-пати: {e}")
+                log_debug(tb_module.format_exc())
+            finally:
+                set_activity("🌙 Сон (event-party wake)")
 
     def check_event_party(self):
         """Координированная пати в ивент-данж (Пупупу+Полюби в FireTower).
@@ -1152,13 +1225,20 @@ class VMMOBot:
                 # Ночной режим: 00:00-08:00 МСК — спим
                 now_msk = datetime.now(MSK)
                 if NIGHT_START <= now_msk.hour < NIGHT_END:
-                    wake_up = now_msk.replace(hour=NIGHT_END, minute=0, second=0, microsecond=0)
-                    sleep_seconds = int((wake_up - now_msk).total_seconds())
-                    log_info(f"🌙 Ночной режим: сплю до 08:00 МСК ({sleep_seconds // 3600}ч {(sleep_seconds % 3600) // 60}м)")
-                    set_activity("🌙 Сон до 08:00")
-                    time.sleep(sleep_seconds)
-                    log_info("☀️ Просыпаюсь!")
-                    set_activity("☀️ Просыпаюсь")
+                    if is_wake_for_event_party_at_night() and is_event_party_enabled():
+                        # Особый режим: спим, но просыпаемся для ивент-пати
+                        # когда у обоих (себя + партнёра) КД ивент-данжа = 0.
+                        # Никаких обычных данжей/крафта/арены ночью.
+                        self._sleep_with_event_party_wakeup()
+                    else:
+                        # Обычный ночной режим: глухой sleep до 08:00
+                        wake_up = now_msk.replace(hour=NIGHT_END, minute=0, second=0, microsecond=0)
+                        sleep_seconds = int((wake_up - now_msk).total_seconds())
+                        log_info(f"🌙 Ночной режим: сплю до 08:00 МСК ({sleep_seconds // 3600}ч {(sleep_seconds % 3600) // 60}м)")
+                        set_activity("🌙 Сон до 08:00")
+                        time.sleep(sleep_seconds)
+                        log_info("☀️ Просыпаюсь!")
+                        set_activity("☀️ Просыпаюсь")
 
                 cycle += 1
                 log_cycle_start(cycle)

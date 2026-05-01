@@ -421,6 +421,16 @@ def get_event_party_config():
     }
 
 
+def is_wake_for_event_party_at_night():
+    """Просыпаться в ночном режиме для прохождения ивент-пати.
+
+    Если True — ночью бот не делает обычные данжи/крафт/арену, а только
+    периодически проверяет КД ивент-данжа и просыпается на ивент-пати,
+    когда у обоих участников КД=0.
+    """
+    return _profile_config.get("wake_for_event_party_at_night", False)
+
+
 def get_party_roll_strategy():
     """Стратегия ролла для пати.
 
