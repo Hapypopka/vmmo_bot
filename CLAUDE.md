@@ -118,15 +118,21 @@ char1-char21 - все боты работают параллельно
 
 Внутри кода используем `brutal`/`hero`/`normal` для логики и UI парсинга.
 
-## Ивент-данжены (Февраль 2026 — Древний Лес)
+## Ивент-данжены (Май 2026 — Огненная Башня)
 
 **Статус:** Активен. Файл: `requests_bot/valentine_event.py`
 
-- Один данж: `14feb_DungeonForest` (Древний Лес)
-- Дефолтная сложность: hero (героик), brutal понижается до hero
-- Конфиг-ключ: `valentine_event_enabled` (сохранён для совместимости)
+- Один данж: `FireTower` (Огненная Башня)
+- Дефолтная сложность: **brutal (impossible)** всегда — без понижения через смерти
+- Конфиг-ключ: `valentine_event_enabled` (имя сохранено для совместимости с bot.py/config.py)
 - Тоггл в TG: "🌲 Ивент-данж"
 - Архив старых ивентов: `archive/events/`
+- TODO техдолг: переименовать `valentine_event.py`/`VALENTINE_DUNGEONS`/`run_valentine_dungeons` → `event_dungeons` отдельным коммитом
+
+История ивентов:
+- Февраль 2026 — Древний Лес (`14feb_DungeonForest`)
+- Апрель 2026 — Комета Ностромо (`Apr2023-ReturnCometNostromo`)
+- Май 2026 — Огненная Башня (`FireTower`) ← текущий
 
 ## Защищённые предметы (PROTECTED_ITEMS в config.py)
 
@@ -190,7 +196,7 @@ char1-char21 - все боты работают параллельно
 | **Бой** | |
 | combat.py | Логика боя, сбор лута |
 | run_dungeon.py | Прохождение обычных данжей |
-| valentine_event.py | Ивент-данж Древний Лес (февраль 2026) |
+| valentine_event.py | Ивент-данж Огненная Башня (май 2026, всегда brutal) |
 | hell_games.py | Адские Игры |
 | survival_mines.py | Заброшенная Шахта |
 | arena.py | PvP арена (дуэли) |

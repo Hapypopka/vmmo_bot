@@ -1,9 +1,13 @@
 # ============================================
-# VMMO Bot - April Event Dungeons
+# VMMO Bot - Event Dungeons
 # ============================================
-# Ивент Апрель 2026 — Комета Ностромо
-# Данжи: mirrormaze, Apr2023-ReturnCometNostromo
-# Дефолтная сложность: normal (нормал)
+# Май 2026 — Огненная Башня (FireTower)
+# Сложность: ВСЕГДА brutal (impossible), без понижения через смерти.
+# Бот продолжает пытаться даже если умирает — пользователь явно так попросил.
+#
+# TODO (техдолг): имена сохранены для совместимости с bot.py/config.py:
+#   VALENTINE_DUNGEONS, run_valentine_dungeons, is_valentine_event_enabled.
+#   Переименовать в EVENT_DUNGEONS / event_dungeons.py отдельным коммитом.
 # ============================================
 
 import time
@@ -11,7 +15,6 @@ import re
 from urllib.parse import urljoin
 
 from requests_bot.logger import log_info, log_debug, log_warning, log_error
-from requests_bot.config import get_dungeon_difficulty, record_death
 
 BASE_URL = "https://vmmo.vten.ru"
 
@@ -22,13 +25,16 @@ DIFFICULTY_URL_MAP = {
     "normal": "normal",
 }
 
-# Ивент-данжен
+# Текущий ивент-данж
 VALENTINE_DUNGEONS = {
-    "Apr2023-ReturnCometNostromo": {
-        "id": "Apr2023-ReturnCometNostromo",
-        "name": "Комета Ностромо",
+    "FireTower": {
+        "id": "FireTower",
+        "name": "Огненная Башня",
     },
 }
+
+# Сложность ивента — всегда brutal, не меняется от конфига и смертей
+EVENT_FORCED_DIFFICULTY = "brutal"
 
 # Кэш КД данженов (в памяти)
 _cooldown_cache = {}
@@ -176,15 +182,8 @@ def try_enter_dungeon(client, dungeon_id: str) -> tuple[str, int]:
     dungeon = VALENTINE_DUNGEONS[dungeon_id]
     name = dungeon["name"]
 
-    # Получаем сложность из deaths.json (дефолт normal для этого ивента)
-    difficulty = get_dungeon_difficulty(dungeon_id)
-    # Ивент только на нормале — понижаем любую сложность
-    if difficulty in ("brutal", "hero"):
-        difficulty = "normal"
-
-    if difficulty == "skip":
-        log_debug(f"[EVENT] {name} в скипе (слишком много смертей)")
-        return "skipped", 0
+    # Огненная Башня всегда на брутале — без оглядки на deaths.json/конфиг.
+    difficulty = EVENT_FORCED_DIFFICULTY
 
     is_available, remaining = check_cooldown(dungeon_id)
     if not is_available:
@@ -335,7 +334,7 @@ def set_cooldown_after_completion(client, dungeon_id: str):
 
 def run_valentine_dungeons(client, dungeon_runner) -> dict:
     """
-    Проходит ивент-данж Комета Ностромо.
+    Проходит ивент-данж Огненная Башня (всегда брутал).
 
     Args:
         client: VMMOClient
@@ -351,12 +350,8 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
 
     for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
         name = dungeon_config["name"]
-
-        difficulty = get_dungeon_difficulty(dungeon_id)
-        # Ивент только на нормале
-        if difficulty in ("brutal", "hero"):
-            difficulty = "normal"
-        diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал", "skip": "скип"}.get(difficulty, difficulty)
+        difficulty = EVENT_FORCED_DIFFICULTY  # всегда брутал
+        diff_name = "брутал"
 
         log_debug(f"[EVENT] Проверяю: {name} ({diff_name})...")
         result, cd = try_enter_dungeon(client, dungeon_id)
@@ -388,12 +383,9 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
                 stats["completed"] += 1
                 set_cooldown_after_completion(client, dungeon_id)
             elif fight_result == "died":
-                new_diff, should_skip = record_death(dungeon_id, name, difficulty)
-                if should_skip:
-                    log_warning(f"[EVENT] Смерть в {name} на {diff_name} → СКИП")
-                else:
-                    new_diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал"}.get(new_diff, new_diff)
-                    log_warning(f"[EVENT] Смерть в {name} на {diff_name} → {new_diff_name}")
+                # Не понижаем сложность — ивент всегда на брутале по требованию пользователя.
+                # Даже многократные смерти не переключат на героик/нормал.
+                log_warning(f"[EVENT] Смерть в {name} на {diff_name} (продолжаем брутал)")
                 stats["errors"] += 1
                 dungeon_runner.resurrect()
             else:
