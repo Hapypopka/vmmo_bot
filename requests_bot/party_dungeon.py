@@ -746,26 +746,60 @@ class PartyDungeonClient:
         return False
 
     def leave_lobby(self):
-        """Покинуть банду."""
+        """Покинуть банду.
+
+        ВАЖНО: после клика leaveParty сервер кидает на /doconfirm — там надо
+        ещё раз нажать 'Да, точно' (a.go-btn → /city?ppAction=leaveParty).
+        Без этого банда остаётся активной → бот не может войти в новые данжи.
+        Кейс 2026-05-01: char25 после ивента застрял в банде, CYCLE 10
+        попыток войти в обычные данжи все 'кнопка входа не найдена'.
+        """
         html = self.client.current_page or ""
         match = re.search(r'href="([^"]*leaveParty[^"]*)"', html)
         if not match:
-            # Пробуем из города
             self.client.get(f"{self.base_url}/city")
             time.sleep(0.5)
             html = self.client.current_page or ""
             match = re.search(r'href="([^"]*leaveParty[^"]*)"', html)
 
-        if match:
-            url = match.group(1).replace("&amp;", "&")
-            if not url.startswith("http"):
-                url = urljoin(self.client.current_url, url)
-            log_info("[PARTY] Покидаем банду")
-            self.client.get(url)
-            time.sleep(0.5)
-            return True
+        if not match:
+            log_debug("[PARTY] Кнопка 'Покинуть банду' не найдена")
+            return False
 
-        log_debug("[PARTY] Кнопка 'Покинуть банду' не найдена")
+        url = match.group(1).replace("&amp;", "&")
+        if not url.startswith("http"):
+            url = urljoin(self.client.current_url, url)
+        log_info("[PARTY] Покидаем банду (шаг 1: клик leaveParty)")
+        self.client.get(url)
+        time.sleep(0.5)
+
+        # Шаг 2: подтверждение если попали на /doconfirm
+        if "/doconfirm" in (self.client.current_url or ""):
+            self._confirm_doconfirm("Да, точно")
+
+        return True
+
+    def _confirm_doconfirm(self, button_text="Да, точно") -> bool:
+        """Нажимает кнопку подтверждения на /doconfirm странице.
+
+        Структура: <a class="go-btn">Да, точно</a> — ведёт на действие.
+        <a class="go-btn _night">Нет, отмена</a> — ведёт обратно.
+        """
+        soup = self.client.soup()
+        if not soup:
+            return False
+        for a in soup.select("a.go-btn"):
+            if a.get_text(strip=True) == button_text:
+                href = a.get("href", "").replace("&amp;", "&")
+                if not href:
+                    continue
+                if not href.startswith("http"):
+                    href = urljoin(self.client.current_url, href)
+                log_info(f"[PARTY] Подтверждение doconfirm: '{button_text}'")
+                self.client.get(href)
+                time.sleep(0.5)
+                return True
+        log_warning(f"[PARTY] Не нашёл кнопку '{button_text}' на doconfirm")
         return False
 
     # === Мембер ===
@@ -1144,18 +1178,33 @@ def cleanup_before_party(client) -> bool:
         log_error(f"[EVENT-PARTY] Не удалось перейти в /city: {e}")
         return False
 
-    # 2. Если есть кнопка "Покинуть банду" — нажимаем
+    # 2. Если есть кнопка "Покинуть банду" — нажимаем (с подтверждением doconfirm)
     html = client.current_page or ""
-    leave_match = re.search(r'href="([^"]*ppAction=leaveParty[^"]*)"', html)
+    leave_match = re.search(r'href="([^"]*leaveParty[^"]*)"', html)
     if leave_match:
         leave_url = leave_match.group(1).replace("&amp;", "&")
         if not leave_url.startswith("http"):
             leave_url = urljoin(client.current_url, leave_url)
-        log_info("[EVENT-PARTY] В банде — покидаем")
+        log_info("[EVENT-PARTY] В банде — покидаем (шаг 1)")
         try:
             client.get(leave_url)
             time.sleep(0.5)
-            # Возвращаемся в город после выхода
+            # Шаг 2: подтверждение если попали на /doconfirm.
+            # БАГ ИГРЫ: leaveParty ведёт сначала на /doconfirm с кнопкой "Да, точно".
+            # Без подтверждения банда остаётся активной.
+            if "/doconfirm" in (client.current_url or ""):
+                soup = client.soup()
+                if soup:
+                    for a in soup.select("a.go-btn"):
+                        if a.get_text(strip=True) == "Да, точно":
+                            href = a.get("href", "").replace("&amp;", "&")
+                            if href and not href.startswith("http"):
+                                href = urljoin(client.current_url, href)
+                            log_info("[EVENT-PARTY] Подтверждаю выход (doconfirm)")
+                            client.get(href)
+                            time.sleep(0.5)
+                            break
+            # Возвращаемся в город
             client.get(f"{BASE_URL}/city")
             time.sleep(0.3)
         except Exception as e:
