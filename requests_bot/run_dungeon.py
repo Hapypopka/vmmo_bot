@@ -1242,7 +1242,8 @@ class DungeonRunner:
                 self.client.get(self.client.current_url)
                 time.sleep(1)
                 html = self.client.current_page or ""
-                soup = self._make_soup(html)
+                # client.soup() кэширован по identity current_page (см. оптимизации CPU)
+                soup = self.client.soup()
 
                 # Если нас перекинуло в бой — лидер уже нажал
                 cur_url = self.client.current_url or ""
