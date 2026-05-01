@@ -632,41 +632,76 @@ class PartyDungeonClient:
     def start_combat(self, difficulty="impossible"):
         """Лидер: нажимает 'Начать бой!' через Wicket AJAX.
 
-        Паттерн URL: IBehaviorListener.0-lobby-dungeon-blockStart-linkStartCombat
+        Логика портирована из run_dungeon._start_combat (вариант 4 Wicket AJAX):
+        Wicket возвращает XML с <redirect>URL</redirect> — нужно по нему перейти.
+        Раньше тут тупо проверялся client.current_url после get — что не работает,
+        так как AJAX делает session.get без обновления current_url.
 
         Returns:
             bool: True если бой начался
         """
+        # Перезагружаем страницу лобби — кнопка "Начать бой" появляется только
+        # когда все мемберы in_lobby; нужно увидеть актуальный HTML.
+        if self.client.current_url:
+            self.client.get(self.client.current_url)
+            time.sleep(0.3)
+
         html = self.client.current_page or ""
 
-        # Ищем linkStartCombat в скриптах или Wicket AJAX
-        match = re.search(
-            r'"u":"([^"]*linkStartCombat[^"]*)"',
-            html
-        )
+        # 1. AJAX вариант — ищем "u":"...linkStartCombat..." в JS
+        match = re.search(r'"u":"([^"]*linkStartCombat[^"]*)"', html)
         if match:
             ajax_url = match.group(1).replace("\\", "")
             if not ajax_url.startswith("http"):
                 ajax_url = urljoin(self.client.current_url, ajax_url)
-            log_info("[PARTY] Лидер: 'Начать бой!' (AJAX)")
+
+            base_path = self.client.current_url.split("?")[0].replace(self.base_url, "")
             headers = {
                 "Wicket-Ajax": "true",
-                "Wicket-Ajax-BaseURL": self.client.current_url.replace(self.base_url, "").lstrip("/"),
+                "Wicket-Ajax-BaseURL": base_path.lstrip("/"),
                 "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/xml, text/xml, */*; q=0.01",
             }
+            log_info("[PARTY] Лидер: 'Начать бой!' (AJAX)")
             resp = self.client.session.get(ajax_url, headers={**self.client.session.headers, **headers})
+
+            if resp.status_code == 200 and ("xml" in resp.headers.get("Content-Type", "") or "<ajax-response" in resp.text):
+                # Ищем redirect в XML ответе
+                redirect_match = re.search(r'<redirect>\s*<!\[CDATA\[([^]]+)\]\]>\s*</redirect>', resp.text)
+                if not redirect_match:
+                    redirect_match = re.search(r'<redirect>([^<]+)</redirect>', resp.text)
+                if redirect_match:
+                    combat_url = redirect_match.group(1).strip()
+                    if not combat_url.startswith("http"):
+                        combat_url = urljoin(self.client.current_url, combat_url)
+                    log_info(f"[PARTY] Лидер: redirect → combat")
+                    self.client.get(combat_url)
+                    if "/combat" in (self.client.current_url or ""):
+                        log_info("[PARTY] Бой начался!")
+                        return True
+
+                # Ищем "Loading content for ..."
+                load_match = re.search(r"Loading content for .*?'([^']+)'", resp.text)
+                if load_match:
+                    combat_url = load_match.group(1)
+                    if not combat_url.startswith("http"):
+                        combat_url = urljoin(self.client.current_url, combat_url)
+                    log_info(f"[PARTY] Лидер: loading combat URL")
+                    self.client.get(combat_url)
+                    if "/combat" in (self.client.current_url or ""):
+                        log_info("[PARTY] Бой начался!")
+                        return True
+
+            # AJAX отработал, но без redirect — возможно сервер просто обновил DOM.
+            # Перезагружаем lobby URL и проверяем не редиректнуло ли на combat.
             time.sleep(1)
-            # Проверяем редирект на combat
             self.client.get(self.client.current_url)
             if "/combat" in (self.client.current_url or ""):
-                log_info("[PARTY] Бой начался!")
+                log_info("[PARTY] Бой начался (после reload)!")
                 return True
 
-        # Фоллбек: ищем linkStartCombat в href
-        match = re.search(
-            r'href="([^"]*linkStartCombat[^"]*)"',
-            html
-        )
+        # 2. Фоллбек href
+        match = re.search(r'href="([^"]*linkStartCombat[^"]*)"', html)
         if match:
             url = match.group(1).replace("&amp;", "&")
             if not url.startswith("http"):
@@ -678,26 +713,22 @@ class PartyDungeonClient:
                 log_info("[PARTY] Бой начался!")
                 return True
 
-        # Фоллбек 2: строим URL из pageId
-        page_match = re.search(r'pageId:\s*(\d+)', html)
-        if page_match:
-            page_id = page_match.group(1)
-            lobby_base = self.client.current_url.split("?")[0]
-            combat_url = f"{lobby_base}?{page_id}-1.IBehaviorListener.0-lobby-dungeon-blockStart-linkStartCombat&1={difficulty}"
-            log_info("[PARTY] Лидер: 'Начать бой!' (constructed URL)")
-            headers = {
-                "Wicket-Ajax": "true",
-                "Wicket-Ajax-BaseURL": self.client.current_url.replace(self.base_url, "").lstrip("/"),
-                "X-Requested-With": "XMLHttpRequest",
-            }
-            resp = self.client.session.get(combat_url, headers={**self.client.session.headers, **headers})
-            time.sleep(1)
-            self.client.get(self.client.current_url)
-            if "/combat" in (self.client.current_url or ""):
-                log_info("[PARTY] Бой начался!")
-                return True
+        # Если мы здесь — кнопка не найдена в HTML.
+        # Раньше был фолбек с constructed URL по pageId — он не работал
+        # (формат игры изменился). Удалён, чтобы не вводить в заблуждение лог.
+        log_warning(f"[PARTY] Не удалось начать бой. URL: {self.client.current_url}")
 
-        log_warning("[PARTY] Не удалось начать бой")
+        # Сохраняем HTML для диагностики
+        try:
+            import os as _os
+            from requests_bot.config import SCRIPT_DIR as _SCRIPT_DIR
+            debug_path = _os.path.join(_SCRIPT_DIR, "debug_party_no_combat.html")
+            with open(debug_path, "w", encoding="utf-8") as f:
+                f.write(html)
+            log_debug(f"[PARTY] HTML dump: {debug_path}")
+        except Exception:
+            pass
+
         return False
 
     def leave_lobby(self):

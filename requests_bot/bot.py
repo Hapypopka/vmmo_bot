@@ -476,7 +476,10 @@ class VMMOBot:
 
         completed = 0
         try:
-            from requests_bot.valentine_event import try_enter_dungeon, set_cooldown_after_completion, get_dungeon_difficulty, record_death, update_cooldowns_from_server
+            from requests_bot.valentine_event import try_enter_dungeon, set_cooldown_after_completion, update_cooldowns_from_server
+            # get_dungeon_difficulty/record_death раньше реэкспортились через valentine_event,
+            # но я их там убрал при FireTower-фиксе — импортирую напрямую из config
+            from requests_bot.config import get_dungeon_difficulty, record_death
 
             # Обновляем КД с сервера
             update_cooldowns_from_server(self.client)
