@@ -598,7 +598,14 @@ class VMMOBot:
             dungeon_id = None
 
         if not dungeon_id:
-            log_debug("[PARTY] Нет подходящей пати" + (" (мембер ждёт лидера)" if role == "member" else " (все на КД)"))
+            if role == "member":
+                # КРИТИЧНО: мембер с включённой пати НЕ должен идти в обычные данжи
+                # пока ждёт лидера — иначе уйдёт в данж и пропустит инвайт.
+                # Возвращаем спец-значение чтобы run_dungeon_cycle мог пропустить
+                # обычные данжи и просто подождать.
+                log_debug("[PARTY] Мембер ждёт лидера, обычные данжи пропускаем")
+                return "member_waiting"
+            log_debug("[PARTY] Нет подходящей пати (все на КД)")
             return None
 
         log_info(f"[PARTY] Проверяю пати-данж {dungeon_id}...")
@@ -707,7 +714,13 @@ class VMMOBot:
         self.check_valentine_dungeons()
 
         # 2.7. Пати-данж (если включён)
-        self.check_party_dungeon()
+        party_result = self.check_party_dungeon()
+        if party_result == "member_waiting":
+            # Мембер ждёт лидера — НЕ идём в обычные данжи (упустит инвайт).
+            # Возврат True = run_dungeon_cycle отработал, основной цикл сделает sleep(5)
+            # и через 5 сек попробует снова — за это время лидер мог создать пати.
+            log_debug("[PARTY] Мембер: жду лидера, цикл закончил")
+            return True
 
         # 3. Получаем список данженов (если включены)
         dungeons = []
