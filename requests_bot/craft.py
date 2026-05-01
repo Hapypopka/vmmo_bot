@@ -1341,6 +1341,21 @@ class CyclicCraftClient(IronCraftClient):
             try:
                 self.client.get(leave_url)
                 time.sleep(0.5)
+                # БАГ ИГРЫ: leaveParty ведёт на /doconfirm — нужно подтвердить.
+                # Без этого банда остаётся активной (раньше лог обманчиво писал "Вышел").
+                if "/doconfirm" in (self.client.current_url or ""):
+                    soup = self.client.soup()
+                    if soup:
+                        for a in soup.select("a.go-btn"):
+                            if a.get_text(strip=True) == "Да, точно":
+                                href = a.get("href", "").replace("&amp;", "&")
+                                if href:
+                                    if not href.startswith("http"):
+                                        from urllib.parse import urljoin
+                                        href = urljoin(self.client.current_url, href)
+                                    self.client.get(href)
+                                    time.sleep(0.3)
+                                break
                 log_info("[CRAFT] Вышел из банды")
                 return True
             except Exception as e:
@@ -1382,8 +1397,21 @@ class CyclicCraftClient(IronCraftClient):
             try:
                 self.client.get(leave_url)
                 time.sleep(0.5)
+                # БАГ ИГРЫ: подтверждение doconfirm нужно, иначе банда висит.
+                if "/doconfirm" in (self.client.current_url or ""):
+                    soup = self.client.soup()
+                    if soup:
+                        for a in soup.select("a.go-btn"):
+                            if a.get_text(strip=True) == "Да, точно":
+                                href = a.get("href", "").replace("&amp;", "&")
+                                if href:
+                                    if not href.startswith("http"):
+                                        from urllib.parse import urljoin
+                                        href = urljoin(self.client.current_url, href)
+                                    self.client.get(href)
+                                    time.sleep(0.3)
+                                break
                 log_info("[CRAFT] Вышел из банды, пробую запустить крафт...")
-                # Пробуем запустить крафт снова
                 return self.start_craft(recipe)
             except Exception as e:
                 log_info(f"[CRAFT] Ошибка выхода из банды: {e}")
