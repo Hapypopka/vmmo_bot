@@ -475,6 +475,13 @@ class VMMOBot:
         if not event_enabled:
             return 0
 
+        # Если включена event-party — одиночный заход в ивент ОТКЛЮЧЁН.
+        # Иначе бот зайдёт сам, зафиксирует КД, нарушит координацию с мембером.
+        # (Реальный кейс 2026-05-01: char9 пошёл в FireTower один пока char25 ждал.)
+        if self._is_event_party_active():
+            log_debug("[EVENT] event_party_enabled — одиночный заход пропущен (приоритет пати)")
+            return 0
+
         completed = 0
         try:
             from requests_bot.valentine_event import try_enter_dungeon, set_cooldown_after_completion, update_cooldowns_from_server
@@ -545,6 +552,11 @@ class VMMOBot:
             self.stats["errors"] += 1
 
         return completed
+
+    def _is_event_party_active(self):
+        """Включена ли event-party у этого бота — если да, одиночный ивент-режим
+        должен быть выключен (иначе бот пройдёт ивент в одиночку и сломает координацию)."""
+        return is_event_party_enabled()
 
     def check_event_party(self):
         """Координированная пати в ивент-данж (Пупупу+Полюби в FireTower).

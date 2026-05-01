@@ -1206,17 +1206,18 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
         log_debug(f"[EVENT-PARTY] У меня КД на {event_key}, пропускаем")
         return None
 
-    # 2. Лидер: проверяем КД у потенциальных мемберов
-    #    Мы не знаем заранее кто мембер — проверяем всех ботов с записью в event_cooldowns.
-    #    Если хотя бы у одного нет КД — можно пробовать (он подхватит forming).
-    #    Если у всех КД — не создаём пати.
+    # 2. Решаем стоит ли вообще идти в пати ПРЕЖДЕ чем делать cleanup.
+    #    Cleanup делает HTTP-запросы (/city, leaveParty) — каждый цикл их делать
+    #    избыточно. Делаем только когда есть РЕАЛЬНАЯ возможность собрать пати.
+    target_members = 2
+
     if role == "leader":
+        # Лидер: проверяем что есть хотя бы один доступный мембер в shared state
         try:
             with FileLock(PARTY_LOCK_FILE):
                 state = _load_state()
             event_cd = state.get("event_cooldowns", {})
 
-            # Список потенциальных мемберов (все кроме меня) — те у кого нет КД на этот данж
             potential_members = []
             for other_profile, cooldowns in event_cd.items():
                 if other_profile == profile:
@@ -1225,21 +1226,22 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
                 if time.time() >= cd_until:
                     potential_members.append(other_profile)
 
-            # Также проверяем ботов которые ВООБЩЕ нет в event_cooldowns —
-            # они либо ещё не запускались, либо на них КД=0. Их не учитываем
-            # пока они не пропишут себя — иначе можем создать пати, в которую
-            # никто не вступит.
             if not potential_members:
-                log_info(f"[EVENT-PARTY] Лидер: нет доступных мемберов (все на КД или не публиковали)")
+                log_debug(f"[EVENT-PARTY] Лидер: нет доступных мемберов")
                 return None
 
             log_info(f"[EVENT-PARTY] Лидер: доступные мемберы: {potential_members}")
         except Exception as e:
             log_error(f"[EVENT-PARTY] Ошибка проверки КД мемберов: {e}")
             return None
+    else:
+        # Мембер: проверяем что есть forming пати — иначе не делаем cleanup впустую
+        forming = find_forming_party(profile)
+        if not forming or forming.get("dungeon_id") != dungeon_id:
+            log_debug(f"[EVENT-PARTY] Мембер: forming пати на {dungeon_id} нет, ждём")
+            return None
 
-    # 3. Cleanup ДО try_join_or_create_party (раньше была проблема — бот пытался
-    #    стать лидером пока сидел в обычной банде с прошлого данжа)
+    # 3. Cleanup ТОЛЬКО когда реально пойдём в пати
     if not cleanup_before_party(client):
         log_warning("[EVENT-PARTY] Cleanup не удался, пропускаем цикл")
         return None
@@ -1252,15 +1254,14 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
         log_debug(f"[EVENT-PARTY] Уже в пати, пропускаем")
         return None
 
-    # 6. Координация через try_join_or_create_party (как в обычной пати)
-    target_members = 2  # ивент-пати всегда 2 для нашего юзкейса
+    # 6. Координация через try_join_or_create_party
     result = try_join_or_create_party(
         profile, nickname, dungeon_id, "impossible", target_members,
         only_join=(role == "member"),
     )
     if not result:
         if role == "member":
-            log_debug(f"[EVENT-PARTY] Мембер {profile}: forming пати нет, ждём")
+            log_debug(f"[EVENT-PARTY] Мембер {profile}: forming пати исчезла, ждём")
         return None
 
     party_id = result["id"]
