@@ -1292,6 +1292,24 @@ class DungeonRunner:
 
                 if rolled_count:
                     log_info(f"[*] Interstep: проролили {rolled_count} предметов (стратегия: {strategy or 'дефолт'})")
+                else:
+                    # Если новая логика ничего не пророллила — fallback на старую.
+                    # Это спасает от случая когда HTML структура отличается от ожидаемой
+                    # (Underlight работал, но FireTower может иметь другие классы).
+                    # Лучше прокликать всё как раньше чем застрять на interstep.
+                    fallback_links = []
+                    for a in soup.select("a.btn.btn-brown-new"):
+                        href = a.get("href", "")
+                        if "ppAction=roll" in href and ("roll=1" in href or "roll=2" in href):
+                            fallback_links.append(href)
+                    if fallback_links:
+                        log_warning(f"[*] Interstep: контейнеры не найдены, fallback — кликаю все {len(fallback_links)} ролл-кнопок")
+                        for href in fallback_links:
+                            if not href.startswith("http"):
+                                href = self.base_url + href
+                            href = href.replace("&amp;", "&")
+                            self.client.get(href)
+                            time.sleep(0.3)
 
             self.try_restore_health()
 

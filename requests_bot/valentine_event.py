@@ -175,9 +175,10 @@ def _publish_event_cooldowns_to_shared_state(cooldowns_ms: dict):
                     # Нет КД — удаляем запись (значит данж доступен)
                     my_cooldowns.pop(dungeon_id, None)
 
-            # Чистим если все КД истекли
-            if not my_cooldowns:
-                event_cooldowns.pop(profile, None)
+            # ВАЖНО: профиль остаётся в event_cooldowns даже если все КД=0.
+            # Это сигнал лидеру "я тут, готов идти" — пустой dict = доступен.
+            # Раньше я удалял профиль и лидер не видел мембера → пати не создавалась.
+            event_cooldowns[profile] = my_cooldowns
 
             with open(PARTY_STATE_FILE, "w", encoding="utf-8") as f:
                 json.dump(state, f, ensure_ascii=False, indent=2)

@@ -574,6 +574,14 @@ class VMMOBot:
         except Exception as e:
             log_warning(f"[EVENT-PARTY] Не удалось обновить КД с сервера: {e}")
 
+        # ВАЖНО: проверяем СВОЙ КД ДО member_waiting логики. Иначе мембер с КД
+        # будет крутиться в member_waiting бесконечно, не идя в обычные данжи.
+        from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile
+        event_key = dungeon_id.replace("dng:", "")
+        if is_dungeon_on_cooldown_for_profile(get_profile_name(), event_key):
+            log_debug(f"[EVENT-PARTY] У меня КД на {event_key} → обычная активность")
+            return None  # пусть бот идёт в обычные данжи
+
         try:
             result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
         except Exception as e:
@@ -582,7 +590,8 @@ class VMMOBot:
             traceback.print_exc()
             return "error"
 
-        # Если result=None и роль member — значит ждём пати (не идём в обычные данжи)
+        # Мембер БЕЗ КД: если пати не нашлась — ждём (не идём в обычные данжи).
+        # Мембер С КД: уже отсеян выше через is_dungeon_on_cooldown_for_profile.
         if result is None and role == "member":
             return "member_waiting"
         return result
