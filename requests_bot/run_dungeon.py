@@ -1192,8 +1192,11 @@ class DungeonRunner:
                         print(f"[*] Dungeon complete: {text}")
                         return "completed"
 
-        # Проверяем URL - на странице между этапами (step)
-        if "/dungeon/step/" in url:
+        # Проверяем URL - на странице между этапами.
+        # /dungeon/step/ — для одиночных данжей.
+        # /dungeon/standby/ — для пати-данжей (после 1го этапа сервер кидает туда).
+        # Обе обрабатываются одинаково: ролл лута + ждём "Продолжить бой".
+        if "/dungeon/step/" in url or "/dungeon/standby/" in url:
             # Пороги Шэдоу Гарда: после последнего полезного этапа выходим
             # (3й этап бесконечный и бесполезный)
             if self.current_dungeon_id == "dng:ShadowGuard":
