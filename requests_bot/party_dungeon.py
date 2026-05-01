@@ -145,8 +145,12 @@ def _find_party(state, party_id):
     return None
 
 
-def is_on_cooldown(profile, dungeon_id="dng:ShadowGuard"):
-    """Проверяет КД данжа из shared state."""
+def is_on_cooldown(profile, dungeon_id):
+    """Проверяет КД данжа из shared state.
+
+    Раньше был дефолт dungeon_id='dng:ShadowGuard' — это маскировало баги,
+    когда вызывающий забывал передать конкретный данж. Теперь обязательный.
+    """
     try:
         with FileLock(PARTY_LOCK_FILE):
             state = _load_state()
@@ -245,8 +249,13 @@ def can_join_party(profile, dungeon_id):
     return True
 
 
-def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossible", target_members=2):
+def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossible", target_members=2, only_join=False):
     """Атомарно: найти FORMING пати и вступить, или создать новую.
+
+    only_join=True: только вступить в существующую (для роли member). Если
+    forming пати нет — вернуть None, не создавать. Защищает от race-окна
+    когда find_forming_party нашёл пати, но к моменту try_join... пати
+    уже исчезла, и мембер случайно становится лидером.
 
     Returns:
         dict: {"id": ..., "role": "leader"|"member", "party": {...}} или None
@@ -279,6 +288,10 @@ def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossib
                     p["updated_at"] = time.time()
                     _save_state(state)
                     return {"id": p["id"], "role": "member", "party": p}
+
+            # only_join=True: мембер пришёл присоединиться, но forming уже нет — выходим
+            if only_join:
+                return None
 
             # Нет подходящей — создаём новую
             party_id = f"party_{int(time.time())}_{profile}"
@@ -826,10 +839,17 @@ class PartyDungeonClient:
 # Главная функция координации
 # ============================================
 
-def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", difficulty="impossible"):
+def run_party_dungeon(client, dungeon_runner, dungeon_id, difficulty="impossible", role=None):
     """Главная функция: координация + вход + бой.
 
-    Вызывается из bot.py.
+    Вызывается из bot.py с уже определённым dungeon_id (раньше был дефолт
+    'dng:ShadowGuard' — маскировал баг когда bot.py забывал передавать).
+
+    role: 'leader' | 'member' | None.
+        - 'leader': создаёт новую пати если нет forming
+        - 'member': только присоединяется, НЕ создаёт (защита от race-окна
+          между find_forming_party в bot.py и try_join_or_create_party здесь)
+        - None: старое поведение (создаст всегда, оставлено для совместимости)
 
     Returns:
         "completed" — данж пройден
@@ -857,8 +877,13 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id="dng:ShadowGuard", diff
     target_members = party_cfg.get("members", 2)
 
     # Пробуем вступить или создать (nickname для инвайтов)
-    result = try_join_or_create_party(profile, nickname, dungeon_id, difficulty, target_members)
+    result = try_join_or_create_party(
+        profile, nickname, dungeon_id, difficulty, target_members,
+        only_join=(role == "member"),  # мембер не создаёт пати
+    )
     if not result:
+        if role == "member":
+            log_debug(f"[PARTY] Мембер {profile}: forming пати исчезла, ждём следующий цикл")
         return None
 
     party_id = result["id"]

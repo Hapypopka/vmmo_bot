@@ -560,6 +560,7 @@ class VMMOBot:
         profile = get_profile_name()
 
         role = cfg.get("role", "member")
+        configured_dungeon = cfg.get("dungeon_id")  # из конфига профиля
 
         # 1. Сначала проверяем — есть ли уже forming пати, к которой можно присоединиться
         forming = find_forming_party(profile)
@@ -567,15 +568,28 @@ class VMMOBot:
             dungeon_id = forming["dungeon_id"]
             log_info(f"[PARTY] Найдена forming пати {forming['id']} для {dungeon_id}, присоединяюсь")
         elif role == "leader":
-            # 2. Только лидер создаёт новую пати — ищем данж без КД
+            # Лидер: сначала пробуем данж из конфига (раньше был баг — игнорировался,
+            # лидер брал первый попавшийся из PARTY_DUNGEONS).
             target_members = cfg.get("members", 2)
             dungeon_id = None
-            for did, dcfg in PARTY_DUNGEONS.items():
-                if dcfg.get("max_members", 5) < target_members:
-                    continue  # Данж на меньше участников чем в пати
-                if not is_on_cooldown(profile, did):
-                    dungeon_id = did
-                    break
+
+            if configured_dungeon and configured_dungeon in PARTY_DUNGEONS:
+                # Используем явно настроенный данж если на нём нет КД
+                dcfg = PARTY_DUNGEONS[configured_dungeon]
+                if dcfg.get("max_members", 5) >= target_members and not is_on_cooldown(profile, configured_dungeon):
+                    dungeon_id = configured_dungeon
+                    log_info(f"[PARTY] Лидер: иду в настроенный {dungeon_id}")
+                else:
+                    log_debug(f"[PARTY] Лидер: настроенный {configured_dungeon} на КД или размер не подходит — fallback")
+
+            if not dungeon_id:
+                # Fallback: первый доступный данж из словаря
+                for did, dcfg in PARTY_DUNGEONS.items():
+                    if dcfg.get("max_members", 5) < target_members:
+                        continue
+                    if not is_on_cooldown(profile, did):
+                        dungeon_id = did
+                        break
         else:
             # Мембер — только присоединяется, не создаёт
             dungeon_id = None
@@ -587,9 +601,12 @@ class VMMOBot:
         log_info(f"[PARTY] Проверяю пати-данж {dungeon_id}...")
 
         try:
+            # Если forming пати уже найдена — мембер. Иначе используем роль из конфига.
+            effective_role = "member" if forming else role
             result = run_party_dungeon(
                 self.client, self.dungeon_runner,
-                dungeon_id=dungeon_id, difficulty=difficulty
+                dungeon_id=dungeon_id, difficulty=difficulty,
+                role=effective_role,
             )
         except Exception as e:
             log_error(f"[PARTY] Ошибка: {e}")
