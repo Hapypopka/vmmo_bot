@@ -634,17 +634,19 @@ class PartyDungeonClient:
 
         Логика портирована из run_dungeon._start_combat (вариант 4 Wicket AJAX):
         Wicket возвращает XML с <redirect>URL</redirect> — нужно по нему перейти.
-        Раньше тут тупо проверялся client.current_url после get — что не работает,
-        так как AJAX делает session.get без обновления current_url.
+
+        КРИТИЧНО: после invite_player лидер остаётся на /party/search, а не в лобби.
+        Поэтому первым делом явно идём в /dungeon/lobby/{url_id}.
 
         Returns:
             bool: True если бой начался
         """
-        # Перезагружаем страницу лобби — кнопка "Начать бой" появляется только
-        # когда все мемберы in_lobby; нужно увидеть актуальный HTML.
-        if self.client.current_url:
-            self.client.get(self.client.current_url)
-            time.sleep(0.3)
+        # Явно идём в лобби — после invite_player current_url = /party/search,
+        # а кнопка "Начать бой" есть только в lobby.
+        lobby_url = f"{self.base_url}/dungeon/lobby/{self.url_id}"
+        log_debug(f"[PARTY] Лидер: иду в лобби {lobby_url}")
+        self.client.get(lobby_url)
+        time.sleep(0.5)
 
         html = self.client.current_page or ""
 
