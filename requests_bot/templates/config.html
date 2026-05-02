@@ -74,6 +74,26 @@
         </div>
 
         <div class="form-group flex flex-between flex-center">
+            <label>🔥 Ивент-пати <span style="opacity:0.6;font-size:0.85em">(role: {{ config.get('event_party_role', '—') }})</span></label>
+            <label class="toggle">
+                <input type="checkbox" id="event_party_enabled"
+                       {{ 'checked' if config.get('event_party_enabled', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'event_party_enabled')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
+            <label>🌙 Просыпаться ночью на ивент-пати</label>
+            <label class="toggle">
+                <input type="checkbox" id="wake_for_event_party_at_night"
+                       {{ 'checked' if config.get('wake_for_event_party_at_night', False) }}
+                       onchange="toggleSetting('{{ profile }}', 'wake_for_event_party_at_night')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="form-group flex flex-between flex-center">
             <label>Шахта выживания</label>
             <label class="toggle">
                 <input type="checkbox" id="survival_mines_enabled"

@@ -94,11 +94,11 @@ PARTY_DUNGEONS = {
         "tab": "event",
     },
     # Текущий ивент Май 2026 — Огненная Башня (event-party).
-    # Используется через run_event_party для координации Пупупу+Полюби.
+    # Используется через run_event_party для координации (Пупупу + до 2 мемберов).
     "dng:FireTower": {
         "name": "Огненная Башня",
         "url_id": "FireTower",
-        "max_members": 2,
+        "max_members": 3,  # подтверждено в landing: "3чел."
         "tab": "event",
         "is_event": True,
         # КД проверяется через valentine_event.is_dungeon_on_cooldown_for_profile
@@ -1258,10 +1258,10 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
     # 2. Решаем стоит ли вообще идти в пати ПРЕЖДЕ чем делать cleanup.
     #    Cleanup делает HTTP-запросы (/city, leaveParty) — каждый цикл их делать
     #    избыточно. Делаем только когда есть РЕАЛЬНАЯ возможность собрать пати.
-    target_members = 2
+    max_party_size = dungeon_cfg.get("max_members", 2)
 
     if role == "leader":
-        # Лидер: проверяем что есть хотя бы один доступный мембер в shared state
+        # Лидер: берёт ВСЕХ доступных мемберов из shared state (до лимита данжа)
         try:
             with FileLock(PARTY_LOCK_FILE):
                 state = _load_state()
@@ -1279,7 +1279,9 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
                 log_debug(f"[EVENT-PARTY] Лидер: нет доступных мемберов")
                 return None
 
-            log_info(f"[EVENT-PARTY] Лидер: доступные мемберы: {potential_members}")
+            # Размер пати = я + доступные мемберы, но не больше max данжа
+            target_members = min(1 + len(potential_members), max_party_size)
+            log_info(f"[EVENT-PARTY] Лидер: доступные мемберы: {potential_members} → target_members={target_members}")
         except Exception as e:
             log_error(f"[EVENT-PARTY] Ошибка проверки КД мемберов: {e}")
             return None
@@ -1289,6 +1291,7 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
         if not forming or forming.get("dungeon_id") != dungeon_id:
             log_debug(f"[EVENT-PARTY] Мембер: forming пати на {dungeon_id} нет, ждём")
             return None
+        target_members = max_party_size  # для try_join_or_create_party — реальное число берётся из forming party
 
     # 3. Cleanup ТОЛЬКО когда реально пойдём в пати
     if not cleanup_before_party(client):

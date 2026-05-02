@@ -1341,6 +1341,8 @@ def api_toggle_setting(profile, setting):
         "hell_games_enabled": False,
         "valentine_event_enabled": False,
         "party_dungeon_enabled": False,
+        "event_party_enabled": False,
+        "wake_for_event_party_at_night": False,
         "survival_mines_enabled": False,
         "iron_craft_enabled": False,
         "pet_resurrection_enabled": False,
