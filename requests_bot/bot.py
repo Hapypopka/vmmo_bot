@@ -562,27 +562,34 @@ class VMMOBot:
     def _sleep_with_event_party_wakeup(self):
         """Ночной режим с пробуждениями для ивент-пати.
 
-        Спим короткими интервалами (~60с с джиттером), каждый раз СНАЧАЛА
-        делаем дешёвую проверку через shared_party_state.json (без HTTP):
-        - Свой КД истёк? Партнёр не на КД? — будимся, делаем ensure_logged_in,
-          вызываем check_event_party (он внутри проверит шаред-state партнёра).
+        Логика разная для leader/member, чтобы они синхронизировались:
 
-        Никаких обычных данжей/крафта/арены ночью не делаем.
+        Лидер: дроссель 2 мин — реже создаёт пати, но точно. После создания
+            пати ждёт 120с в лобби (FORMING_TIMEOUT), мембер должен успеть.
+
+        Мембер: каждый цикл (~60с) делает ДЕШЁВУЮ проверку find_forming_party()
+            (только чтение shared_party_state.json, без HTTP). Если forming-пати
+            от лидера есть — ensure_logged_in + join. Если нет — обратно спать.
+
+        Никаких обычных данжей/крафта/арены ночью.
         Ждём NIGHT_END (08:00 МСК) и выходим обратно в основной цикл.
         """
         import random
         from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile
+        from requests_bot.party_dungeon import find_forming_party
 
         cfg = get_event_party_config()
         event_key = cfg.get("dungeon_id", "dng:FireTower").replace("dng:", "")
+        dungeon_id = cfg.get("dungeon_id", "dng:FireTower")
         my_profile = get_profile_name()
+        my_role = cfg.get("role", "member")
 
-        log_info("🌙 Ночной режим (event-party wake-up): сплю до 08:00 МСК, проснусь только на ивент-пати")
+        log_info(f"🌙 Ночной режим (event-party wake-up, role={my_role}): сплю до 08:00 МСК")
         set_activity("🌙 Сон (event-party wake)")
 
-        last_wake_attempt = 0  # Чтобы не спамить ensure_logged_in
+        last_leader_attempt = 0  # Только для лидера
         while True:
-            # Сначала спим — джиттер 50-75с чтобы лидер и мембер не били в одну секунду
+            # Сначала спим — джиттер 50-75с
             jitter = random.randint(50, 75)
             time.sleep(jitter)
 
@@ -593,27 +600,31 @@ class VMMOBot:
                 set_activity("☀️ Просыпаюсь")
                 return
 
-            # Дешёвая проверка: свой КД через shared state (только чтение, без HTTP)
+            # Дешёвая проверка: свой КД через shared state (только чтение)
             if is_dungeon_on_cooldown_for_profile(my_profile, event_key):
                 continue  # На КД — спим дальше
 
-            # Свой КД=0. Не дёргаем сервер чаще раз в 4 минуты подряд (если уже проснулись
-            # и не нашли партнёра — нет смысла спамить login каждую минуту).
-            if time.time() - last_wake_attempt < 240:
-                continue
-            last_wake_attempt = time.time()
-
-            log_info("⚡ КД ивент-данжа истёк, проверяю готовность партнёра...")
-            set_activity("⚡ Проверка ивент-пати")
+            # === МЕМБЕР: дешёвая проверка forming-пати в shared state ===
+            if my_role == "member":
+                forming = find_forming_party(my_profile)
+                if not forming or forming.get("dungeon_id") != dungeon_id:
+                    continue  # Лидер ещё не создал пати — спим
+                # Лидер создал пати! Идём
+                log_info(f"⚡ Лидер создал forming-пати на {dungeon_id} → присоединяюсь")
+                set_activity("⚡ Join к лидеру")
+            else:
+                # === ЛИДЕР: дроссель 2 мин ===
+                if time.time() - last_leader_attempt < 120:
+                    continue
+                last_leader_attempt = time.time()
+                log_info("⚡ КД ивент-данжа истёк, создаю пати...")
+                set_activity("⚡ Создаю ивент-пати")
 
             try:
-                # Логинимся (сессия за ночь могла протухнуть)
                 if not self.client.ensure_logged_in():
                     log_warning("Не удалось залогиниться ночью — спим дальше")
                     continue
 
-                # Запускаем check_event_party — она сама обновит КД с сервера и
-                # проверит партнёра через shared state.
                 result = self.check_event_party()
 
                 if result in ("completed", "died"):
@@ -621,7 +632,6 @@ class VMMOBot:
                 elif result == "member_waiting":
                     log_debug("🌙 Мембер ждёт лидера, продолжаю проверки")
                 elif result is None:
-                    # Партнёр ещё на КД или одиночник
                     log_debug("🌙 Ивент-пати не готов, продолжаю спать")
                 else:
                     log_debug(f"🌙 Ивент-пати: {result}")
