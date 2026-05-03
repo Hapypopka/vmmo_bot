@@ -933,36 +933,91 @@ class PartyDungeonClient:
         return self.enter_dungeon_feedback(), markers
 
     def wait_and_accept_invite(self, leader_username, timeout=INVITE_TIMEOUT):
-        """Мембер: поллит разные страницы ожидая приглашение.
+        """Мембер ждёт инвайт от лидера.
 
-        Навигирует между /city и /backpack чтобы триггерить обновление notice.
+        Стратегия:
+            1. Открываем /city и подписываемся на Wicket WebSocket
+               (push-канал игры — там реально приходят notice о приглашениях).
+            2. Параллельно поллим HTTP-страницы как fallback на случай если
+               WS-сообщение пришло раньше подписки.
+            3. Какое из двух сработает — то и используем.
+
+        Без WS чисто HTTP-fallback почти не ловит инвайт (сервер пушит
+        через WS-канал и в HTML страниц не возвращает после первых ~2
+        минут сессии).
 
         Returns:
             bool: True если приглашение принято и вошёл в данж
         """
-        deadline = time.time() + timeout
-        attempt = 0
-        # Чередуем страницы для обновления notice. /dungeon/landing/<id>/<diff>
-        # часто содержит свежие notice т.к. лидер именно там собирает банду.
-        pages = ["city", "dungeon/landing/FireTower/impossible", "backpack", "city", "dungeons"]
+        from requests_bot.wicket_ws import listener_for_current_page
+
         log_info(f"[PARTY] Мембер: жду инвайт от {leader_username} ({timeout}с)...")
 
-        last_markers = None
-        while time.time() < deadline:
-            page = pages[attempt % len(pages)]
-            attempt += 1
+        # Сначала встаём на /city — там и WS-канал нужного типа (CityPage),
+        # и реальные приглашения приходят сюда.
+        self.client.get(f"{self.base_url}/city")
+        time.sleep(0.3)
 
-            result, markers = self.check_and_accept_invite(leader_username, page=page, attempt=attempt)
-            if result:
-                return True
-            last_markers = markers
+        ws_listener = None
+        try:
+            ws_listener = listener_for_current_page(self.client)
+            if ws_listener:
+                ws_listener.start()
+                log_info(f"[PARTY] WS-слушатель запущен на pageId={ws_listener.page_id}")
+            else:
+                log_warning("[PARTY] WS-слушатель не создан, fallback на HTTP-поллинг")
+        except Exception as e:
+            log_warning(f"[PARTY] Ошибка WS: {e}")
 
-            time.sleep(POLL_INTERVAL)
+        try:
+            # Если WS поднялся — ждём сначала через него, параллельно делая
+            # лёгкие HTTP-полли как страховку.
+            deadline = time.time() + timeout
+            attempt = 0
+            pages = ["city", "dungeon/landing/FireTower/impossible", "backpack", "city", "dungeons"]
+            last_markers = None
 
-        log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с), {attempt} попыток")
-        if last_markers:
-            log_warning(f"[PARTY] Последняя проверка: {last_markers}")
-        return False
+            # WS-проверка делается в маленьком цикле (короткие wait) чтобы успевать
+            # делать HTTP-полли параллельно
+            ws_poll_step = 3.0  # сек между проверками WS
+
+            while time.time() < deadline:
+                # 1) Проверка WS
+                if ws_listener:
+                    invite = ws_listener.wait_for_invite(timeout=ws_poll_step, leader_username=leader_username)
+                    if invite:
+                        log_info(f"[PARTY] Мембер: вижу инвайт через WS от '{invite['inviter_name'] or '?'}'")
+                        accept_url = invite["accept_url"]
+                        log_debug(f"[PARTY] WS Accept URL: {accept_url}")
+                        self.client.get(accept_url)
+                        time.sleep(0.5)
+                        # После accept сервер обычно редиректит в лобби
+                        current = self.client.current_url or ""
+                        if "/dungeon/lobby/" in current or "/dungeon/standby/" in current:
+                            log_info("[PARTY] Мембер: уже в лобби после accept!")
+                            return True
+                        return self.enter_dungeon_feedback()
+                else:
+                    time.sleep(ws_poll_step)
+
+                # 2) Параллельный HTTP-полл (на случай если WS пропустил)
+                page = pages[attempt % len(pages)]
+                attempt += 1
+                result, markers = self.check_and_accept_invite(leader_username, page=page, attempt=attempt)
+                if result:
+                    return True
+                last_markers = markers
+
+            log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с), {attempt} HTTP-попыток")
+            if last_markers:
+                log_warning(f"[PARTY] Последняя HTTP-проверка: {last_markers}")
+            return False
+        finally:
+            if ws_listener:
+                try:
+                    ws_listener.stop()
+                except Exception:
+                    pass
 
 
 # ============================================
