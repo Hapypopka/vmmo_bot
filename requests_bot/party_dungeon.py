@@ -1049,7 +1049,11 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
 
     while time.time() < lobby_deadline:
         members = get_party_members(party_id)
-        if members and all(m.get("status") == "in_lobby" for m in members.values()):
+        # Проверяем что мемберов достаточно И все в лобби.
+        # Без len-проверки баг: если мембер ушёл (leave_party после таймаута
+        # своего invite), он удаляется из members, остаётся ТОЛЬКО лидер.
+        # all(...) для одного элемента = True → лидер шёл в бой соло.
+        if len(members) >= target_members and all(m.get("status") == "in_lobby" for m in members.values()):
             break
 
         # Переотправляем инвайт каждые 30с
