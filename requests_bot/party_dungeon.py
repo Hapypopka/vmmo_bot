@@ -23,7 +23,7 @@ PARTY_STATE_FILE = os.path.join(SCRIPT_DIR, "shared_party_state.json")
 PARTY_LOCK_FILE = os.path.join(SCRIPT_DIR, "shared_party_state.lock")
 
 # Таймауты
-FORMING_TIMEOUT = 120      # 2 мин на сбор пати
+FORMING_TIMEOUT = 180      # 3 мин на сбор пати — даёт запас на медленный цикл мембера в дневном режиме
 INVITE_TIMEOUT = 60        # 60с на accept инвайта
 LOBBY_TIMEOUT = 90         # 90с ожидание в лобби
 COMBAT_TIMEOUT = 600       # 10 мин на бой

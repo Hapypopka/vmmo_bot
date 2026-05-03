@@ -554,6 +554,15 @@ class VMMOBot:
 
         return completed
 
+    def _cleanup_event_cooldowns_inactive(self):
+        """Прокси на valentine_event.cleanup_inactive_event_cooldowns().
+
+        Логика убрана в valentine_event.py чтобы не плодить дублирующих
+        работ с shared_party_state.json в bot.py.
+        """
+        from requests_bot.valentine_event import cleanup_inactive_event_cooldowns
+        cleanup_inactive_event_cooldowns()
+
     def _is_event_party_active(self):
         """Включена ли event-party у этого бота — если да, одиночный ивент-режим
         должен быть выключен (иначе бот пройдёт ивент в одиночку и сломает координацию)."""
@@ -642,54 +651,100 @@ class VMMOBot:
                 set_activity("🌙 Сон (event-party wake)")
 
     def check_event_party(self):
-        """Координированная пати в ивент-данж (Пупупу+Полюби в FireTower).
+        """Координированная пати в ивент-данж.
 
-        Идём только когда у обоих КД=0. Лидер и мембер обновляют свои КД в
-        shared state перед проверкой. Если ни у одного из ботов нет КД —
-        пати создаётся; иначе ждём.
+        Логика разделена для leader/member чтобы не разсинхронизировались
+        в дневном режиме (ночной режим уже синхронизирован отдельно):
+
+        Мембер (быстрый путь, БЕЗ HTTP в большинстве вызовов):
+            1. find_forming_party() — дешёвая проверка shared_party_state.json.
+            2. Если forming-пати лидера НЕТ — return None СРАЗУ.
+               Бот пойдёт делать обычные данжи / крафт. На следующем цикле
+               снова дёшево проверит — затраты минимальны.
+            3. Если forming-пати ЕСТЬ — обновляем КД с сервера, идём в
+               run_event_party (там join + ждём инвайт).
+
+            Раньше мембер ВСЕГДА делал HTTP-запрос update_event_cooldowns
+            каждый цикл (~75с) → лидер инвайтил мембера в первые ~15с
+            forming-окна, а мембер замечал forming через минуту. Они
+            хронически промахивались друг по другу.
+
+        Лидер:
+            1. update_event_cooldowns с сервера → публикация в shared state.
+            2. Проверка своего КД через shared state.
+            3. Cleanup призрачных мемберов (event_party_enabled=False).
+            4. run_event_party — соберёт мемберов, создаст пати, инвайтит.
 
         Returns:
             "completed"/"died"/"error"/"timeout" — результат боя
-            "member_waiting" — мембер ждёт лидера, обычные данжи пропускаем
-            None — нет смысла пробовать (КД, выкл, и т.д.)
+            "member_waiting" — мембер был в forming-пати, но что-то пошло не так
+            None — пати нет, бот должен делать обычную активность
         """
         if not is_event_party_enabled():
             return None
 
-        from requests_bot.party_dungeon import run_event_party
+        from requests_bot.party_dungeon import run_event_party, find_forming_party
+        from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile
 
         cfg = get_event_party_config()
         role = cfg.get("role", "member")
         dungeon_id = cfg.get("dungeon_id", "dng:FireTower")
+        event_key = dungeon_id.replace("dng:", "")
+        my_profile = get_profile_name()
 
-        # Сначала обновляем КД ивент-данжей с сервера → публикуется в shared state.
-        # Это нужно ДО любой проверки чтобы лидер и мембер видели актуальный КД.
+        # === МЕМБЕР: быстрый путь без HTTP ===
+        if role == "member":
+            forming = find_forming_party(my_profile)
+            if not forming or forming.get("dungeon_id") != dungeon_id:
+                # Forming-пати лидера нет → пусть бот делает обычные данжи.
+                # НЕ возвращаем "member_waiting" — это блокировало бы обычную
+                # активность каждый цикл, что в дневном режиме плохо.
+                return None
+
+            log_info(f"⚡ [EVENT-PARTY] Лидер создал forming-пати → присоединяюсь")
+            try:
+                update_event_cooldowns(self.client)
+            except Exception as e:
+                log_warning(f"[EVENT-PARTY] Не удалось обновить КД: {e}")
+
+            # Свой КД мог появиться между циклами — перепроверим
+            if is_dungeon_on_cooldown_for_profile(my_profile, event_key):
+                log_debug(f"[EVENT-PARTY] У меня КД на {event_key} → не вступаю")
+                return None
+
+            try:
+                result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
+            except Exception as e:
+                log_error(f"[EVENT-PARTY] Ошибка: {e}")
+                import traceback
+                traceback.print_exc()
+                return "error"
+
+            if result is None:
+                return "member_waiting"
+            return result
+
+        # === ЛИДЕР: полный путь с HTTP ===
         try:
             update_event_cooldowns(self.client)
         except Exception as e:
             log_warning(f"[EVENT-PARTY] Не удалось обновить КД с сервера: {e}")
 
-        # ВАЖНО: проверяем СВОЙ КД ДО member_waiting логики. Иначе мембер с КД
-        # будет крутиться в member_waiting бесконечно, не идя в обычные данжи.
-        from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile
-        event_key = dungeon_id.replace("dng:", "")
-        if is_dungeon_on_cooldown_for_profile(get_profile_name(), event_key):
+        if is_dungeon_on_cooldown_for_profile(my_profile, event_key):
             log_debug(f"[EVENT-PARTY] У меня КД на {event_key} → обычная активность")
-            return None  # пусть бот идёт в обычные данжи
+            return None
+
+        # Удаляем призрачных мемберов (event_party_enabled=False),
+        # чтобы не ждать тех кто отключил ивент-пати в UI.
+        self._cleanup_event_cooldowns_inactive()
 
         try:
-            result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
+            return run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
         except Exception as e:
             log_error(f"[EVENT-PARTY] Ошибка: {e}")
             import traceback
             traceback.print_exc()
             return "error"
-
-        # Мембер БЕЗ КД: если пати не нашлась — ждём (не идём в обычные данжи).
-        # Мембер С КД: уже отсеян выше через is_dungeon_on_cooldown_for_profile.
-        if result is None and role == "member":
-            return "member_waiting"
-        return result
 
     def check_party_dungeon(self):
         """Пробует пройти пати-данж (координация с другими ботами).

@@ -186,6 +186,58 @@ def _publish_event_cooldowns_to_shared_state(cooldowns_ms: dict):
         log_debug(f"[EVENT] Ошибка публикации КД в shared state: {e}")
 
 
+def cleanup_inactive_event_cooldowns():
+    """Удаляет из event_cooldowns профили с event_party_enabled=False.
+
+    Без этого лидер ждёт мемберов которые отключили ивент-пати в UI —
+    их запись остаётся в shared state, и target_members оказывается
+    больше реально доступных.
+
+    Вызывается лидером перед созданием пати.
+    """
+    try:
+        from requests_bot.party_dungeon import PARTY_STATE_FILE, PARTY_LOCK_FILE
+        from requests_bot.craft_prices import FileLock
+        import json
+        import os
+
+        profiles_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "profiles",
+        )
+
+        with FileLock(PARTY_LOCK_FILE):
+            if not os.path.exists(PARTY_STATE_FILE):
+                return
+            with open(PARTY_STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+
+            event_cooldowns = state.get("event_cooldowns", {})
+            to_remove = []
+            for prof in list(event_cooldowns.keys()):
+                cfg_path = os.path.join(profiles_dir, prof, "config.json")
+                if not os.path.exists(cfg_path):
+                    to_remove.append(prof)
+                    continue
+                try:
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    if not cfg.get("event_party_enabled", False):
+                        to_remove.append(prof)
+                except Exception:
+                    pass
+
+            if to_remove:
+                for prof in to_remove:
+                    del event_cooldowns[prof]
+                state["event_cooldowns"] = event_cooldowns
+                with open(PARTY_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(state, f, ensure_ascii=False, indent=2)
+                log_info(f"[EVENT-PARTY] Убраны призраки из event_cooldowns: {to_remove}")
+    except Exception as e:
+        log_debug(f"[EVENT-PARTY] cleanup_inactive_event_cooldowns: {e}")
+
+
 def is_dungeon_on_cooldown_for_profile(profile: str, dungeon_id: str) -> bool:
     """Проверяет КД ивент-данжа для произвольного профиля через shared state.
 
