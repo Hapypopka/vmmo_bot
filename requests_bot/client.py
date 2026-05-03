@@ -211,10 +211,51 @@ class VMMOClient:
         return resp
 
     def _is_server_update_page(self):
-        """Проверяет является ли текущая страница 'обновление сервера'"""
+        """Проверяет является ли текущая страница 'обновление сервера'.
+
+        Прямой маркер виден только на главной (/) — там есть текст
+        'Идет обновление сервера'. Залогиненные боты на /city, /dungeons
+        и т.д. получают пустой fallback (title 'Мир Теней Онлайн-игра',
+        ~270 байт) — БЕЗ маркера обновления.
+
+        Поэтому при подозрительном fallback'е дёргаем главную для
+        подтверждения. Результат кэшируется на 30 секунд чтобы не
+        спамить запросами при повторных проверках.
+        """
         if not self.current_page:
             return False
-        return "Идет обновление сервера" in self.current_page or "Идёт обновление сервера" in self.current_page
+
+        # Прямой признак — на главной/логине
+        if "Идет обновление сервера" in self.current_page or "Идёт обновление сервера" in self.current_page:
+            return True
+
+        # Эвристика для залогиненных: fallback страница вместо контента
+        is_fallback = (
+            len(self.current_page) < 1500
+            and "Мир Теней Онлайн-игра" in self.current_page
+        )
+        if not is_fallback:
+            return False
+
+        # Кэш результата на 30с чтобы не делать лишних HTTP при поллинге
+        if not hasattr(self, "_update_check_ts"):
+            self._update_check_ts = 0
+            self._update_check_result = False
+        if time.time() - self._update_check_ts < 30:
+            return self._update_check_result
+
+        try:
+            check_resp = self.session.get(BASE_URL, timeout=10, allow_redirects=False)
+            text = check_resp.text or ""
+            self._update_check_result = (
+                "Идет обновление сервера" in text or "Идёт обновление сервера" in text
+            )
+            self._update_check_ts = time.time()
+            if self._update_check_result:
+                print("[CLIENT] Подтверждено: сервер на обновлении (через GET /)")
+            return self._update_check_result
+        except Exception:
+            return False
 
     def is_server_updating(self):
         """Публичный метод для проверки обновления сервера"""
