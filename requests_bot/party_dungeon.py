@@ -824,7 +824,7 @@ class PartyDungeonClient:
             return m.group(1).strip()
         return None
 
-    def check_and_accept_invite(self, leader_username, page="city"):
+    def check_and_accept_invite(self, leader_username, page="city", attempt=0):
         """Мембер: проверяет приглашение на странице и принимает.
 
         Уведомление рендерится через JS (Ptx.Shadows.Notice.show),
@@ -832,57 +832,105 @@ class PartyDungeonClient:
         Принимает ТОЛЬКО приглашение от своего лидера.
 
         Returns:
-            bool: True если приглашение принято
+            tuple[bool, dict]: (нашли и приняли инвайт, диагностические маркеры)
         """
-        # Переходим на указанную страницу чтобы увидеть уведомление
-        self.client.get(f"{self.base_url}/{page}")
+        # Cache-busting чтобы сервер/прокси не отдавали закешированную версию.
+        # Также явный no-cache header.
+        url = f"{self.base_url}/{page}?_={int(time.time() * 1000)}"
+        try:
+            self.client.session.headers["Cache-Control"] = "no-cache"
+            self.client.session.headers["Pragma"] = "no-cache"
+            self.client.get(url)
+        finally:
+            self.client.session.headers.pop("Cache-Control", None)
+            self.client.session.headers.pop("Pragma", None)
         time.sleep(0.5)
         html = self.client.current_page or ""
+        current_url = self.client.current_url or ""
 
         # Ищем notice с приглашением (текст есть в JS даже без рендеринга)
         has_invite = "приглашает тебя в банду" in html
         has_feedback = "feedbackAction=accept" in html
 
+        # Диагностические маркеры всегда считаем (для возврата)
+        markers = {
+            "size": len(html),
+            "url": current_url[:120],
+            "has_invite_text": has_invite,
+            "has_feedback_accept": has_feedback,
+            "has_notice_js": "Ptx.Shadows.Notice" in html,
+            "has_feedback_anywhere": "feedbackAction" in html,
+            "has_party_word": ("банду" in html or "банда" in html),
+            "has_leader_name": (leader_username in html) if leader_username else False,
+            "has_login_form": ('name="login"' in html or "Вход в аккаунт" in html),
+        }
+
+        # Логируем КАЖДУЮ попытку на INFO — это разовое расследование.
+        # После того как баг найден — снизить до debug.
+        log_info(f"[PARTY-DBG] invite-poll #{attempt} /{page}: {markers}")
+
         if not has_invite and not has_feedback:
-            return False
+            # Дамп HTML только при подозрительных состояниях:
+            #  - login_form (нас разлогинило)
+            #  - notice есть, но не про банду (инвайт другого формата?)
+            #  - первая попытка после ожидаемого invite (attempt 2-3)
+            should_dump = (
+                markers["has_login_form"]
+                or (markers["has_notice_js"] and not markers["has_party_word"])
+                or attempt in (2, 3)
+            )
+            if should_dump:
+                try:
+                    import os
+                    from requests_bot.config import get_profile_name
+                    debug_dir = "/tmp/debug_party"
+                    os.makedirs(debug_dir, exist_ok=True)
+                    safe_page = page.replace("/", "_")
+                    profile = get_profile_name() or "unknown"
+                    fname = f"{debug_dir}/invite_{profile}_{safe_page}_a{attempt}_{int(time.time())}.html"
+                    with open(fname, "w", encoding="utf-8") as f:
+                        f.write(f"<!-- URL: {current_url} -->\n")
+                        f.write(f"<!-- Attempt: {attempt}, Page: {page} -->\n")
+                        f.write(f"<!-- Markers: {markers} -->\n")
+                        f.write(html)
+                    log_warning(f"[PARTY-DBG] dump: {fname}")
+                except Exception as e:
+                    log_debug(f"[PARTY-DBG] dump fail: {e}")
+
+            return False, markers
 
         # Проверяем что приглашение от нашего лидера
         inviter = self._extract_inviter_name(html)
         if inviter and inviter != leader_username:
             log_warning(f"[PARTY] Мембер: приглашение от '{inviter}', а ждём от '{leader_username}' — отклоняю")
-            # Отклоняем чужое приглашение
             decline_url = self._find_feedback_url(html, "decline")
             if decline_url:
                 self.client.get(decline_url)
                 time.sleep(0.5)
-            return False
+            return False, markers
 
         log_info(f"[PARTY] Мембер: вижу приглашение от {inviter or '?'}! (page=/{page})")
 
-        # Ищем URL принятия из HTML или JS-контента
         accept_url = self._find_feedback_url(html, "accept")
         if not accept_url:
             log_warning("[PARTY] Мембер: URL 'Принять' не найден в HTML")
-            # Логируем фрагменты для отладки
             for i, line in enumerate(html.split('\n')):
                 if 'feedback' in line.lower() or 'приглашает' in line.lower():
                     log_debug(f"[PARTY] HTML[{i}]: {line[:200]}")
-            return False
+            return False, markers
 
         log_info(f"[PARTY] Мембер: принимаю приглашение от {leader_username}")
         log_debug(f"[PARTY] Accept URL: {accept_url}")
         self.client.get(accept_url)
         time.sleep(0.5)
 
-        # После accept сервер может редиректить прямо в лобби
         current = self.client.current_url or ""
         log_debug(f"[PARTY] После accept URL: {current}")
         if "/dungeon/lobby/" in current or "/dungeon/standby/" in current:
             log_info("[PARTY] Мембер: уже в лобби после accept!")
-            return True
+            return True, markers
 
-        # Иначе ищем кнопку "Войти в подземелье"
-        return self.enter_dungeon_feedback()
+        return self.enter_dungeon_feedback(), markers
 
     def wait_and_accept_invite(self, leader_username, timeout=INVITE_TIMEOUT):
         """Мембер: поллит разные страницы ожидая приглашение.
@@ -894,23 +942,26 @@ class PartyDungeonClient:
         """
         deadline = time.time() + timeout
         attempt = 0
-        # Чередуем страницы для обновления notice
-        pages = ["city", "backpack", "city", "dungeons"]
+        # Чередуем страницы для обновления notice. /dungeon/landing/<id>/<diff>
+        # часто содержит свежие notice т.к. лидер именно там собирает банду.
+        pages = ["city", "dungeon/landing/FireTower/impossible", "backpack", "city", "dungeons"]
         log_info(f"[PARTY] Мембер: жду инвайт от {leader_username} ({timeout}с)...")
 
+        last_markers = None
         while time.time() < deadline:
             page = pages[attempt % len(pages)]
             attempt += 1
 
-            if attempt % 4 == 0:
-                remaining = int(deadline - time.time())
-                log_debug(f"[PARTY] Мембер: поллинг #{attempt}, /{page}, осталось {remaining}с")
-
-            if self.check_and_accept_invite(leader_username, page=page):
+            result, markers = self.check_and_accept_invite(leader_username, page=page, attempt=attempt)
+            if result:
                 return True
+            last_markers = markers
+
             time.sleep(POLL_INTERVAL)
 
         log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с), {attempt} попыток")
+        if last_markers:
+            log_warning(f"[PARTY] Последняя проверка: {last_markers}")
         return False
 
 
