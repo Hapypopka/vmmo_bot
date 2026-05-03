@@ -421,6 +421,16 @@ def get_event_party_config():
     }
 
 
+def get_event_dungeon_difficulty():
+    """Сложность одиночного прохождения ивент-данжа.
+
+    Возможные значения: 'normal', 'hero', 'brutal' (default).
+    Нужно для случаев когда бот слишком слабый для брутала —
+    Nza идёт в FireTower на normal, а Пупупу+Полюби в пати на impossible.
+    """
+    return _profile_config.get("event_dungeon_difficulty", "brutal")
+
+
 def is_wake_for_event_party_at_night():
     """Просыпаться в ночном режиме для прохождения ивент-пати.
 

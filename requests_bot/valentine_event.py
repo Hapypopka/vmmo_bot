@@ -316,8 +316,10 @@ def try_enter_dungeon(client, dungeon_id: str) -> tuple[str, int]:
     dungeon = VALENTINE_DUNGEONS[dungeon_id]
     name = dungeon["name"]
 
-    # Огненная Башня всегда на брутале — без оглядки на deaths.json/конфиг.
-    difficulty = EVENT_FORCED_DIFFICULTY
+    # Сложность из конфига профиля (default brutal — для большинства персонажей).
+    # Слабым ботам можно поставить normal/hero чтобы реально выживать.
+    from requests_bot.config import get_event_dungeon_difficulty
+    difficulty = get_event_dungeon_difficulty()
 
     is_available, remaining = check_cooldown(dungeon_id)
     if not is_available:
@@ -482,10 +484,12 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
     log_info("[EVENT] Проверяю КД данженов с сервера...")
     update_cooldowns_from_server(client)
 
+    from requests_bot.config import get_event_dungeon_difficulty
+    difficulty = get_event_dungeon_difficulty()
+    diff_name = {"brutal": "брутал", "hero": "героик", "normal": "норма"}.get(difficulty, difficulty)
+
     for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
         name = dungeon_config["name"]
-        difficulty = EVENT_FORCED_DIFFICULTY  # всегда брутал
-        diff_name = "брутал"
 
         log_debug(f"[EVENT] Проверяю: {name} ({diff_name})...")
         result, cd = try_enter_dungeon(client, dungeon_id)
