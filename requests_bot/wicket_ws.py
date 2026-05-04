@@ -50,8 +50,12 @@ WICKET_APP_NAME = "WicketApplicationFilter"
 #       baseUrl: 'dungeon/combat/demonsBaron', ...
 #   }
 # Парсим отдельные поля регуляркой — JSON.loads тут не сработает.
+#
+# Игра иногда рендерит chained-assign:
+#   Ptx.Shadows.WebSocket.params = params = { ... }
+# Поэтому позволяем любые символы между `=` и `{`.
 _WS_BLOCK_RE = re.compile(
-    r'Ptx\.Shadows\.WebSocket\.params\s*=\s*\{([^}]+)\}',
+    r'Ptx\.Shadows\.WebSocket\.params\s*=[^{]*\{([^}]+)\}',
     re.DOTALL,
 )
 _FIELD_PAGE_ID = re.compile(r'pageId\s*:\s*(\d+)')

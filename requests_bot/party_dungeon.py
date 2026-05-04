@@ -974,7 +974,11 @@ class PartyDungeonClient:
             # лёгкие HTTP-полли как страховку.
             deadline = time.time() + timeout
             attempt = 0
-            pages = ["city", "dungeon/landing/FireTower/impossible", "backpack", "city", "dungeons"]
+            # Fallback-страницы для HTTP-полла. Landing-URL зависит от сложности
+            # (impossible/hard/normal), но мембер не знает свой difficulty.
+            # Просто ротируем нейтральные страницы — notice о приглашении должен
+            # отдаваться на любой странице после авторизации.
+            pages = ["city", "backpack", "dungeons", "city", "character"]
             last_markers = None
 
             # WS-проверка делается в маленьком цикле (короткие wait) чтобы успевать
