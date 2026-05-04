@@ -431,6 +431,16 @@ def get_event_dungeon_difficulty():
     return _profile_config.get("event_dungeon_difficulty", "brutal")
 
 
+def get_event_party_difficulty():
+    """Сложность пати-прохождения ивент-данжа (читается из профиля ЛИДЕРА).
+
+    Возможные значения: 'normal', 'hero' (default), 'brutal'.
+    Default 'hero' — на брутале пати из 2 без потионов выживала ~88с
+    и не дотягивала до конца. Hero даёт запас прочности.
+    """
+    return _profile_config.get("event_party_difficulty", "hero")
+
+
 def is_wake_for_event_party_at_night():
     """Просыпаться в ночном режиме для прохождения ивент-пати.
 

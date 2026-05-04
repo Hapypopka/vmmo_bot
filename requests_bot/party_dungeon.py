@@ -1416,9 +1416,16 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
         log_debug(f"[EVENT-PARTY] Уже в пати, пропускаем")
         return None
 
-    # 6. Координация через try_join_or_create_party
+    # 6. Сложность пати: лидер берёт из своего конфига (event_party_difficulty,
+    # default "hero"). Мембер ждёт инвайт — сложность ему не нужна.
+    from requests_bot.config import get_event_party_difficulty
+    from requests_bot.valentine_event import DIFFICULTY_URL_MAP
+    party_difficulty_raw = get_event_party_difficulty() if role == "leader" else "hero"
+    party_difficulty = DIFFICULTY_URL_MAP.get(party_difficulty_raw, "hard")
+
+    # 7. Координация через try_join_or_create_party
     result = try_join_or_create_party(
-        profile, nickname, dungeon_id, "impossible", target_members,
+        profile, nickname, dungeon_id, party_difficulty, target_members,
         only_join=(role == "member"),
     )
     if not result:
@@ -1431,15 +1438,20 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
     party = result["party"]
     party_client = PartyDungeonClient(client, dungeon_id)
 
-    log_info(f"[EVENT-PARTY] {username}: role={actual_role}, party={party_id}")
+    # Если попали как мембер — сложность узнали из forming-party (записал лидер)
+    if actual_role == "member":
+        party_difficulty = party.get("difficulty", party_difficulty)
+
+    log_info(f"[EVENT-PARTY] {username}: role={actual_role}, party={party_id}, difficulty={party_difficulty}")
 
     try:
         if actual_role == "leader":
             return _run_as_leader(
                 profile, username, party_id, party_client,
-                dungeon_runner, dungeon_id, "impossible", target_members,
+                dungeon_runner, dungeon_id, party_difficulty, target_members,
             )
         else:
+            # Мембер: сложность из forming-party (записал лидер)
             leader_username = party.get("leader_username", "")
             return _run_as_member(
                 profile, username, party_id, party_client,
