@@ -231,13 +231,15 @@ class WicketWSListener:
     # ---------- Internal callbacks ----------
 
     def _on_open(self, ws):
-        log_debug(f"[WS] Open pageId={self.page_id}")
+        # Временно INFO — расследуем почему сервер не пушит инвайт.
+        # После починки можно вернуть log_debug.
+        log_info(f"[WS] Open pageId={self.page_id}")
 
     def _on_close(self, ws, code, reason):
-        log_debug(f"[WS] Close code={code} reason={reason}")
+        log_info(f"[WS] Close code={code} reason={reason}")
 
     def _on_error(self, ws, error):
-        log_debug(f"[WS] Error: {error}")
+        log_warning(f"[WS] Error: {error}")
 
     def _on_message(self, ws, message):
         """Обработка входящего сообщения от сервера.
@@ -254,6 +256,12 @@ class WicketWSListener:
                 message = message.decode("utf-8", errors="ignore")
             except Exception:
                 return
+
+        # Временно: первые 5 сообщений логируем целиком, чтобы понять
+        # пушит ли сервер хоть что-то на этот WS-канал.
+        if self._messages_received <= 5:
+            preview = message[:300].replace("\n", " ")
+            log_info(f"[WS] Msg #{self._messages_received} ({len(message)}b): {preview}")
 
         # Ack: извлекаем ptxMsgId и шлём подтверждения
         msg_id_m = re.search(r'ptxMsgId="(\d+)"', message)
