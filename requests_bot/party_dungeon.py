@@ -525,40 +525,23 @@ class PartyDungeonClient:
 
         html = self.client.current_page or ""
 
-        # 2. КРИТИЧНО: используем AJAX endpoint IBehaviorListener.0-inviteForm-submit,
-        # а не legacy IFormSubmitListener-inviteForm.
-        #
-        # Раньше бот слал на form action — `?N-X.IFormSubmitListener-inviteForm`.
-        # Сервер отвечал 200 + HTML "Приглашение отправлено" — но НЕ ПУШИЛ
-        # уведомление мемберу. Мембер ничего не получал ни через WS, ни в HTML
-        # на /city. Браузер же использует AJAX-endpoint
-        # `?N-X.IBehaviorListener.0-inviteForm-submit` с заголовками Wicket-Ajax,
-        # после чего сервер выполняет push-логику и мембер видит инвайт на /city.
-        # Найдено диагностикой 2026-05-05.
-        ajax_match = re.search(
-            r'"u":"([^"]*IBehaviorListener\.\d+-inviteForm-submit[^"]*)"',
-            html,
+        # 2. Ищем форму inviteForm
+        form_match = re.search(
+            r'action="([^"]*inviteForm[^"]*)"',
+            html
         )
-        if not ajax_match:
-            log_warning("[PARTY] Не найден AJAX-endpoint IBehaviorListener-inviteForm-submit")
+        if not form_match:
+            log_warning("[PARTY] Не найдена форма inviteForm")
             return False
 
-        ajax_url = ajax_match.group(1).replace("\\/", "/").replace("\\", "")
-        if not ajax_url.startswith("http"):
-            ajax_url = urljoin(self.client.current_url, ajax_url)
+        form_url = form_match.group(1).replace("&amp;", "&")
+        if not form_url.startswith("http"):
+            form_url = urljoin(self.client.current_url, form_url)
 
-        # Hidden field id..._hf_0 для p::name input'а
-        hidden_match = re.search(r'name="(id\w+_hf_0)"', html)
+        # 3. Отправляем POST с ником
+        # Ищем hidden field
+        hidden_match = re.search(r'name="([^"]*_hf_0)"', html)
         hidden_name = hidden_match.group(1) if hidden_match else ""
-
-        # Wicket-Ajax-BaseURL — relative path текущей страницы (без BASE_URL,
-        # без jsessionid; & должен быть как &amp; в этом заголовке)
-        cur = self.client.current_url or ""
-        base_path = cur.replace(self.base_url + "/", "").split("?")[0]
-        base_path = re.sub(r';jsessionid=[^/?]*', '', base_path)
-        qs = cur.split("?", 1)[1] if "?" in cur else ""
-        qs = re.sub(r';jsessionid=[^?&]*', '', qs)
-        wicket_baseurl = f"{base_path}?{qs}".replace("&", "&amp;") if qs else base_path
 
         data = {
             "p::name": username,
@@ -567,37 +550,30 @@ class PartyDungeonClient:
         if hidden_name:
             data[hidden_name] = ""
 
-        ajax_headers = {
+        log_info(f"[PARTY] Лидер: приглашаю '{username}'")
+
+        resp = self.client.session.post(form_url, data=data, headers={
             **self.client.session.headers,
-            "Accept": "application/xml, text/xml, */*; q=0.01",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "Wicket-Ajax": "true",
-            "Wicket-Ajax-BaseURL": wicket_baseurl,
-            "Wicket-FocusedElementId": "submitSent",
-            "X-Requested-With": "XMLHttpRequest",
-            "Origin": self.base_url,
-            "Referer": cur,
-        }
-
-        log_info(f"[PARTY] Лидер: приглашаю '{username}' (AJAX → {ajax_url[-80:]})")
-
-        resp = self.client.session.post(ajax_url, data=data, headers=ajax_headers)
+            "Content-Type": "application/x-www-form-urlencoded",
+        })
         time.sleep(0.5)
 
-        # 3. Проверяем ответ. Wicket-AJAX отвечает XML-документом. Успешный
-        # ответ содержит <ajax-response> с <evaluate>/<priority-evaluate>.
-        # Дополнительная подтверждалка — что мембер увидит инвайт у себя.
+        # 4. Проверяем ответ
         resp_text = resp.text if resp else ""
-        if resp.status_code == 200 and "<ajax-response" in resp_text:
-            log_info(f"[PARTY] Лидер: AJAX-приглашение отправлено для '{username}'")
-            # Обновляем текущую страницу чтобы синхронизировать DOM с сервером
+        if "Приглашение отправлено" in resp_text:
+            log_info(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
+            # Обновляем текущую страницу
             self.client.get(self.client.current_url)
             return True
 
-        log_warning(
-            f"[PARTY] Лидер: не удалось отправить приглашение "
-            f"(status={resp.status_code}, body[:200]={resp_text[:200]!r})"
-        )
+        # Может отображаться на перезагруженной странице
+        self.client.get(self.client.current_url)
+        html = self.client.current_page or ""
+        if "Приглашение отправлено" in html:
+            log_info(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
+            return True
+
+        log_warning("[PARTY] Лидер: не удалось отправить приглашение")
         return False
 
     def _find_feedback_url(self, html, action):
