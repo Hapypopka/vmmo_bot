@@ -696,10 +696,21 @@ class VMMOBot:
         if role == "member":
             forming = find_forming_party(my_profile)
             if not forming or forming.get("dungeon_id") != dungeon_id:
-                # Forming-пати лидера нет → пусть бот делает обычные данжи.
-                # НЕ возвращаем "member_waiting" — это блокировало бы обычную
-                # активность каждый цикл, что в дневном режиме плохо.
-                return None
+                # Race-window: лидер мог запустить forming чуть позже мембера
+                # (на ~5-15 сек — у обоих свои pre-cycle действия: лидер делает
+                # update_event_cooldowns HTTP, мембер быстрее). Без retry мембер
+                # упускал forming и уходил на 10-20 мин в обычку, а лидер
+                # 180 сек впустую ждал в лобби. Делаем 5 повторов по 3 сек —
+                # за 15 сек лидер успеет записать forming в shared state.
+                import time as _t
+                for _ in range(5):
+                    _t.sleep(3)
+                    forming = find_forming_party(my_profile)
+                    if forming and forming.get("dungeon_id") == dungeon_id:
+                        log_info(f"[EVENT-PARTY] Forming-пати найдена после ожидания")
+                        break
+                if not forming or forming.get("dungeon_id") != dungeon_id:
+                    return None
 
             log_info(f"⚡ [EVENT-PARTY] Лидер создал forming-пати → присоединяюсь")
             try:
