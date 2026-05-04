@@ -596,5 +596,25 @@ def test_survival_mines():
     print("\n[TEST] Тест завершён (бой не начат)")
 
 
+# ============================================
+# Module-level helper для использования из других модулей
+# ============================================
+
+def ensure_guild_bonus(client) -> bool:
+    """Проверяет и активирует гильдийский бонус Сила+Здоровье.
+
+    Используется не только в Survival Mines, но и перед event-party
+    (FireTower) — пати без бонуса в брутале/героике уходит до конца.
+
+    Returns:
+        True если бонус активен (или был активирован),
+        False если активация не удалась (нет серебра/нет гильдии/ошибка).
+    """
+    smc = SurvivalMinesClient(client)
+    if smc.check_guild_bonus_active():
+        return True
+    return smc.activate_guild_bonus()
+
+
 if __name__ == "__main__":
     test_survival_mines()

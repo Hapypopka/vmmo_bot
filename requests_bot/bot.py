@@ -723,6 +723,16 @@ class VMMOBot:
                 log_debug(f"[EVENT-PARTY] У меня КД на {event_key} → не вступаю")
                 return None
 
+            # Гильдийский бонус (Сила+Здоровье) перед event-party боем —
+            # без него пати в брутал/героик не вытягивает.
+            # check_active возвращает True если бонус уже взят (1ч действия)
+            # — лишних трат серебра нет.
+            try:
+                from requests_bot.survival_mines import ensure_guild_bonus
+                ensure_guild_bonus(self.client)
+            except Exception as e:
+                log_warning(f"[EVENT-PARTY] Не удалось взять гильд-бонус: {e}")
+
             try:
                 result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
             except Exception as e:
@@ -748,6 +758,13 @@ class VMMOBot:
         # Удаляем призрачных мемберов (event_party_enabled=False),
         # чтобы не ждать тех кто отключил ивент-пати в UI.
         self._cleanup_event_cooldowns_inactive()
+
+        # Гильдийский бонус перед event-party боем — см. коммент в ветке мембера.
+        try:
+            from requests_bot.survival_mines import ensure_guild_bonus
+            ensure_guild_bonus(self.client)
+        except Exception as e:
+            log_warning(f"[EVENT-PARTY] Не удалось взять гильд-бонус: {e}")
 
         try:
             return run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
