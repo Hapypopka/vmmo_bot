@@ -529,6 +529,24 @@ class VMMOClient:
         print("[GRAVEYARD] Воскрешён, продолжаем работу")
         return True
 
+    def force_relogin(self) -> bool:
+        """Полный re-login: чистит cookies и логинится заново через POST /login.
+
+        Используется перед event-party боем, чтобы получить свежий JSESSIONID.
+        Без этого сервер хранит "stale" сессию, которая иногда дропает push'и
+        инвайтов мемберу. После ребута процесса работает 1-2 раза, потом
+        перестаёт. Re-login без ребута процесса даёт тот же эффект.
+
+        Returns:
+            True если перелогинились успешно, False иначе.
+        """
+        print("[*] Force re-login (clear cookies + fresh login)")
+        try:
+            self.session.cookies.clear()
+        except Exception as e:
+            print(f"[WARN] cookie clear: {e}")
+        return self.login()
+
     def login(self, username=None, password=None):
         """
         Авторизация через requests.
