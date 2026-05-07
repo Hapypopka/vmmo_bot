@@ -723,16 +723,6 @@ class VMMOBot:
                 log_debug(f"[EVENT-PARTY] У меня КД на {event_key} → не вступаю")
                 return None
 
-            # Force re-login перед event-party. Сервер дропает push-инвайт
-            # если у бот-сессии "stale" JSESSIONID (накопленный за часы работы).
-            # Свежий login → новая сессия → invite приходит. Тратит 2-3 сек,
-            # вызывается только перед реальным боем (КД 0, есть forming).
-            try:
-                log_info(f"[EVENT-PARTY] Re-login перед боем для свежей сессии")
-                self.client.force_relogin()
-            except Exception as e:
-                log_warning(f"[EVENT-PARTY] Re-login fail: {e}")
-
             # Гильдийский бонус (Сила+Здоровье) перед event-party боем —
             # без него пати в брутал/героик не вытягивает.
             # check_active возвращает True если бонус уже взят (1ч действия)
@@ -768,13 +758,6 @@ class VMMOBot:
         # Удаляем призрачных мемберов (event_party_enabled=False),
         # чтобы не ждать тех кто отключил ивент-пати в UI.
         self._cleanup_event_cooldowns_inactive()
-
-        # Force re-login перед event-party. См. коммент в ветке мембера.
-        try:
-            log_info(f"[EVENT-PARTY] Re-login перед боем для свежей сессии")
-            self.client.force_relogin()
-        except Exception as e:
-            log_warning(f"[EVENT-PARTY] Re-login fail: {e}")
 
         # Гильдийский бонус перед event-party боем — см. коммент в ветке мембера.
         try:
