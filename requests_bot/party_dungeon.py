@@ -566,10 +566,15 @@ class PartyDungeonClient:
 
         log_info(f"[PARTY] Лидер: приглашаю '{username}'")
 
-        resp = self.client.session.post(form_url, data=data, headers={
+        post_headers = {
             **self.client.session.headers,
             "Content-Type": "application/x-www-form-urlencoded",
-        })
+        }
+        try:
+            log_info(f"[PARTY-DIAG] Request headers: {dict(post_headers)}")
+        except Exception:
+            pass
+        resp = self.client.session.post(form_url, data=data, headers=post_headers)
         time.sleep(0.5)
 
         # 4. Проверяем ответ
@@ -582,6 +587,10 @@ class PartyDungeonClient:
                 f"len={len(resp_text)}, "
                 f"final_url={resp.url if resp else 'None'}"
             )
+            try:
+                log_info(f"[PARTY-DIAG] Response headers: {dict(resp.headers)}")
+            except Exception:
+                pass
             log_info(f"[PARTY-DIAG] POST resp head[0:500]: {resp_text[:500]!r}")
             # Также ищем ключевые маркеры
             markers = {
@@ -592,8 +601,16 @@ class PartyDungeonClient:
                 "has_error_panel": "feedbackPanelERROR" in resp_text,
                 "has_doconfirm": "/doconfirm" in resp_text,
                 "has_login_form": 'name="login"' in resp_text,
+                "has_notice_show": "Notice.show" in resp_text,
+                "has_pending_request": "pendingRequest" in resp_text or "ожидает" in resp_text,
             }
             log_info(f"[PARTY-DIAG] Resp markers: {markers}")
+            # Поиск Notice.show вызовов в JS — может там скрытое уведомление
+            notice_matches = re.findall(r'Notice\.show\(\s*\{[^}]{0,500}', resp_text)
+            if notice_matches:
+                log_info(f"[PARTY-DIAG] Найдено {len(notice_matches)} Notice.show вызовов")
+                for i, nm in enumerate(notice_matches[:3]):
+                    log_info(f"[PARTY-DIAG] Notice #{i}: {nm[:300]}")
             # Дамп ПОЛНОГО ответа в файл
             try:
                 import os as _os
@@ -916,11 +933,24 @@ class PartyDungeonClient:
             "has_party_word": ("банду" in html or "банда" in html),
             "has_leader_name": (leader_username in html) if leader_username else False,
             "has_login_form": ('name="login"' in html or "Вход в аккаунт" in html),
+            # Доп. маркеры — что-нибудь push-related серверу всё-таки могло упасть
+            "has_notice_show": "Notice.show" in html,
+            "has_pending": "pendingRequest" in html or "ожидает" in html,
+            "has_inviter": "приглашает" in html,  # без 'тебя в банду' тоже учитываем
+            "has_acceptlink": "accept" in html.lower(),
         }
 
         # Логируем КАЖДУЮ попытку на INFO — это разовое расследование.
         # После того как баг найден — снизить до debug.
         log_info(f"[PARTY-DBG] invite-poll #{attempt} /{page}: {markers}")
+
+        # Поиск ВСЕХ Notice.show вызовов в HTML — даже если не про банду,
+        # это покажет что сервер пушит на эту сессию что-то другое
+        notice_calls = re.findall(r'Notice\.show\(\s*\{[^}]{0,500}', html)
+        if notice_calls:
+            log_info(f"[PARTY-DBG] /{page} имеет {len(notice_calls)} Notice.show вызов(а)")
+            for i, nc in enumerate(notice_calls[:2]):
+                log_info(f"[PARTY-DBG]   notice #{i}: {nc[:300]}")
 
         if not has_invite and not has_feedback:
             # Дамп HTML только при подозрительных состояниях:
@@ -1027,16 +1057,17 @@ class PartyDungeonClient:
             # лёгкие HTTP-полли как страховку.
             deadline = time.time() + timeout
             attempt = 0
-            # Fallback-страницы для HTTP-полла. Landing-URL зависит от сложности
-            # (impossible/hard/normal), но мембер не знает свой difficulty.
-            # Просто ротируем нейтральные страницы — notice о приглашении должен
-            # отдаваться на любой странице после авторизации.
-            pages = ["city", "backpack", "dungeons", "city", "character"]
+            # Fallback-страницы для HTTP-полла.
+            # Из реальных успехов 04-06 мая: invite приходил почти ВСЕГДА на
+            # /dungeons (polling #2-#3). На /city реже. Поэтому поллим в
+            # основном /dungeons + /city, чаще.
+            pages = ["dungeons", "city", "dungeons", "city", "dungeons", "city", "tavern"]
             last_markers = None
 
             # WS-проверка делается в маленьком цикле (короткие wait) чтобы успевать
-            # делать HTTP-полли параллельно
-            ws_poll_step = 3.0  # сек между проверками WS
+            # делать HTTP-полли параллельно. Уменьшил с 3.0 до 1.5 — invite
+            # имеет show_time 4сек, чтобы не пропустить окно показа.
+            ws_poll_step = 1.5  # сек между проверками WS
 
             while time.time() < deadline:
                 # 1) Проверка WS
