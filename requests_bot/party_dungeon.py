@@ -595,6 +595,7 @@ class PartyDungeonClient:
             # Также ищем ключевые маркеры
             markers = {
                 "has_invite_sent": "Приглашение отправлено" in resp_text,
+                "has_already_pending": "уже имеет приглашение" in resp_text,  # КРИТИЧНО — invite в очереди
                 "has_already_invited": "уже приглашён" in resp_text or "уже пригласил" in resp_text,
                 "has_offline": "не в сети" in resp_text or "оффлайн" in resp_text.lower(),
                 "has_not_found": "не найден" in resp_text,
@@ -604,6 +605,12 @@ class PartyDungeonClient:
                 "has_notice_show": "Notice.show" in resp_text,
                 "has_pending_request": "pendingRequest" in resp_text or "ожидает" in resp_text,
             }
+            if markers["has_already_pending"]:
+                log_warning(
+                    f"[PARTY] ⚠ Сервер: 'уже имеет приглашение' — pending invite "
+                    f"висит у мембера, новый дропается. Ждать expire или мембер "
+                    f"должен перелогиниться."
+                )
             log_info(f"[PARTY-DIAG] Resp markers: {markers}")
             # Поиск Notice.show вызовов в JS — может там скрытое уведомление
             notice_matches = re.findall(r'Notice\.show\(\s*\{[^}]{0,500}', resp_text)

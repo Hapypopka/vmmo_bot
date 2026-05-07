@@ -753,9 +753,12 @@ class VMMOBot:
                     return "member_waiting"
                 # timeout / error — пробуем ещё раз
                 if attempt < 2:
-                    log_warning(f"[EVENT-PARTY] Мембер: попытка {attempt + 1} → '{result}', retry через 30с")
+                    # 90 сек пауза вместо 30. Сервер может держать pending invite
+                    # в очереди и дропать новые. За 90 сек есть шанс что старый
+                    # expire и новый дойдёт.
+                    log_warning(f"[EVENT-PARTY] Мембер: попытка {attempt + 1} → '{result}', retry через 90с")
                     import time as _t
-                    _t.sleep(30)
+                    _t.sleep(90)
             return result if result else "member_waiting"
 
         # === ЛИДЕР: полный путь с HTTP ===
@@ -796,9 +799,10 @@ class VMMOBot:
                 return None
             # timeout / error — пробуем ещё раз
             if attempt < 2:
-                log_warning(f"[EVENT-PARTY] Лидер: попытка {attempt + 1} → '{result}', retry через 30с")
+                # 90 сек пауза — см. коммент в ветке мембера
+                log_warning(f"[EVENT-PARTY] Лидер: попытка {attempt + 1} → '{result}', retry через 90с")
                 import time as _t
-                _t.sleep(30)
+                _t.sleep(90)
         return result
 
     def check_party_dungeon(self):
