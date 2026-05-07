@@ -737,6 +737,11 @@ class VMMOBot:
             # завершилась таймаутом (мембер не получил invite, сервер дропнул
             # push), пробуем ещё раз. Сервер иногда пушит, иногда нет —
             # 2-3 попытки увеличивают шанс.
+            #
+            # Между попытками делаем RELOGIN: WS-канал заблокирован 403 Fraud,
+            # invite приходит только в HTML notice первых ~2 минут свежей сессии.
+            # Без relogin retry бесполезен — pending уже висит на сервере и
+            # новый push не отправляется.
             result = None
             for attempt in range(3):
                 try:
@@ -751,14 +756,24 @@ class VMMOBot:
                 if result is None:
                     # Уже в пати / forming исчезла — не повторяем
                     return "member_waiting"
-                # timeout / error — пробуем ещё раз
+                # timeout / error — пробуем ещё раз через relogin
                 if attempt < 2:
-                    # 90 сек пауза вместо 30. Сервер может держать pending invite
-                    # в очереди и дропать новые. За 90 сек есть шанс что старый
-                    # expire и новый дойдёт.
-                    log_warning(f"[EVENT-PARTY] Мембер: попытка {attempt + 1} → '{result}', retry через 90с")
-                    import time as _t
-                    _t.sleep(90)
+                    log_warning(
+                        f"[EVENT-PARTY] Мембер: попытка {attempt + 1} → '{result}', "
+                        f"делаю relogin для свежей сессии и retry"
+                    )
+                    try:
+                        self.client.session.cookies.clear()
+                        self.client._cached_soup = None
+                        self.client._cached_soup_for = None
+                        if not self.client.login():
+                            log_warning("[EVENT-PARTY] Мембер: relogin упал — пауза 30с и retry со старой сессией")
+                            import time as _t
+                            _t.sleep(30)
+                    except Exception as e:
+                        log_warning(f"[EVENT-PARTY] Мембер: ошибка при relogin: {e} — пауза 30с")
+                        import time as _t
+                        _t.sleep(30)
             return result if result else "member_waiting"
 
         # === ЛИДЕР: полный путь с HTTP ===
