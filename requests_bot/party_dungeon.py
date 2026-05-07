@@ -550,6 +550,20 @@ class PartyDungeonClient:
         if hidden_name:
             data[hidden_name] = ""
 
+        # === ПОЛНЫЙ ДИАГ-ЛОГ ===
+        # Логируем всё что есть на момент POST: cookies, headers, body
+        try:
+            cookies_str = "; ".join(f"{c.name}={c.value[:40]}{'...' if len(c.value) > 40 else ''}"
+                                     for c in self.client.session.cookies if "vten" in (c.domain or ""))
+            log_info(f"[PARTY-DIAG] POST URL: {form_url}")
+            log_info(f"[PARTY-DIAG] POST data: {data}")
+            log_info(f"[PARTY-DIAG] Cookies (vten): {cookies_str[:300]}")
+            ua = self.client.session.headers.get("User-Agent", "?")
+            log_info(f"[PARTY-DIAG] UA: {ua}")
+            log_info(f"[PARTY-DIAG] Current URL до POST: {self.client.current_url}")
+        except Exception as e:
+            log_debug(f"[PARTY-DIAG] log fail: {e}")
+
         log_info(f"[PARTY] Лидер: приглашаю '{username}'")
 
         resp = self.client.session.post(form_url, data=data, headers={
@@ -560,6 +574,45 @@ class PartyDungeonClient:
 
         # 4. Проверяем ответ
         resp_text = resp.text if resp else ""
+
+        # === ПОЛНЫЙ ДИАГ-ЛОГ RESPONSE ===
+        try:
+            log_info(
+                f"[PARTY-DIAG] POST resp status={resp.status_code if resp else 'None'}, "
+                f"len={len(resp_text)}, "
+                f"final_url={resp.url if resp else 'None'}"
+            )
+            log_info(f"[PARTY-DIAG] POST resp head[0:500]: {resp_text[:500]!r}")
+            # Также ищем ключевые маркеры
+            markers = {
+                "has_invite_sent": "Приглашение отправлено" in resp_text,
+                "has_already_invited": "уже приглашён" in resp_text or "уже пригласил" in resp_text,
+                "has_offline": "не в сети" in resp_text or "оффлайн" in resp_text.lower(),
+                "has_not_found": "не найден" in resp_text,
+                "has_error_panel": "feedbackPanelERROR" in resp_text,
+                "has_doconfirm": "/doconfirm" in resp_text,
+                "has_login_form": 'name="login"' in resp_text,
+            }
+            log_info(f"[PARTY-DIAG] Resp markers: {markers}")
+            # Дамп ПОЛНОГО ответа в файл
+            try:
+                import os as _os
+                debug_dir = "/tmp/debug_party"
+                _os.makedirs(debug_dir, exist_ok=True)
+                ts = int(time.time())
+                fname = f"{debug_dir}/invite_post_resp_{ts}.html"
+                with open(fname, "w", encoding="utf-8") as f:
+                    f.write(f"<!-- POST {form_url} -->\n")
+                    f.write(f"<!-- data: {data} -->\n")
+                    f.write(f"<!-- status: {resp.status_code if resp else 'None'} -->\n")
+                    f.write(f"<!-- markers: {markers} -->\n")
+                    f.write(resp_text)
+                log_info(f"[PARTY-DIAG] Full POST response dumped: {fname}")
+            except Exception as e:
+                log_debug(f"[PARTY-DIAG] dump fail: {e}")
+        except Exception as e:
+            log_debug(f"[PARTY-DIAG] log resp fail: {e}")
+
         if "Приглашение отправлено" in resp_text:
             log_info(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
             # Обновляем текущую страницу

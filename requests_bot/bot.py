@@ -733,17 +733,30 @@ class VMMOBot:
             except Exception as e:
                 log_warning(f"[EVENT-PARTY] Не удалось взять гильд-бонус: {e}")
 
-            try:
-                result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
-            except Exception as e:
-                log_error(f"[EVENT-PARTY] Ошибка: {e}")
-                import traceback
-                traceback.print_exc()
-                return "error"
-
-            if result is None:
-                return "member_waiting"
-            return result
+            # Retry на случай "intermittent" сервера: если первая попытка
+            # завершилась таймаутом (мембер не получил invite, сервер дропнул
+            # push), пробуем ещё раз. Сервер иногда пушит, иногда нет —
+            # 2-3 попытки увеличивают шанс.
+            result = None
+            for attempt in range(3):
+                try:
+                    result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
+                except Exception as e:
+                    log_error(f"[EVENT-PARTY] Ошибка: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return "error"
+                if result in ("completed", "died"):
+                    return result  # бой произошёл — выходим
+                if result is None:
+                    # Уже в пати / forming исчезла — не повторяем
+                    return "member_waiting"
+                # timeout / error — пробуем ещё раз
+                if attempt < 2:
+                    log_warning(f"[EVENT-PARTY] Мембер: попытка {attempt + 1} → '{result}', retry через 30с")
+                    import time as _t
+                    _t.sleep(30)
+            return result if result else "member_waiting"
 
         # === ЛИДЕР: полный путь с HTTP ===
         try:
@@ -766,13 +779,27 @@ class VMMOBot:
         except Exception as e:
             log_warning(f"[EVENT-PARTY] Не удалось взять гильд-бонус: {e}")
 
-        try:
-            return run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
-        except Exception as e:
-            log_error(f"[EVENT-PARTY] Ошибка: {e}")
-            import traceback
-            traceback.print_exc()
-            return "error"
+        # Retry для лидера — см. коммент в ветке мембера.
+        result = None
+        for attempt in range(3):
+            try:
+                result = run_event_party(self.client, self.dungeon_runner, dungeon_id, role)
+            except Exception as e:
+                log_error(f"[EVENT-PARTY] Ошибка: {e}")
+                import traceback
+                traceback.print_exc()
+                return "error"
+            if result in ("completed", "died"):
+                return result
+            if result is None:
+                # Нет мемберов / уже в пати / КД — не повторяем
+                return None
+            # timeout / error — пробуем ещё раз
+            if attempt < 2:
+                log_warning(f"[EVENT-PARTY] Лидер: попытка {attempt + 1} → '{result}', retry через 30с")
+                import time as _t
+                _t.sleep(30)
+        return result
 
     def check_party_dungeon(self):
         """Пробует пройти пати-данж (координация с другими ботами).
