@@ -171,10 +171,21 @@ class WicketWSListener:
         cookie_header = _cookies_to_header(self.client.session)
         ua = self.client.session.headers.get("User-Agent", "Mozilla/5.0")
 
+        # Полный браузерный набор заголовков для WS-handshake.
+        # Tomcat-фильтр vten возвращал 403 "Fraud suspected" когда handshake
+        # шёл голым (только Cookie/UA/Origin) — фингерпринтит по отсутствию
+        # Accept-Language/Pragma/Cache-Control/DNT. Матчим Firefox 128 (наш UA).
         headers = {
-            "Cookie": cookie_header,
             "User-Agent": ua,
+            "Accept": "*/*",
+            "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
             "Origin": "https://vmmo.vten.ru",
+            "DNT": "1",
+            "Sec-GPC": "1",
+            "Pragma": "no-cache",
+            "Cache-Control": "no-cache",
+            "Cookie": cookie_header,
         }
 
         self._ws = websocket.WebSocketApp(
