@@ -509,23 +509,11 @@ class PartyDungeonClient:
         """
         html = self.client.current_page or ""
 
-        # 1. Ищем ссылку "Поиск игроков".
-        # После re-login HTML лобби иногда не содержит кнопку с первого
-        # запроса (сервер ещё рендерит state). Делаем 3 retry с reload лобби.
+        # 1. Ищем ссылку "Поиск игроков"
         match = re.search(r'href="([^"]*party/search[^"]*)"', html)
         if not match:
-            log_debug("[PARTY] 'Поиск игроков' не найдена с первого раза, перезагружаю лобби...")
-            for attempt in range(3):
-                time.sleep(1.5)
-                self.client.get(f"{self.base_url}/dungeon/lobby/{self.url_id}")
-                html = self.client.current_page or ""
-                match = re.search(r'href="([^"]*party/search[^"]*)"', html)
-                if match:
-                    log_info(f"[PARTY] 'Поиск игроков' найдена после retry #{attempt + 1}")
-                    break
-            if not match:
-                log_warning("[PARTY] Не найдена кнопка 'Поиск игроков' (даже после 3 retry)")
-                return False
+            log_warning("[PARTY] Не найдена кнопка 'Поиск игроков'")
+            return False
 
         search_url = match.group(1).replace("&amp;", "&")
         if not search_url.startswith("http"):
