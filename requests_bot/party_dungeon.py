@@ -1064,11 +1064,13 @@ class PartyDungeonClient:
             # лёгкие HTTP-полли как страховку.
             deadline = time.time() + timeout
             attempt = 0
-            # Fallback-страницы для HTTP-полла.
-            # Из реальных успехов 04-06 мая: invite приходил почти ВСЕГДА на
-            # /dungeons (polling #2-#3). На /city реже. Поэтому поллим в
-            # основном /dungeons + /city, чаще.
-            pages = ["dungeons", "city", "dungeons", "city", "dungeons", "city", "tavern"]
+            # Страницы для HTTP-полла.
+            # /city/talk — РЕАЛЬНОЕ место хранения pending-invite на сервере
+            # (раздел "Общение"). Проверено через MCP-браузер 09 мая: на /city
+            # и /dungeons маркер `приглашает тебя в банду` отсутствует, а на
+            # /city/talk виден весь invite целиком (имя, ник, accept/decline
+            # URLs). Все остальные страницы — лёгкий бонус-fallback.
+            pages = ["city/talk", "dungeons", "city/talk", "city", "city/talk", "tavern"]
             last_markers = None
 
             # WS-проверка делается в маленьком цикле (короткие wait) чтобы успевать
