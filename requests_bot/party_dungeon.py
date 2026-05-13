@@ -1125,9 +1125,9 @@ class PartyDungeonClient:
             ws_poll_step = 1.5  # сек между проверками WS
 
             while time.time() < deadline:
-                # 1) Проверка WS
+                # 1) Проверка WS на полноценный invite-XML с маркерами
                 if ws_listener:
-                    invite = ws_listener.wait_for_invite(timeout=ws_poll_step, leader_username=leader_username)
+                    invite = ws_listener.wait_for_invite(timeout=0.1, leader_username=leader_username)
                     if invite:
                         log_info(f"[PARTY] Мембер: вижу инвайт через WS от '{invite['inviter_name'] or '?'}'")
                         accept_url = invite["accept_url"]
@@ -1140,10 +1140,17 @@ class PartyDungeonClient:
                             log_info("[PARTY] Мембер: уже в лобби после accept!")
                             return True
                         return self.enter_dungeon_feedback()
+
+                    # 2) Ждём ЛЮБОЙ push-сигнал (12-байт notification tickle)
+                    # или timeout. Без этого poll-цикл крутится 2с,
+                    # пропуская окно отображения invite в /city/talk.
+                    ws_listener.wait_for_tickle(timeout=ws_poll_step)
                 else:
                     time.sleep(ws_poll_step)
 
-                # 2) Параллельный HTTP-полл (на случай если WS пропустил)
+                # 3) HTTP-полл /city/talk — БЕЗ задержки после tickle.
+                # Если push пришёл (tickle сработал), invite появится здесь
+                # на ~1с окно — критично попасть в него.
                 page = pages[attempt % len(pages)]
                 attempt += 1
                 result, markers = self.check_and_accept_invite(leader_username, page=page, attempt=attempt)

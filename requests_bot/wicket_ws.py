@@ -160,6 +160,12 @@ class WicketWSListener:
         self._pending_invite = None  # dict {accept_url, inviter_name, raw_message}
         self._lock = threading.Lock()
 
+        # Tickle-event: set'ится при ЛЮБОМ входящем WS-сообщении (даже
+        # 12-байт "notification" без полезной нагрузки). Polling в boot
+        # дёргает /city/talk немедленно по сигналу, не ожидая своей
+        # 2-секундной итерации. Окно появления invite на странице ~1с.
+        self._tickle_event = threading.Event()
+
         # Счётчик полученных сообщений (для статистики)
         self._messages_received = 0
         self._invite_filter_username = None  # ожидаемый ник лидера или None для любого
@@ -239,6 +245,18 @@ class WicketWSListener:
                 return self._pending_invite
         return None
 
+    def wait_for_tickle(self, timeout=2.0):
+        """Блокирует до прихода ЛЮБОГО WS-сообщения (либо timeout).
+
+        Используется HTTP-polling'ом мембера для мгновенного пробуждения
+        при первом push-сигнале от сервера. Возвращает True если сигнал
+        пришёл, False — если timeout. Сбрасывает event перед return.
+        """
+        triggered = self._tickle_event.wait(timeout)
+        if triggered:
+            self._tickle_event.clear()
+        return triggered
+
     # ---------- Internal callbacks ----------
 
     def _on_open(self, ws):
@@ -261,6 +279,11 @@ class WicketWSListener:
         2. Проверить наличие маркеров приглашения в content.
         """
         self._messages_received += 1
+
+        # Будим всех кто ждёт WS-активности — пусть проверят /city/talk.
+        # Серверный invite появляется на странице на короткое окно (~1с),
+        # poll-итерация 2с может его пропустить.
+        self._tickle_event.set()
 
         if not isinstance(message, str):
             try:
