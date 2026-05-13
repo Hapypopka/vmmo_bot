@@ -683,6 +683,16 @@ class VMMOBot:
         if not is_event_party_enabled():
             return None
 
+        # Orphan-pending cooldown: после детекта застрявшего pending на мембере
+        # дальнейшие попытки бесполезны до TTL. Спим 30 мин в памяти процесса
+        # — после рестарта бота cooldown сбрасывается (и это намеренно: рестарт
+        # бывает редко, не хочется чтобы он мешал восстановлению).
+        import time as _t
+        if getattr(self, "_event_party_orphan_until", 0) > _t.time():
+            remaining = int(self._event_party_orphan_until - _t.time())
+            log_debug(f"[EVENT-PARTY] Orphan-cooldown ещё {remaining}с, skip")
+            return None
+
         from requests_bot.party_dungeon import run_event_party, find_forming_party
         from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile
 
@@ -812,6 +822,16 @@ class VMMOBot:
             if result is None:
                 # Нет мемберов / уже в пати / КД — не повторяем
                 return None
+            if result == "orphan_pending":
+                # На мембере застрял pending от прошлого цикла, сервер дропает
+                # новые invite. Retry бесполезен пока pending не expire (TTL
+                # неизвестен, минимум 10 минут наблюдалось). Засыпаем длинно,
+                # чтобы дать серверу шанс почистить очередь. В обычку
+                # возвращаемся — пусть лидер крафтит/бегает данжи.
+                import time as _t
+                self._event_party_orphan_until = _t.time() + 1800  # 30 мин
+                log_warning("[EVENT-PARTY] Лидер: orphan-pending у мембера, cooldown 30 мин")
+                return "orphan_pending"
             # timeout / error — пробуем ещё раз
             if attempt < 2:
                 # 90 сек пауза — см. коммент в ветке мембера
@@ -996,6 +1016,9 @@ class VMMOBot:
         if event_party_result == "completed":
             log_info("[EVENT-PARTY] Ивент-данж пройден в пати!")
             return True
+        if event_party_result == "orphan_pending":
+            # Cooldown уже выставлен в check_event_party. Дальше — обычка.
+            log_info("[EVENT-PARTY] Orphan-pending, ушёл в обычные данжи на 30 мин")
 
         # 2.8. Обычная пати-данж (если включён)
         party_result = self.check_party_dungeon()

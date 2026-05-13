@@ -294,7 +294,11 @@ def try_join_or_create_party(profile, username, dungeon_id, difficulty="impossib
                     p["members"][profile] = {
                         "role": "member",
                         "username": username,
-                        "status": "waiting_invite",
+                        # "joined" → "ready" → "in_lobby". На "joined" мембер ещё
+                        # не открыл /city и не поднял WS — push от лидера в
+                        # этот момент породит orphan pending. Лидер обязан
+                        # ждать "ready" перед invite_player.
+                        "status": "joined",
                         "joined_at": time.time(),
                     }
                     p["updated_at"] = time.time()
@@ -375,21 +379,32 @@ def get_party_members(party_id):
     return {}
 
 
-def wait_for_members(party_id, target_count, timeout=FORMING_TIMEOUT):
+def wait_for_members(party_id, target_count, timeout=FORMING_TIMEOUT, require_ready=False):
     """Лидер ждёт пока наберётся нужное число мемберов.
 
+    Args:
+        require_ready: если True — ждёт что все нелидеры в статусе "ready"
+            (подняли WS, готовы принять push). Без этого лидер шлёт invite
+            до того как у мембера WS-listener подключился → push улетает в
+            несуществующий pageId → orphan-pending на сервере (баг 13 мая).
+
     Returns:
-        "ready" — все собрались
+        "ready" — все собрались (и готовы, если require_ready)
         "timeout" — не набрали за таймаут
     """
     deadline = time.time() + timeout
     while time.time() < deadline:
         members = get_party_members(party_id)
         if len(members) >= target_count:
-            return "ready"
+            if not require_ready:
+                return "ready"
+            non_leaders = [v for v in members.values() if v.get("role") != "leader"]
+            if non_leaders and all(v.get("status") in ("ready", "in_lobby") for v in non_leaders):
+                return "ready"
         remaining = int(deadline - time.time())
         if remaining % 15 == 0 and remaining > 0:
-            log_debug(f"[PARTY] Лидер: жду мемберов ({len(members)}/{target_count}), осталось {remaining}с")
+            statuses = [v.get("status") for v in members.values() if v.get("role") != "leader"]
+            log_debug(f"[PARTY] Лидер: жду мемберов ({len(members)}/{target_count}), статусы={statuses}, осталось {remaining}с")
         time.sleep(POLL_INTERVAL)
     return "timeout"
 
@@ -505,7 +520,11 @@ class PartyDungeonClient:
         """Лидер: 'Поиск игроков' → ввод ника → отправка.
 
         Returns:
-            bool: True если приглашение отправлено
+            True: invite успешно ушёл, мембер должен получить push
+            "orphan_pending": сервер дропнул с 'уже имеет приглашение' —
+                на стороне target висит стухший pending от прошлого цикла.
+                Новые invite на этого ника бесполезны пока pending не expire.
+            False: иная ошибка отправки
         """
         html = self.client.current_page or ""
 
@@ -637,9 +656,21 @@ class PartyDungeonClient:
         except Exception as e:
             log_debug(f"[PARTY-DIAG] log resp fail: {e}")
 
+        # Orphan-pending имеет приоритет: сервер шлёт оба notice одновременно
+        # ("Приглашение отправлено" + "Этот человек уже имеет приглашение"),
+        # но реально push НЕ доставлен — pending от прошлого цикла блочит.
+        # Без этой проверки лидер уходил в '[PARTY] жду всех в лобби...' и
+        # 90с впустую гадал что invite ушёл.
+        if "уже имеет приглашение" in resp_text:
+            log_warning(
+                f"[PARTY] Лидер: '{username}' — orphan pending на сервере, "
+                f"новые invite дропаются. Ждать TTL."
+            )
+            self.client.get(self.client.current_url)
+            return "orphan_pending"
+
         if "Приглашение отправлено" in resp_text:
             log_info(f"[PARTY] Лидер: приглашение отправлено для '{username}'!")
-            # Обновляем текущую страницу
             self.client.get(self.client.current_url)
             return True
 
@@ -1022,7 +1053,7 @@ class PartyDungeonClient:
 
         return self.enter_dungeon_feedback(), markers
 
-    def wait_and_accept_invite(self, leader_username, timeout=INVITE_TIMEOUT):
+    def wait_and_accept_invite(self, leader_username, timeout=INVITE_TIMEOUT, profile=None, party_id=None):
         """Мембер ждёт инвайт от лидера.
 
         Стратегия:
@@ -1053,11 +1084,26 @@ class PartyDungeonClient:
             ws_listener = listener_for_current_page(self.client)
             if ws_listener:
                 ws_listener.start()
+                # Короткая пауза — дать WS handshake завершиться и
+                # серверу зарегистрировать pageId как активный listener.
+                # Без этого ниже мы сигналим лидеру "ready" слишком рано
+                # и его POST порождает orphan pending.
+                time.sleep(1.0)
                 log_info(f"[PARTY] WS-слушатель запущен на pageId={ws_listener.page_id}")
             else:
                 log_warning("[PARTY] WS-слушатель не создан, fallback на HTTP-поллинг")
+                # Без WS push не придёт. Дадим серверу больше времени на
+                # установку HTTP-сессии прежде чем сигналить ready.
+                time.sleep(1.0)
         except Exception as e:
             log_warning(f"[PARTY] Ошибка WS: {e}")
+
+        # Сигнализируем лидеру что WS поднят и можно слать invite.
+        # До этого момента лидер не должен делать POST /party/search —
+        # иначе push улетит в pageId которого ещё нет.
+        if profile and party_id:
+            update_member_status(profile, party_id, "ready")
+            log_info(f"[PARTY] Мембер: status=ready, лидер может инвайтить")
 
         try:
             # Если WS поднялся — ждём сначала через него, параллельно делая
@@ -1196,8 +1242,15 @@ def run_party_dungeon(client, dungeon_runner, dungeon_id, difficulty="impossible
         return "error"
 
 
-def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, dungeon_id, difficulty, target_members):
-    """Логика лидера."""
+def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, dungeon_id, difficulty, target_members, require_member_ready=False):
+    """Логика лидера.
+
+    require_member_ready: ждать что мембер выставил status="ready" ПЕРЕД
+        отправкой invite. Защищает от race-condition при которой мембер ещё
+        не успел поднять WS, а лидер уже шлёт push — push улетает в
+        несуществующий pageId, и сервер создаёт orphan-pending который
+        потом блочит все последующие invite этому нику.
+    """
 
     # 1. Входим в данж (создаём пати в игре)
     if not party_client.enter_as_leader(difficulty):
@@ -1212,9 +1265,13 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
     update_member_status(profile, party_id, "in_lobby")
     update_party_state(party_id, "forming")
 
-    # 2. Ждём пока мемберы появятся в JSON
+    # 2. Ждём пока мемберы появятся в JSON и (для event-party) подтвердят
+    # status="ready" — это значит они подняли WS и готовы получить push.
     log_info(f"[PARTY] Лидер: жду {target_members - 1} мемберов...")
-    wait_result = wait_for_members(party_id, target_members, timeout=FORMING_TIMEOUT)
+    wait_result = wait_for_members(
+        party_id, target_members, timeout=FORMING_TIMEOUT,
+        require_ready=require_member_ready,
+    )
 
     if wait_result != "ready":
         log_warning("[PARTY] Лидер: таймаут сбора, отменяю")
@@ -1239,7 +1296,16 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
         party_client.client.get(f"{party_client.base_url}/dungeon/lobby/{party_client.url_id}")
         time.sleep(0.5)
 
-        if not party_client.invite_player(mem_username):
+        invite_result = party_client.invite_player(mem_username)
+        if invite_result == "orphan_pending":
+            # На стороне target застрял pending. Дальнейшие POST бесполезны
+            # пока сервер не освободит. Сворачиваем форсайт и сигналим выше
+            # event-party-циклу — он применит длинный cooldown к этому нику.
+            log_warning(f"[PARTY] Лидер: {mem_username} в orphan-pending, прерываю forming")
+            party_client.leave_lobby()
+            leave_party(profile, party_id)
+            return "orphan_pending"
+        if not invite_result:
             log_warning(f"[PARTY] Лидер: не удалось пригласить {mem_username}")
             # Продолжаем с остальными
 
@@ -1272,7 +1338,12 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
                     # Возвращаемся в лобби перед инвайтом
                     party_client.client.get(f"{party_client.base_url}/dungeon/lobby/{party_client.url_id}")
                     time.sleep(0.5)
-                    party_client.invite_player(mem_username)
+                    invite_result = party_client.invite_player(mem_username)
+                    if invite_result == "orphan_pending":
+                        log_warning(f"[PARTY] Лидер: {mem_username} orphan-pending в reinvite — отменяю")
+                        party_client.leave_lobby()
+                        leave_party(profile, party_id)
+                        return "orphan_pending"
             last_reinvite = time.time()
 
         time.sleep(POLL_INTERVAL)
@@ -1304,8 +1375,13 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
 def _run_as_member(profile, username, party_id, party_client, dungeon_runner, dungeon_id, leader_username):
     """Логика мембера."""
 
-    # 1. Ждём приглашение и принимаем
-    if not party_client.wait_and_accept_invite(leader_username, timeout=INVITE_TIMEOUT):
+    # 1. Ждём приглашение и принимаем.
+    # profile/party_id нужны мемберу чтобы выставить status="ready" ПОСЛЕ
+    # того как поднимет WS — это сигнал лидеру что можно слать invite.
+    if not party_client.wait_and_accept_invite(
+        leader_username, timeout=INVITE_TIMEOUT,
+        profile=profile, party_id=party_id,
+    ):
         log_warning("[PARTY] Мембер: не получил инвайт")
         leave_party(profile, party_id)
         return "timeout"
@@ -1543,9 +1619,12 @@ def run_event_party(client, dungeon_runner, dungeon_id, role):
 
     try:
         if actual_role == "leader":
+            # require_member_ready=True ТОЛЬКО для event-party — там накопились
+            # orphan-pending'и и без этого race лечится только waiting'ом TTL.
             return _run_as_leader(
                 profile, username, party_id, party_client,
                 dungeon_runner, dungeon_id, party_difficulty, target_members,
+                require_member_ready=True,
             )
         else:
             # Мембер: сложность из forming-party (записал лидер)
