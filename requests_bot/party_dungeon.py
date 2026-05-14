@@ -1054,120 +1054,129 @@ class PartyDungeonClient:
         return self.enter_dungeon_feedback(), markers
 
     def wait_and_accept_invite(self, leader_username, timeout=INVITE_TIMEOUT, profile=None, party_id=None):
-        """Мембер ждёт инвайт от лидера.
+        """Мембер ждёт инвайт от лидера через серверную очередь Notice.
 
-        Стратегия:
-            1. Открываем /city и подписываемся на Wicket WebSocket
-               (push-канал игры — там реально приходят notice о приглашениях).
-            2. Параллельно поллим HTTP-страницы как fallback на случай если
-               WS-сообщение пришло раньше подписки.
-            3. Какое из двух сработает — то и используем.
+        Механизм (выяснен 14 мая разбором JS /city/talk):
+            Игра доставляет invite в банду через серверную очередь
+            уведомлений. На /city/talk объект Ptx.Shadows.Notice имеет:
+              urlGetNotice  = ?{pageId}-IEndpointBehaviorListener.1-
+              urlShowNotice = ?{pageId}-IEndpointBehaviorListener.2-
+            Браузер периодически дёргает urlGetNotice — сервер отдаёт
+            СЛЕДУЮЩИЙ notice из очереди как JSON. После показа браузер
+            зовёт urlShowNotice?notice_id=N — это продвигает очередь
+            (следующий getNotice вернёт {} если очередь пуста).
 
-        Без WS чисто HTTP-fallback почти не ловит инвайт (сервер пушит
-        через WS-канал и в HTML страниц не возвращает после первых ~2
-        минут сессии).
+            invite в банду — это такой же notice. Голый GET /city/talk
+            его НЕ содержит: invite живёт ТОЛЬКО в очереди. Старые подходы
+            (WS-listener, polling HTML страниц) ловили invite лишь когда
+            тот случайно успевал отрендериться в HTML — отсюда мизерный
+            процент успеха и накопление orphan-pending'ов.
 
         Returns:
             bool: True если приглашение принято и вошёл в данж
         """
-        from requests_bot.wicket_ws import listener_for_current_page
-
         log_info(f"[PARTY] Мембер: жду инвайт от {leader_username} ({timeout}с)...")
 
-        # Сначала встаём на /city — там и WS-канал нужного типа (CityPage),
-        # и реальные приглашения приходят сюда.
-        self.client.get(f"{self.base_url}/city")
+        # Встаём на /city/talk — здесь Notice-эндпоинты и invite-очередь.
+        self.client.get(f"{self.base_url}/city/talk")
         time.sleep(0.3)
+        html = self.client.current_page or ""
 
-        ws_listener = None
-        try:
-            ws_listener = listener_for_current_page(self.client)
-            if ws_listener:
-                ws_listener.start()
-                # Короткая пауза — дать WS handshake завершиться и
-                # серверу зарегистрировать pageId как активный listener.
-                # Без этого ниже мы сигналим лидеру "ready" слишком рано
-                # и его POST порождает orphan pending.
-                time.sleep(1.0)
-                log_info(f"[PARTY] WS-слушатель запущен на pageId={ws_listener.page_id}")
-            else:
-                log_warning("[PARTY] WS-слушатель не создан, fallback на HTTP-поллинг")
-                # Без WS push не придёт. Дадим серверу больше времени на
-                # установку HTTP-сессии прежде чем сигналить ready.
-                time.sleep(1.0)
-        except Exception as e:
-            log_warning(f"[PARTY] Ошибка WS: {e}")
+        page_id_m = re.search(r'ptxPageId\s*=\s*(\d+)', html)
+        if not page_id_m:
+            log_warning("[PARTY] Мембер: pageId не найден на /city/talk — не могу слушать очередь")
+            if profile and party_id:
+                update_member_status(profile, party_id, "ready")
+            return False
+        page_id = page_id_m.group(1)
 
-        # Сигнализируем лидеру что WS поднят и можно слать invite.
-        # До этого момента лидер не должен делать POST /party/search —
-        # иначе push улетит в pageId которого ещё нет.
+        get_notice_url = f"{self.base_url}/city/talk?{page_id}-IEndpointBehaviorListener.1-"
+        show_notice_url = f"{self.base_url}/city/talk?{page_id}-IEndpointBehaviorListener.2-"
+        ajax_headers = {
+            "Wicket-Ajax": "true",
+            "Wicket-Ajax-BaseURL": "city/talk",
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/xml, text/xml, */*; q=0.01",
+        }
+
+        # Сигнал лидеру: мы на /city/talk, очередь слушаем — можно слать invite.
         if profile and party_id:
             update_member_status(profile, party_id, "ready")
-            log_info(f"[PARTY] Мембер: status=ready, лидер может инвайтить")
+            log_info(f"[PARTY] Мембер: status=ready (pageId={page_id}), лидер может инвайтить")
 
-        try:
-            # Если WS поднялся — ждём сначала через него, параллельно делая
-            # лёгкие HTTP-полли как страховку.
-            deadline = time.time() + timeout
-            attempt = 0
-            # Страницы для HTTP-полла.
-            # /city/talk — РЕАЛЬНОЕ место хранения pending-invite на сервере
-            # (раздел "Общение"). Проверено через MCP-браузер 09 мая: на /city
-            # и /dungeons маркер `приглашает тебя в банду` отсутствует, а на
-            # /city/talk виден весь invite целиком (имя, ник, accept/decline
-            # URLs). Все остальные страницы — лёгкий бонус-fallback.
-            pages = ["city/talk", "dungeons", "city/talk", "city", "city/talk", "tavern"]
-            last_markers = None
+        deadline = time.time() + timeout
+        polls = 0
+        while time.time() < deadline:
+            polls += 1
+            try:
+                resp = self.client.session.get(get_notice_url, headers=ajax_headers, timeout=8)
+                body = resp.text or ""
+            except Exception as e:
+                log_debug(f"[PARTY] Мембер: getNotice ошибка: {e}")
+                time.sleep(1.0)
+                continue
 
-            # WS-проверка делается в маленьком цикле (короткие wait) чтобы успевать
-            # делать HTTP-полли параллельно. Уменьшил с 3.0 до 1.5 — invite
-            # имеет show_time 4сек, чтобы не пропустить окно показа.
-            ws_poll_step = 1.5  # сек между проверками WS
+            # Пустая очередь — сервер отдаёт "{}" (len 2)
+            if len(body.strip()) <= 3:
+                time.sleep(1.0)
+                continue
 
-            while time.time() < deadline:
-                # 1) Проверка WS на полноценный invite-XML с маркерами
-                if ws_listener:
-                    invite = ws_listener.wait_for_invite(timeout=0.1, leader_username=leader_username)
-                    if invite:
-                        log_info(f"[PARTY] Мембер: вижу инвайт через WS от '{invite['inviter_name'] or '?'}'")
-                        accept_url = invite["accept_url"]
-                        log_debug(f"[PARTY] WS Accept URL: {accept_url}")
-                        self.client.get(accept_url)
-                        time.sleep(0.5)
-                        # После accept сервер обычно редиректит в лобби
-                        current = self.client.current_url or ""
-                        if "/dungeon/lobby/" in current or "/dungeon/standby/" in current:
-                            log_info("[PARTY] Мембер: уже в лобби после accept!")
-                            return True
-                        return self.enter_dungeon_feedback()
-
-                    # 2) Ждём ЛЮБОЙ push-сигнал (12-байт notification tickle)
-                    # или timeout. Без этого poll-цикл крутится 2с,
-                    # пропуская окно отображения invite в /city/talk.
-                    ws_listener.wait_for_tickle(timeout=ws_poll_step)
-                else:
-                    time.sleep(ws_poll_step)
-
-                # 3) HTTP-полл /city/talk — БЕЗ задержки после tickle.
-                # Если push пришёл (tickle сработал), invite появится здесь
-                # на ~1с окно — критично попасть в него.
-                page = pages[attempt % len(pages)]
-                attempt += 1
-                result, markers = self.check_and_accept_invite(leader_username, page=page, attempt=attempt)
-                if result:
-                    return True
-                last_markers = markers
-
-            log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с), {attempt} HTTP-попыток")
-            if last_markers:
-                log_warning(f"[PARTY] Последняя HTTP-проверка: {last_markers}")
-            return False
-        finally:
-            if ws_listener:
+            # В очереди есть notice — извлекаем id и СРАЗУ продвигаем очередь,
+            # чтобы следующий getNotice вернул то что за ним (вдруг invite).
+            nid_m = re.search(r'"notice_id"\s*:\s*"?(\d+)"?', body)
+            notice_id = nid_m.group(1) if nid_m else None
+            if notice_id:
                 try:
-                    ws_listener.stop()
+                    self.client.session.get(
+                        f"{show_notice_url}&notice_id={notice_id}",
+                        headers=ajax_headers, timeout=8,
+                    )
                 except Exception:
                     pass
+
+            # Это приглашение в банду?
+            if "приглашает тебя в банду" not in body:
+                # Другой notice (ларец полон, награда и т.п.) — очередь уже
+                # продвинута, без задержки берём следующий: invite может
+                # стоять прямо за ним.
+                log_debug(f"[PARTY] Мембер: notice id={notice_id} не invite, дальше")
+                continue
+
+            # JSON-notice экранирует слеши как \/ — снимаем перед парсингом URL.
+            body_clean = body.replace("\\/", "/")
+            inviter = self._extract_inviter_name(body_clean)
+            if inviter and leader_username and inviter != leader_username:
+                log_warning(
+                    f"[PARTY] Мембер: invite от '{inviter}', ждём '{leader_username}' — отклоняю"
+                )
+                decline_url = self._find_feedback_url(body_clean, "decline")
+                if decline_url:
+                    try:
+                        self.client.get(decline_url)
+                    except Exception:
+                        pass
+                continue
+
+            accept_url = self._find_feedback_url(body_clean, "accept")
+            if not accept_url:
+                log_warning("[PARTY] Мембер: invite найден, но accept URL не извлечён")
+                log_debug(f"[PARTY] notice body: {body[:400]}")
+                continue
+
+            log_info(
+                f"[PARTY] Мембер: вижу приглашение от {inviter or leader_username} "
+                f"(notice-очередь, poll #{polls})"
+            )
+            self.client.get(accept_url)
+            time.sleep(0.5)
+            current = self.client.current_url or ""
+            if "/dungeon/lobby/" in current or "/dungeon/standby/" in current:
+                log_info("[PARTY] Мембер: уже в лобби после accept!")
+                return True
+            return self.enter_dungeon_feedback()
+
+        log_warning(f"[PARTY] Мембер: таймаут ожидания приглашения ({timeout}с), {polls} notice-poll'ов")
+        return False
 
 
 # ============================================
