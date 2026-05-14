@@ -1325,12 +1325,14 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
             log_warning(f"[PARTY] Лидер: не удалось пригласить {mem_username}")
             # Продолжаем с остальными
 
-    # 4. Ждём пока все мемберы зайдут в лобби (status=in_lobby)
-    #    Каждые 30с переотправляем инвайт тем, кто ещё не в лобби
+    # 4. Ждём пока все мемберы зайдут в лобби (status=in_lobby).
+    #    БЕЗ повторного invite: reinvite через 30с натыкался на ещё живой
+    #    pending первого invite ("уже имеет приглашение") → детект orphan →
+    #    30-мин cooldown, и настоящий invite тоже сгорал. Reinvite сам и был
+    #    генератором orphan'ов. Один invite — мембер обязан принять за
+    #    INVITE_TIMEOUT через notice-очередь. Не успел — forming заново.
     log_info("[PARTY] Лидер: жду всех в лобби...")
     lobby_deadline = time.time() + LOBBY_TIMEOUT
-    reinvite_interval = 30
-    last_reinvite = time.time()
 
     while time.time() < lobby_deadline:
         members = get_party_members(party_id)
@@ -1340,27 +1342,6 @@ def _run_as_leader(profile, username, party_id, party_client, dungeon_runner, du
         # all(...) для одного элемента = True → лидер шёл в бой соло.
         if len(members) >= target_members and all(m.get("status") == "in_lobby" for m in members.values()):
             break
-
-        # Переотправляем инвайт каждые 30с
-        if time.time() - last_reinvite >= reinvite_interval:
-            for mem_profile, mem_info in members.items():
-                if mem_profile == profile:
-                    continue
-                if mem_info.get("status") == "in_lobby":
-                    continue
-                mem_username = mem_info.get("username", "")
-                if mem_username:
-                    log_info(f"[PARTY] Лидер: повторный инвайт {mem_username}")
-                    # Возвращаемся в лобби перед инвайтом
-                    party_client.client.get(f"{party_client.base_url}/dungeon/lobby/{party_client.url_id}")
-                    time.sleep(0.5)
-                    invite_result = party_client.invite_player(mem_username)
-                    if invite_result == "orphan_pending":
-                        log_warning(f"[PARTY] Лидер: {mem_username} orphan-pending в reinvite — отменяю")
-                        party_client.leave_lobby()
-                        leave_party(profile, party_id)
-                        return "orphan_pending"
-            last_reinvite = time.time()
 
         time.sleep(POLL_INTERVAL)
     else:
