@@ -491,7 +491,11 @@ class VMMOBot:
 
             for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
                 name = dungeon_config["name"]
-                difficulty = get_dungeon_difficulty(dungeon_id)
+                # Ключи VALENTINE_DUNGEONS без префикса dng: (нужно для URL).
+                # А deaths.json / DUNGEON_ACTION_LIMITS / dungeon_difficulties
+                # используют формат с префиксом — добавляем при lookup'ах.
+                full_id = f"dng:{dungeon_id}"
+                difficulty = get_dungeon_difficulty(full_id)
                 # Ивент-данж использует ту же механику что обычные данжи:
                 # деффолт brutal, понижение через deaths.json при смертях.
                 if difficulty == "skip":
@@ -513,7 +517,7 @@ class VMMOBot:
                     diff_name = {"brutal": "брутал", "hero": "героик", "normal": "нормал"}.get(difficulty, difficulty)
                     set_activity(f"☄️ {name} ({diff_name})")
                     log_info(f"[EVENT] Бой в {name} ({diff_name})...")
-                    self.dungeon_runner.current_dungeon_id = dungeon_id
+                    self.dungeon_runner.current_dungeon_id = full_id
                     self.dungeon_runner.combat_url = self.client.current_url
                     fight_result, actions = self.dungeon_runner.fight_until_done()
                     self.stats["total_actions"] += actions
@@ -528,7 +532,7 @@ class VMMOBot:
                     elif fight_result == "died":
                         self.stats["deaths"] += 1
                         # Понижаем сложность
-                        new_diff, should_skip = record_death(dungeon_id, name, difficulty)
+                        new_diff, should_skip = record_death(full_id, name, difficulty)
                         if should_skip:
                             log_warning(f"[EVENT] Смерть в {name} → СКИП")
                         else:
@@ -542,6 +546,11 @@ class VMMOBot:
                         except Exception as e:
                             log_debug(f"Ошибка ремонта: {e}")
                         self.check_craft()
+                    else:
+                        # Например max_actions_reached / timeout — fight_until_done не вернул
+                        # ни completed ни died. На сервере данж мог зачёлкнуться (КД встанет),
+                        # но мы это не зафиксировали — обновим КД на следующем тике.
+                        log_warning(f"[EVENT] {name}: бой оборван ({fight_result}, {actions} действий)")
         except Exception as e:
             log_error(f"[EVENT] Ошибка: {e}")
             self.stats["errors"] += 1

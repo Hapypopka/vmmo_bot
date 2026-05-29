@@ -323,8 +323,10 @@ def try_enter_dungeon(client, dungeon_id: str) -> tuple[str, int]:
     # Сложность берётся из deaths.json (если умирали — понижена) или из
     # dungeon_difficulties в конфиге, дефолт brutal. Понижение через record_death
     # вызывается из bot.py.check_valentine_dungeons после смерти.
+    # deaths.json / dungeon_difficulties используют формат "dng:<id>",
+    # а VALENTINE_DUNGEONS — без префикса (нужно для URL) — добавляем при lookup.
     from requests_bot.config import get_dungeon_difficulty
-    difficulty = get_dungeon_difficulty(dungeon_id)
+    difficulty = get_dungeon_difficulty(f"dng:{dungeon_id}")
 
     is_available, remaining = check_cooldown(dungeon_id)
     if not is_available:
@@ -493,7 +495,8 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
 
     for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
         name = dungeon_config["name"]
-        difficulty = get_dungeon_difficulty(dungeon_id)
+        full_id = f"dng:{dungeon_id}"
+        difficulty = get_dungeon_difficulty(full_id)
         diff_name = {"brutal": "брутал", "hero": "героик", "normal": "норма"}.get(difficulty, difficulty)
 
         log_debug(f"[EVENT] Проверяю: {name} ({diff_name})...")
@@ -516,7 +519,7 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
 
         if result == "entered":
             log_info(f"[EVENT] Бой в {name} ({diff_name})...")
-            dungeon_runner.current_dungeon_id = dungeon_id
+            dungeon_runner.current_dungeon_id = full_id
             dungeon_runner.combat_url = client.current_url
 
             fight_result, actions = dungeon_runner.fight_until_done()
@@ -527,7 +530,7 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
                 set_cooldown_after_completion(client, dungeon_id)
             elif fight_result == "died":
                 # Понижение сложности через deaths.json как у обычных данжей.
-                new_diff, should_skip = record_death(dungeon_id, name, difficulty)
+                new_diff, should_skip = record_death(full_id, name, difficulty)
                 if should_skip:
                     log_warning(f"[EVENT] Смерть в {name} → СКИП")
                 else:
