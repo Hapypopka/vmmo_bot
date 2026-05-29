@@ -476,12 +476,8 @@ class VMMOBot:
         if not event_enabled:
             return 0
 
-        # Если включена event-party — одиночный заход в ивент ОТКЛЮЧЁН.
-        # Иначе бот зайдёт сам, зафиксирует КД, нарушит координацию с мембером.
-        # (Реальный кейс 2026-05-01: char9 пошёл в FireTower один пока char25 ждал.)
-        if self._is_event_party_active():
-            log_debug("[EVENT] event_party_enabled — одиночный заход пропущен (приоритет пати)")
-            return 0
+        # 2026-05-19: ивент Затерянный храм проходим соло на брутале —
+        # event-party больше не нужна, блокировка снята.
 
         completed = 0
         try:
@@ -496,10 +492,9 @@ class VMMOBot:
             for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
                 name = dungeon_config["name"]
                 difficulty = get_dungeon_difficulty(dungeon_id)
-                # Ивент только на нормале
-                if difficulty in ("brutal", "hero"):
-                    difficulty = "normal"
-
+                # Затерянный храм соло на брутале (вне зависимости от per-dungeon
+                # настроек). Сама try_enter_dungeon строит URL по
+                # get_event_dungeon_difficulty() (дефолт brutal).
                 if difficulty == "skip":
                     continue
 
@@ -564,9 +559,10 @@ class VMMOBot:
         cleanup_inactive_event_cooldowns()
 
     def _is_event_party_active(self):
-        """Включена ли event-party у этого бота — если да, одиночный ивент-режим
-        должен быть выключен (иначе бот пройдёт ивент в одиночку и сломает координацию)."""
-        return is_event_party_enabled()
+        """Раньше блокировал одиночный заход в ивент чтобы не сломать координацию с мембером.
+        2026-05-19: Затерянный храм проходим соло на брутале — event-party больше не нужна.
+        Метод оставлен ради совместимости со старыми вызовами, всегда False."""
+        return False
 
     def _sleep_with_event_party_wakeup(self):
         """Ночной режим с пробуждениями для ивент-пати.
@@ -680,6 +676,10 @@ class VMMOBot:
             "member_waiting" — мембер был в forming-пати, но что-то пошло не так
             None — пати нет, бот должен делать обычную активность
         """
+        # 2026-05-19: Затерянный храм соло на брутале — event-party полностью отключена.
+        # Игнорируем флаг event_party_enabled в конфигах (их деплоить нельзя).
+        return None
+
         if not is_event_party_enabled():
             return None
 
