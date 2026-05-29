@@ -492,9 +492,8 @@ class VMMOBot:
             for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
                 name = dungeon_config["name"]
                 difficulty = get_dungeon_difficulty(dungeon_id)
-                # Затерянный храм соло на брутале (вне зависимости от per-dungeon
-                # настроек). Сама try_enter_dungeon строит URL по
-                # get_event_dungeon_difficulty() (дефолт brutal).
+                # Ивент-данж использует ту же механику что обычные данжи:
+                # деффолт brutal, понижение через deaths.json при смертях.
                 if difficulty == "skip":
                     continue
 

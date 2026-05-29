@@ -319,10 +319,12 @@ def try_enter_dungeon(client, dungeon_id: str) -> tuple[str, int]:
     dungeon = VALENTINE_DUNGEONS[dungeon_id]
     name = dungeon["name"]
 
-    # Сложность из конфига профиля (default brutal — для большинства персонажей).
-    # Слабым ботам можно поставить normal/hero чтобы реально выживать.
-    from requests_bot.config import get_event_dungeon_difficulty
-    difficulty = get_event_dungeon_difficulty()
+    # 2026-05-19: ивент-данж теперь использует ту же механику что обычные данжи.
+    # Сложность берётся из deaths.json (если умирали — понижена) или из
+    # dungeon_difficulties в конфиге, дефолт brutal. Понижение через record_death
+    # вызывается из bot.py.check_valentine_dungeons после смерти.
+    from requests_bot.config import get_dungeon_difficulty
+    difficulty = get_dungeon_difficulty(dungeon_id)
 
     is_available, remaining = check_cooldown(dungeon_id)
     if not is_available:
@@ -487,12 +489,12 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
     log_info("[EVENT] Проверяю КД данженов с сервера...")
     update_cooldowns_from_server(client)
 
-    from requests_bot.config import get_event_dungeon_difficulty
-    difficulty = get_event_dungeon_difficulty()
-    diff_name = {"brutal": "брутал", "hero": "героик", "normal": "норма"}.get(difficulty, difficulty)
+    from requests_bot.config import get_dungeon_difficulty, record_death
 
     for dungeon_id, dungeon_config in VALENTINE_DUNGEONS.items():
         name = dungeon_config["name"]
+        difficulty = get_dungeon_difficulty(dungeon_id)
+        diff_name = {"brutal": "брутал", "hero": "героик", "normal": "норма"}.get(difficulty, difficulty)
 
         log_debug(f"[EVENT] Проверяю: {name} ({diff_name})...")
         result, cd = try_enter_dungeon(client, dungeon_id)
@@ -524,9 +526,13 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
                 stats["completed"] += 1
                 set_cooldown_after_completion(client, dungeon_id)
             elif fight_result == "died":
-                # Не понижаем сложность — ивент всегда на брутале по требованию пользователя.
-                # Даже многократные смерти не переключат на героик/нормал.
-                log_warning(f"[EVENT] Смерть в {name} на {diff_name} (продолжаем брутал)")
+                # Понижение сложности через deaths.json как у обычных данжей.
+                new_diff, should_skip = record_death(dungeon_id, name, difficulty)
+                if should_skip:
+                    log_warning(f"[EVENT] Смерть в {name} → СКИП")
+                else:
+                    new_diff_name = {"brutal": "брутал", "hero": "героик", "normal": "норма"}.get(new_diff, new_diff)
+                    log_warning(f"[EVENT] Смерть в {name} на {diff_name} → {new_diff_name}")
                 stats["errors"] += 1
                 dungeon_runner.resurrect()
             else:

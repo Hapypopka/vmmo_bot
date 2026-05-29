@@ -421,14 +421,10 @@ def get_event_party_config():
     }
 
 
-def get_event_dungeon_difficulty():
-    """Сложность одиночного прохождения ивент-данжа.
-
-    Возможные значения: 'normal', 'hero', 'brutal' (default).
-    Нужно для случаев когда бот слишком слабый для брутала —
-    Nza идёт в FireTower на normal, а Пупупу+Полюби в пати на impossible.
-    """
-    return _profile_config.get("event_dungeon_difficulty", "brutal")
+# 2026-05-19: get_event_dungeon_difficulty удалён.
+# Ивент-данж теперь использует get_dungeon_difficulty(dungeon_id) — общую
+# механику с обычными данжами (deaths.json + понижение через record_death).
+# Ключ event_dungeon_difficulty в профилях остаётся, но больше не читается.
 
 
 def get_event_party_difficulty():
