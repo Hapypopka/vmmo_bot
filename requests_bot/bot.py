@@ -568,33 +568,34 @@ class VMMOBot:
 
         Логика разная для leader/member, чтобы они синхронизировались:
 
-        Лидер: дроссель 2 мин — реже создаёт пати, но точно. После создания
-            пати ждёт 120с в лобби (FORMING_TIMEOUT), мембер должен успеть.
+        2026-05-19: режим теперь СОЛО.
+            Раньше будили мембера/лидера для координированной пати в FireTower.
+            Сейчас Затерянный храм проходим в одиночку — просыпаемся когда
+            КД=0, проходим, спим дальше до 08:00 МСК.
 
-        Мембер: каждый цикл (~60с) делает ДЕШЁВУЮ проверку find_forming_party()
-            (только чтение shared_party_state.json, без HTTP). Если forming-пати
-            от лидера есть — ensure_logged_in + join. Если нет — обратно спать.
+        Цикл:
+            1. Спим ~5 мин (джиттер 270-330с).
+            2. Если утро — выходим.
+            3. ensure_logged_in (сессия могла протухнуть за ночь).
+            4. update_cooldowns_from_server — свежий КД с сервера.
+            5. Если ивент-данж доступен → check_valentine_dungeons() (соло).
+            6. Обратно в сон.
 
         Никаких обычных данжей/крафта/арены ночью.
-        Ждём NIGHT_END (08:00 МСК) и выходим обратно в основной цикл.
         """
         import random
-        from requests_bot.valentine_event import is_dungeon_on_cooldown_for_profile
-        from requests_bot.party_dungeon import find_forming_party
+        from requests_bot.valentine_event import (
+            update_cooldowns_from_server as update_event_cooldowns,
+            check_cooldown,
+            VALENTINE_DUNGEONS,
+        )
 
-        cfg = get_event_party_config()
-        event_key = cfg.get("dungeon_id", "dng:FireTower").replace("dng:", "")
-        dungeon_id = cfg.get("dungeon_id", "dng:FireTower")
-        my_profile = get_profile_name()
-        my_role = cfg.get("role", "member")
+        log_info("🌙 Ночной режим (event-wake, соло): сплю до 08:00 МСК")
+        set_activity("🌙 Сон (event-wake)")
 
-        log_info(f"🌙 Ночной режим (event-party wake-up, role={my_role}): сплю до 08:00 МСК")
-        set_activity("🌙 Сон (event-party wake)")
-
-        last_leader_attempt = 0  # Только для лидера
         while True:
-            # Сначала спим — джиттер 50-75с
-            jitter = random.randint(50, 75)
+            # Спим джиттер ~5 мин: чаще не нужно, КД ивента 4-6ч
+            jitter = random.randint(270, 330)
             time.sleep(jitter)
 
             # Проверка — настало ли утро
@@ -604,46 +605,30 @@ class VMMOBot:
                 set_activity("☀️ Просыпаюсь")
                 return
 
-            # Дешёвая проверка: свой КД через shared state (только чтение)
-            if is_dungeon_on_cooldown_for_profile(my_profile, event_key):
-                continue  # На КД — спим дальше
-
-            # === МЕМБЕР: дешёвая проверка forming-пати в shared state ===
-            if my_role == "member":
-                forming = find_forming_party(my_profile)
-                if not forming or forming.get("dungeon_id") != dungeon_id:
-                    continue  # Лидер ещё не создал пати — спим
-                # Лидер создал пати! Идём
-                log_info(f"⚡ Лидер создал forming-пати на {dungeon_id} → присоединяюсь")
-                set_activity("⚡ Join к лидеру")
-            else:
-                # === ЛИДЕР: дроссель 2 мин ===
-                if time.time() - last_leader_attempt < 120:
-                    continue
-                last_leader_attempt = time.time()
-                log_info("⚡ КД ивент-данжа истёк, создаю пати...")
-                set_activity("⚡ Создаю ивент-пати")
-
             try:
                 if not self.client.ensure_logged_in():
                     log_warning("Не удалось залогиниться ночью — спим дальше")
                     continue
 
-                result = self.check_event_party()
+                # Обновляем КД с сервера — он же положит свежее в кэш
+                update_event_cooldowns(self.client)
 
-                if result in ("completed", "died"):
-                    log_info(f"🌙 Ивент-пати ночью завершён: {result}, возвращаюсь в сон")
-                elif result == "member_waiting":
-                    log_debug("🌙 Мембер ждёт лидера, продолжаю проверки")
-                elif result is None:
-                    log_debug("🌙 Ивент-пати не готов, продолжаю спать")
-                else:
-                    log_debug(f"🌙 Ивент-пати: {result}")
+                # Проверяем — все ли ивент-данжи на КД?
+                all_on_cd = all(
+                    not check_cooldown(d_id)[0] for d_id in VALENTINE_DUNGEONS
+                )
+                if all_on_cd:
+                    continue  # Все на КД — спим дальше
+
+                log_info("⚡ Ивент-данж доступен ночью → захожу соло")
+                set_activity("⚡ Ивент ночью (соло)")
+                result = self.check_valentine_dungeons()
+                log_info(f"🌙 Ночной заход завершён (пройдено: {result}), возвращаюсь в сон")
             except Exception as e:
-                log_error(f"Ошибка ночного ивент-пати: {e}")
+                log_error(f"Ошибка ночного ивент-захода: {e}")
                 log_debug(tb_module.format_exc())
             finally:
-                set_activity("🌙 Сон (event-party wake)")
+                set_activity("🌙 Сон (event-wake)")
 
     def check_event_party(self):
         """Координированная пати в ивент-данж.
@@ -1386,9 +1371,11 @@ class VMMOBot:
                 # Ночной режим: 00:00-08:00 МСК — спим
                 now_msk = datetime.now(MSK)
                 if NIGHT_START <= now_msk.hour < NIGHT_END:
-                    if is_wake_for_event_party_at_night() and is_event_party_enabled():
-                        # Особый режим: спим, но просыпаемся для ивент-пати
-                        # когда у обоих (себя + партнёра) КД ивент-данжа = 0.
+                    if is_wake_for_event_party_at_night() and is_valentine_event_enabled():
+                        # Особый режим: спим, но просыпаемся для соло-ивента
+                        # (Затерянный храм) когда КД=0. Раньше тут была пати —
+                        # её больше нет, но флаг wake_for_event_party_at_night
+                        # переиспользуем (чтобы не менять конфиги профилей).
                         # Никаких обычных данжей/крафта/арены ночью.
                         self._sleep_with_event_party_wakeup()
                     else:
