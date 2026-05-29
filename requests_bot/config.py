@@ -54,6 +54,8 @@ DUNGEON_ACTION_LIMITS = {
     "dng:ShadowGuard": 700,
     "dng:Barony": 500,
     "dng:HighDungeon": 500,
+    # LostTemple — многоэтапный ивент-данж (5-6 этапов). На брутале легко даёт >500 действий.
+    "dng:LostTemple": 2500,
     "default": 500,
 }
 
