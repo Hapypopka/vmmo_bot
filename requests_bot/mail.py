@@ -233,6 +233,10 @@ class MailClient:
         - "Аукцион Твой лот [Железо x10] продан за 4з"
         - "Аукцион Твой лот [Медь x5] продан"
 
+        ВАЖНО: в текущей версии игры в *списке писем* приходит обрезанный текст
+        "Аукцион:Твоя продажа" без скобок. Имя лота надо вытаскивать уже из
+        HTML открытого письма — см. extract_sold_item_from_opened_mail.
+
         Returns:
             tuple: (item_name, count) или (None, None)
         """
@@ -242,6 +246,31 @@ class MailClient:
             item_name = match.group(1).strip()
             count = int(match.group(2)) if match.group(2) else 1
             return item_name, count
+        return None, None
+
+    def extract_sold_item_from_opened_mail(self):
+        """
+        Достаёт имя проданного лота из УЖЕ ОТКРЫТОГО письма продажи.
+
+        В списке писем приходит "Аукцион:Твоя продажа" (без названия лота).
+        Полный текст с названием — в HTML открытого письма.
+
+        Returns:
+            tuple: (item_name, count) или (None, None)
+        """
+        soup = self.client.soup()
+        if not soup:
+            return None, None
+
+        # Сначала пробуем по всему текстовому содержимому страницы письма
+        full_text = soup.get_text(" ", strip=True)
+        # Тот же паттерн [Название xN]
+        match = re.search(r'\[([^\]]+?)(?:\s*[xх](\d+))?\]', full_text)
+        if match:
+            item_name = match.group(1).strip()
+            count = int(match.group(2)) if match.group(2) else 1
+            return item_name, count
+
         return None, None
 
     def process_mailbox(self, on_backpack_full=None):
@@ -267,13 +296,24 @@ class MailClient:
 
         max_iterations = 50  # Защита от бесконечного цикла
 
+        # Защита от дублей: одно и то же письмо в рамках сессии обрабатываем
+        # ОДИН раз. Иначе если collect_message_items не удалит письмо (нет
+        # кнопки / ошибка) — оно снова окажется первым в списке на следующей
+        # итерации, и record_expired запишется десятки раз.
+        # Кейс из лога: char9 30.05 — Тор зафиксирован 7567 раз за день.
+        processed_urls = set()
+
         for _ in range(max_iterations):
             messages = self.find_active_messages()
             if not messages:
                 break
 
-            # Берём первое письмо
-            msg = messages[0]
+            # Берём первое НЕОБРАБОТАННОЕ письмо
+            msg = next((m for m in messages if m["url"] not in processed_urls), None)
+            if msg is None:
+                # Все письма уже пытались обработать — выходим
+                break
+            processed_urls.add(msg["url"])
             print(f"[MAIL] Открываю: {msg['text'][:50]}...")
 
             # Проверяем истекший лот
@@ -299,13 +339,23 @@ class MailClient:
                         add_to_auction_blacklist(item_name)
                         print(f"[MAIL] '{item_name}' добавлен в blacklist (не продался)")
 
-            # Парсим информацию о проданном лоте ДО открытия письма
+            # Парсим информацию о проданном лоте ДО открытия письма.
+            # В списке писем приходит только "Аукцион:Твоя продажа" без [имени],
+            # поэтому здесь почти всегда вернётся (None, None) — основной
+            # парсинг произойдёт после открытия письма.
             sold_item_name, sold_count = None, None
             if is_sold:
                 sold_item_name, sold_count = self.extract_sold_item_info(msg["text"])
 
             # Открываем письмо
             self.client.get(msg["url"])
+
+            # Если это продажа и имя не извлеклось из списка — пробуем из
+            # содержимого открытого письма (там полный текст с [Название xN]).
+            if is_sold and not sold_item_name:
+                sold_item_name, sold_count = self.extract_sold_item_from_opened_mail()
+                if sold_item_name:
+                    print(f"[MAIL] Проданный лот (из открытого письма): {sold_item_name} x{sold_count}")
 
             # Парсим деньги
             gold, silver = self.parse_mail_money()
@@ -315,8 +365,13 @@ class MailClient:
                 print(f"[MAIL] Деньги: {gold}g {silver}s")
 
                 # Если это продажа - записываем в статистику
-                if is_sold and sold_item_name:
-                    record_sale(sold_item_name, sold_count or 1, gold, silver, profile=self.profile)
+                if is_sold:
+                    if sold_item_name:
+                        record_sale(sold_item_name, sold_count or 1, gold, silver, profile=self.profile)
+                    else:
+                        # Фиксируем факт продажи без имени — лучше чем терять данные
+                        record_sale("(неизвестно)", 1, gold, silver, profile=self.profile)
+                        print("[MAIL] Имя проданного лота не извлечено — записан как '(неизвестно)'")
 
             # Забираем предметы
             result = self.collect_message_items()
