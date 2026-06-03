@@ -218,8 +218,13 @@ class BackpackClient:
                 log_debug(f"[BACKPACK] - btn: '{btn.get_text(strip=True)}' href={btn.get('href', 'NO_HREF')[:50] if btn.get('href') else 'NO_HREF'}")
 
         for item_div in item_divs:
-            # Название предмета
-            name_link = item_div.select_one("span.e-name a")
+            # Название предмета.
+            # Старый формат:  <span class="e-name"><a class="iGood">Имя</a></span>
+            # Новый формат:   <div class="el-name"><div><a class="iEpic"><span>Имя</span></a>...
+            # У свитков (Свиток Качества и пр.) и некоторых эпиков используется
+            # новый формат — раньше эти предметы вообще не парсились и оставались
+            # в рюкзаке, не попадая ни в sell_all, ни в drop_unusable.
+            name_link = item_div.select_one("span.e-name a, div.el-name a")
             if not name_link:
                 continue
 
