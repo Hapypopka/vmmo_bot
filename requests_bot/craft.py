@@ -1267,6 +1267,19 @@ class CyclicCraftClient(IronCraftClient):
             item_name = ITEM_NAMES.get(old_recipe, old_recipe) if old_recipe else "none"
             log_info(f"[CRAFT] Обнаружено изменение настроек крафта! Сбрасываем рецепт ({item_name})")
 
+        # Если выбранный рецепт больше не в списке актуальных (FINAL_RECIPES) —
+        # сбрасываем кэш. Это покрывает случай "редактнули код, убрали рецепт,
+        # бот не перезапускали".
+        if self._selected_recipe:
+            try:
+                from requests_bot.craft_prices import FINAL_RECIPES
+                if self._selected_recipe not in FINAL_RECIPES:
+                    item_name = ITEM_NAMES.get(self._selected_recipe, self._selected_recipe)
+                    log_info(f"[CRAFT] Рецепт {item_name} больше не в FINAL_RECIPES — сбрасываю и выбираю заново")
+                    self._selected_recipe = None
+            except Exception:
+                pass
+
         # Если рецепт уже выбран - возвращаем его без пересчётов
         if self._selected_recipe:
             return self._selected_recipe
