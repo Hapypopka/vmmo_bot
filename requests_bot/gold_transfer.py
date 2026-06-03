@@ -55,7 +55,12 @@ def get_profile_list():
 TRANSFER_CONFIG = {
     "reserve_gold": 10,          # сколько золота оставить альту
     "transfer_item": "ruby",     # ресурс для трансфера (всегда Рубин)
-    "price_multiplier": 100,     # макс x100 от рыночной (лимит системы)
+    # 2026-06-03: x100 упирался в серверный лимит "цена значительно выше
+    # рыночной" (стояли на грани x99.7). Снижаем до x80 с safety_factor 0.9 —
+    # фактический множитель цены ~x72, остаётся запас на колебания рынка
+    # между моментом замера market_price и фактической отправкой лота.
+    "price_multiplier": 80,
+    "safety_factor": 0.9,
     "auction_fee": 0.05,         # комиссия 5%
     "retry_attempts": 3,         # попыток найти лот
     "retry_delay": 2,            # секунд между попытками
@@ -820,8 +825,15 @@ class GoldTransfer:
             results["error"] = "Не удалось получить рыночную цену рубина"
             return results
 
-        max_per_ruby = market_price * self.config["price_multiplier"]
-        self._log(f"Рыночная цена: {market_price}с, макс за рубин: {max_per_ruby}с = {max_per_ruby // 100}з")
+        # Применяем safety_factor (0.9 по умолчанию) — фактический множитель ~x72
+        # вместо номинального x80, чтобы оставаться подальше от серверного лимита.
+        raw_max = market_price * self.config["price_multiplier"]
+        safety = self.config.get("safety_factor", 1.0)
+        max_per_ruby = int(raw_max * safety)
+        self._log(
+            f"Рыночная цена: {market_price}с, макс за рубин: {max_per_ruby}с = "
+            f"{max_per_ruby // 100}з (x{self.config['price_multiplier']} * safety={safety})"
+        )
 
         # Проверяем хватает ли рубинов у мейна для всех трансферов
         total_silver_needed = sum(t["amount"] * 100 for t in transfers)
