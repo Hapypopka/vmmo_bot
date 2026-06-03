@@ -372,12 +372,16 @@ def acquire_craft_lock(profile):
                 lock_info = locks[profile]
                 if now - lock_info.get("timestamp", 0) <= LOCK_TTL:
                     recipe_id = lock_info.get("recipe_id")
-                    # Если рецепт в исключениях — сбрасываем лок и выбираем заново
-                    if recipe_id not in AUTO_SELECT_EXCLUDED:
+                    # Если рецепт в исключениях ИЛИ уже не в FINAL_RECIPES
+                    # (был удалён из списка автовыбора) — сбрасываем лок и выбираем заново.
+                    if recipe_id in AUTO_SELECT_EXCLUDED:
+                        print(f"[CRAFT_LOCKS] {profile}: {recipe_id} в исключениях, выбираю другой")
+                    elif recipe_id not in FINAL_RECIPES:
+                        print(f"[CRAFT_LOCKS] {profile}: {recipe_id} больше не в FINAL_RECIPES, выбираю другой")
+                    else:
                         locks[profile]["timestamp"] = now
                         save_craft_locks(locks)
                         return recipe_id
-                    print(f"[CRAFT_LOCKS] {profile}: {recipe_id} в исключениях, выбираю другой")
 
             # Считаем ботов на каждом рецепте (внутри лока!)
             bot_counts = {recipe: 0 for recipe in FINAL_RECIPES}
