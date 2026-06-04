@@ -276,7 +276,9 @@ class BackpackClient:
                         buttons["disassemble"] = full_url
                     elif "выкинуть" in btn_text.lower():
                         buttons["drop"] = full_url
-                    elif "открыть" in btn_text.lower():
+                    elif "открыть" in btn_text.lower() or "использовать" in btn_text.lower():
+                        # Сундуки/ларцы (особенно Аммониты) часто имеют кнопку
+                        # "Использовать" вместо "Открыть". Свитки тоже.
                         buttons["open"] = full_url
 
             # DEBUG: если нет кнопок, показываем что было
