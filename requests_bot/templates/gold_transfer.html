@@ -291,6 +291,7 @@ function startTransfer() {
     document.getElementById('startTransferBtn').style.display = 'none';
     document.getElementById('stopTransferBtn').style.display = 'inline-block';
 
+    // 1) Запускаем трансфер в фоне
     fetch('/api/gold_transfer', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -301,57 +302,68 @@ function startTransfer() {
     })
     .then(r => r.json())
     .then(data => {
-        document.getElementById('startTransferBtn').disabled = false;
-        document.getElementById('startTransferBtn').style.display = 'inline-block';
-        document.getElementById('stopTransferBtn').style.display = 'none';
-        document.getElementById('stopTransferBtn').disabled = false;
-        document.getElementById('stopTransferBtn').textContent = 'Остановить';
-
         if (!data.success) {
-            addLog('Ошибка: ' + data.error, 'error');
+            resetTransferButtons();
+            addLog('Ошибка запуска: ' + data.error, 'error');
             return;
         }
-
-        const result = data.result;
-
-        addLog('', 'info');
-        addLog('=== Результаты ===', 'info');
-
-        for (const detail of result.details) {
-            const status = detail.status === 'ok' ? 'success' : 'error';
-            addLog(`${detail.profile}: ${detail.transferred}з ${detail.status}`, status);
-            if (detail.error) {
-                addLog(`  Ошибка: ${detail.error}`, 'error');
-            }
-        }
-
-        addLog('', 'info');
-        addLog(`Итого передано: ${result.total_transferred}з`, 'info');
-        addLog(`Мейн получит: ~${result.total_received}з`, 'success');
-
-        if (result.mail_collected) {
-            addLog(`Собрано из почты: ${result.mail_collected.gold}з ${result.mail_collected.silver}с`, 'success');
-        }
-
-        if (result.stopped) {
-            addLog('Трансфер был остановлен пользователем', 'error');
-        }
-
-        if (result.warning) {
-            addLog('⚠️ ' + result.warning, 'error');
-        }
-
-        // Обновляем балансы (быстро из кэша, не с сервера игры)
-        loadFromStats();
+        addLog('Запущен в фоне, опрашиваю прогресс…', 'info');
+        // 2) Поллим статус каждые 3 секунды до завершения
+        const reportedDetails = new Set();
+        const pollTimer = setInterval(() => {
+            fetch('/api/gold_transfer/status')
+                .then(r => r.json())
+                .then(st => {
+                    if (!st.success) return;
+                    const s = st.state;
+                    // Покажем новые detail-записи по мере их появления
+                    if (s.result && Array.isArray(s.result.details)) {
+                        for (const d of s.result.details) {
+                            const key = d.profile + ':' + d.status;
+                            if (reportedDetails.has(key)) continue;
+                            reportedDetails.add(key);
+                            const t = d.status === 'ok' ? 'success' : 'error';
+                            addLog(`${d.profile}: ${d.transferred}з ${d.status}`, t);
+                            if (d.error) addLog(`  Ошибка: ${d.error}`, 'error');
+                        }
+                    }
+                    if (!s.running) {
+                        clearInterval(pollTimer);
+                        resetTransferButtons();
+                        if (s.error) {
+                            addLog('Исключение: ' + s.error, 'error');
+                            return;
+                        }
+                        const result = s.result || {};
+                        addLog('', 'info');
+                        addLog(`Итого передано: ${result.total_transferred || 0}з`, 'info');
+                        addLog(`Мейн получит: ~${result.total_received || 0}з`, 'success');
+                        if (result.mail_collected) {
+                            addLog(`Собрано из почты: ${result.mail_collected.gold}з ${result.mail_collected.silver}с`, 'success');
+                        }
+                        if (result.stopped) addLog('Трансфер был остановлен пользователем', 'error');
+                        if (result.warning) addLog('⚠️ ' + result.warning, 'error');
+                        loadFromStats();
+                    }
+                })
+                .catch(err => {
+                    // Не убиваем поллинг на одиночной сетевой ошибке — таймер живёт
+                    console.warn('status poll error', err);
+                });
+        }, 3000);
     })
     .catch(err => {
-        document.getElementById('startTransferBtn').disabled = false;
-        document.getElementById('startTransferBtn').style.display = 'inline-block';
-        document.getElementById('stopTransferBtn').style.display = 'none';
-        document.getElementById('stopTransferBtn').disabled = false;
-        document.getElementById('stopTransferBtn').textContent = 'Остановить';
+        resetTransferButtons();
         addLog('Ошибка: ' + err, 'error');
     });
+}
+
+function resetTransferButtons() {
+    document.getElementById('startTransferBtn').disabled = false;
+    document.getElementById('startTransferBtn').style.display = 'inline-block';
+    document.getElementById('stopTransferBtn').style.display = 'none';
+    document.getElementById('stopTransferBtn').disabled = false;
+    document.getElementById('stopTransferBtn').textContent = 'Остановить';
 }
 
 function stopTransfer() {

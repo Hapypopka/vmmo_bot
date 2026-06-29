@@ -151,6 +151,16 @@
     </div>
 </div>
 
+<!-- Craft-only боты (Пупупу — получатель золота) -->
+{% if craft_only_bots %}
+<h2 class="section-title">🔨 Только крафт</h2>
+<div class="grid grid-3">
+    {% for bot in craft_only_bots %}
+    {{ render_bot_card(bot) }}
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Пати-боты -->
 {% if party_bots %}
 <h2 class="section-title">👥 Пати</h2>

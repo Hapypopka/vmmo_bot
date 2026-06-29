@@ -494,16 +494,29 @@ def get_grouped_stats():
     """Собирает статистику с группировкой: мейны отдельно, мулы сгруппированы"""
     all_stats = get_all_stats()
 
+    # Craft-only боты (Пупупу-получатель золота) — отдельный блок в самом верху
+    craft_only_profiles = set()
     # Пати-боты — отдельная группа сверху
     party_profiles = set()
     for s in all_stats:
         cfg = s.get("config", {})
+        if cfg.get("craft_only_mode"):
+            craft_only_profiles.add(s["profile"])
         if cfg.get("party_dungeon_enabled"):
             party_profiles.add(s["profile"])
 
-    party_bots = [s for s in all_stats if s["profile"] in party_profiles]
-    mains = [s for s in all_stats if s.get("is_main", False) and s["profile"] not in party_profiles]
-    mules = [s for s in all_stats if not s.get("is_main", False) and s["profile"] not in party_profiles]
+    # craft-only исключаем из всех остальных групп
+    craft_only_bots = [s for s in all_stats if s["profile"] in craft_only_profiles]
+    party_bots = [s for s in all_stats
+                  if s["profile"] in party_profiles and s["profile"] not in craft_only_profiles]
+    mains = [s for s in all_stats
+             if s.get("is_main", False)
+             and s["profile"] not in party_profiles
+             and s["profile"] not in craft_only_profiles]
+    mules = [s for s in all_stats
+             if not s.get("is_main", False)
+             and s["profile"] not in party_profiles
+             and s["profile"] not in craft_only_profiles]
 
     # Суммарная статистика мулов
     mules_summary = {
@@ -536,6 +549,7 @@ def get_grouped_stats():
     best_mule = mules_sorted[0] if mules_sorted else None
 
     return {
+        "craft_only_bots": craft_only_bots,
         "party_bots": party_bots,
         "mains": mains,
         "mules": mules,
@@ -1018,7 +1032,7 @@ reload_profiles()
 def index():
     """Главная страница - обзор всех ботов"""
     grouped = get_grouped_stats()
-    all_stats = grouped["party_bots"] + grouped["mains"] + grouped["mules"]
+    all_stats = grouped["craft_only_bots"] + grouped["party_bots"] + grouped["mains"] + grouped["mules"]
 
     # Расчёт total_stats для hero-панели
     total_stats = {
@@ -1050,6 +1064,7 @@ def index():
         total_stats["gold_per_hour"] = total_stats["gold_earned"] / total_stats["total_hours"]
 
     return render_template("index.html",
+                           craft_only_bots=grouped["craft_only_bots"],
                            party_bots=grouped["party_bots"],
                            mains=grouped["mains"],
                            mules=grouped["mules"],
@@ -2640,18 +2655,48 @@ def api_gold_balances():
         return jsonify({"success": False, "error": str(e)})
 
 
+# Глобальное состояние асинхронного трансфера. В рамках одного процесса
+# web_panel допускается один трансфер за раз — этого достаточно для всех
+# реалистичных сценариев и убирает таймаут UI на длинных операциях.
+_TRANSFER_STATE = {
+    "running": False,
+    "started_at": None,
+    "finished_at": None,
+    "main_profile": None,
+    "transfers": [],
+    "result": None,       # итоговый dict от transfer_gold (после завершения)
+    "error": None,        # строка ошибки (если упало с исключением)
+}
+_TRANSFER_LOCK = __import__("threading").Lock()
+
+
+def _run_transfer_async(main_profile, transfers):
+    """Запускается в отдельном треде. Пишет результат в _TRANSFER_STATE."""
+    from .gold_transfer import transfer_gold
+    import traceback
+    from datetime import datetime
+    try:
+        result = transfer_gold(main_profile, transfers)
+        with _TRANSFER_LOCK:
+            _TRANSFER_STATE["result"] = result
+            _TRANSFER_STATE["error"] = None
+    except Exception as e:
+        traceback.print_exc()
+        with _TRANSFER_LOCK:
+            _TRANSFER_STATE["error"] = str(e)
+    finally:
+        with _TRANSFER_LOCK:
+            _TRANSFER_STATE["running"] = False
+            _TRANSFER_STATE["finished_at"] = datetime.now().isoformat()
+
+
 @app.route("/api/gold_transfer", methods=["POST"])
 @login_required
 def api_gold_transfer():
-    """
-    POST /api/gold_transfer
-    {
-        "main_profile": "char1",
-        "transfers": [
-            {"profile": "char2", "amount": 40},
-            {"profile": "char3", "amount": 20}
-        ]
-    }
+    """POST /api/gold_transfer — запуск трансфера В ФОНЕ.
+
+    Сразу возвращает {"success":true,"started":true}. UI должен опрашивать
+    /api/gold_transfer/status для прогресса и итогового результата.
     """
     try:
         data = request.json
@@ -2660,18 +2705,57 @@ def api_gold_transfer():
 
         if not main_profile:
             return jsonify({"success": False, "error": "main_profile required"})
-
         if not transfers:
             return jsonify({"success": False, "error": "transfers required"})
 
-        from .gold_transfer import transfer_gold
-        result = transfer_gold(main_profile, transfers)
+        # Не запускаем второй трансфер пока идёт первый
+        with _TRANSFER_LOCK:
+            if _TRANSFER_STATE["running"]:
+                return jsonify({
+                    "success": False,
+                    "error": "Трансфер уже идёт. Используй /api/gold_transfer/status для проверки.",
+                })
+            from datetime import datetime
+            _TRANSFER_STATE.update({
+                "running": True,
+                "started_at": datetime.now().isoformat(),
+                "finished_at": None,
+                "main_profile": main_profile,
+                "transfers": transfers,
+                "result": None,
+                "error": None,
+            })
 
-        return jsonify({"success": True, "result": result})
+        # Запускаем в фоне (daemon=True — не мешает завершению процесса)
+        import threading
+        t = threading.Thread(
+            target=_run_transfer_async,
+            args=(main_profile, transfers),
+            daemon=True,
+        )
+        t.start()
+
+        return jsonify({"success": True, "started": True})
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/gold_transfer/status", methods=["GET"])
+@login_required
+def api_gold_transfer_status():
+    """GET /api/gold_transfer/status — текущее состояние трансфера.
+
+    Возвращает:
+      - running: True/False
+      - started_at, finished_at: ISO timestamps
+      - main_profile, transfers: входные данные текущего/последнего трансфера
+      - result: итог transfer_gold (когда завершено) — содержит details, total_transferred, ...
+      - error: строка исключения (если упало)
+    """
+    with _TRANSFER_LOCK:
+        return jsonify({"success": True, "state": dict(_TRANSFER_STATE)})
 
 
 @app.route("/api/gold_transfer/stop", methods=["POST"])

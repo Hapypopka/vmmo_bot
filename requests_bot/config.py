@@ -522,6 +522,16 @@ def is_iron_craft_enabled():
     return _profile_config.get("iron_craft_enabled", False)
 
 
+def is_craft_only_mode():
+    """Режим «только крафт» (например для Пупупу — персонажа-получателя золота).
+
+    Когда True — бот делает ТОЛЬКО крафт и продажу крафта. Никакой очистки
+    рюкзака, почты, данжей, ивентов, арены, шахты. Нужно для персонажей,
+    которым переводят золото через аукцион: их рюкзак и рубины трогать нельзя.
+    """
+    return _profile_config.get("craft_only_mode", False)
+
+
 def is_sell_crafts_on_startup():
     """Продавать все крафты при старте бота (по умолчанию True)"""
     return _profile_config.get("sell_crafts_on_startup", True)

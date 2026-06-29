@@ -55,15 +55,32 @@ def get_profile_list():
 TRANSFER_CONFIG = {
     "reserve_gold": 10,          # сколько золота оставить альту
     "transfer_item": "ruby",     # ресурс для трансфера (всегда Рубин)
-    # 2026-06-03: x100 упирался в серверный лимит "цена значительно выше
-    # рыночной" (стояли на грани x99.7). Снижаем до x80 с safety_factor 0.9 —
-    # фактический множитель цены ~x72, остаётся запас на колебания рынка
-    # между моментом замера market_price и фактической отправкой лота.
-    "price_multiplier": 80,
-    "safety_factor": 0.9,
+    # 2026-06-03: разгадан корень.
+    # get_market_price брал bidGold/bidSilver из ФОРМЫ — это рекомендация
+    # системы, а не реальная минималка. Например: форма пишет 11с, а на
+    # самом аукционе самый дешёвый лот: 1000 рубинов за 70з 64с (7.06с/шт).
+    # Сервер ставит лимит x100 от реальной минималки (~706с/шт), а наш
+    # x100 от формы давал ~1100с/шт → сервер режет.
+    # Юзер руками ставил 6з 95с = 695с (x98.4 от реальной) → прошло.
+    #
+    # Решение: новый метод get_actual_min_ruby_price_silver — парсит
+    # реальные лоты с страницы аукциона. Берём x90 от него с safety=1.0.
+    "price_multiplier": 100,
+    "safety_factor": 1.0,
+    # 2026-06-03: ступенька в лимите сервера.
+    # Тест: amount=10 за 100з прошло, 200з — нет. amount=13 за 80з — режется.
+    # Значит сервер ужесточает лимит per_unit между amount=10..13.
+    # Решение: жёстко фиксируем 10 рубинов в лот, потолок 70з (= 10 * 7з/шт).
+    "target_lot_amount": 10,
+    "max_lot_gold": 70,
     "auction_fee": 0.05,         # комиссия 5%
     "retry_attempts": 3,         # попыток найти лот
     "retry_delay": 2,            # секунд между попытками
+    # Останавливать весь трансфер при первой ошибке create_lot.
+    # 2026-06-03: после нахождения формулы (max_lot_gold=80) — выключено.
+    # Если лот не пройдёт по случайным причинам, бот идёт к следующему альту.
+    # Включи если хочешь снова видеть стоп на первой ошибке для дебага.
+    "stop_on_first_error": False,
 }
 
 
@@ -217,9 +234,94 @@ class GoldTransferClient:
         silver = int(bid_silver.get("value", 0)) if bid_silver else 0
 
         market_price = gold * 100 + silver
-        print(f"[TRANSFER] Рыночная цена рубина: {gold}з {silver}с = {market_price}с")
+        print(f"[TRANSFER] Рыночная цена рубина (из формы): {gold}з {silver}с = {market_price}с")
 
         return market_price
+
+    def get_actual_min_ruby_price_silver(self) -> int:
+        """
+        Парсит РЕАЛЬНУЮ минимальную цену рубина (за 1 шт в серебре)
+        среди существующих лотов на странице создания.
+
+        Игра ставит лимит x100 от ЭТОЙ цены, а не от bidGold/bidSilver
+        в форме. Если бот ставит цену с учётом реальной минималки —
+        сервер не режет лот как "значительно выше рыночной".
+
+        Returns:
+            int: минимальная цена за 1 рубин в серебре, или 0 если не найдено
+        """
+        ruby_name = RESOURCE_NAMES.get("ruby", "Рубин")
+
+        # 1. Открываем категорию stones — там сейчас только минералы по
+        #    умолчанию, рубины надо искать.
+        url = f"{BASE_URL}/auction?category=resources&sub_resources=stones"
+        self.client.get(url)
+        time.sleep(0.3)
+        soup = self.client.soup()
+        if not soup:
+            return 0
+
+        # 2. Ищем форму поиска и POST с именем "Рубин".
+        search_form = soup.find("form", {"action": lambda x: x and "search" in x})
+        if search_form:
+            form_action = search_form.get("action", "")
+            if not form_action.startswith("http"):
+                form_action = urljoin(BASE_URL, form_action)
+            name_input = search_form.find("input", {"type": "text"})
+            input_name = name_input.get("name", "name") if name_input else "name"
+            self.client.post(form_action, data={input_name: ruby_name})
+            time.sleep(0.3)
+            soup = self.client.soup()
+            if not soup:
+                return 0
+        else:
+            print(f"[TRANSFER] Форма поиска не найдена на /auction")
+
+        # 3. Парсим лоты. По умолчанию сортировка по цене — на первой
+        #    странице самые дешёвые, этого достаточно для минимума.
+        lots = soup.select("div.list-el")
+        min_per_unit = None
+        ruby_lots_seen = 0
+        for lot in lots:
+            name_el = lot.select_one("div.e-name") or lot.select_one("span.e-name")
+            if not name_el:
+                continue
+            name_text = name_el.get_text(strip=True)
+            if ruby_name not in name_text:
+                continue
+            ruby_lots_seen += 1
+
+            # Количество: div.e-count → "x100"
+            count_el = lot.select_one("div.e-count, span.e-count")
+            count = 0
+            if count_el:
+                m = re.search(r'[xх](\d+)', count_el.get_text(strip=True), re.IGNORECASE)
+                if m:
+                    count = int(m.group(1))
+            if count == 0:
+                continue
+
+            # Цена выкупа: a.go-btn._auction (для чужих) или span.go-btn._auction
+            # (для своих) — оба задают рыночный уровень.
+            buy_btn = lot.select_one("a.go-btn._auction, span.go-btn._auction")
+            if not buy_btn:
+                continue
+            gold, silver = self._parse_button_price(buy_btn)
+            price_silver = gold * 100 + silver
+            if price_silver == 0:
+                continue
+
+            per_unit = price_silver / count
+            if min_per_unit is None or per_unit < min_per_unit:
+                min_per_unit = per_unit
+
+        if min_per_unit is None:
+            print(f"[TRANSFER] Не удалось распарсить лоты рубинов (lots={len(lots)}, рубинов={ruby_lots_seen})")
+            return 0
+
+        result = int(min_per_unit)
+        print(f"[TRANSFER] Реальная минималка рубина на аукционе: {result}с/шт (из {ruby_lots_seen} лотов)")
+        return result
 
     def create_lot(self, amount: int, price_silver: int) -> bool:
         """
@@ -816,24 +918,44 @@ class GoldTransfer:
             "details": []
         }
 
-        # Получаем рыночную цену рубина
+        # Получаем рыночную цену рубина.
+        # Приоритет: реальная минимальная с аукциона.
+        # Fallback: bidGold/bidSilver из формы.
         main_client = GoldTransferClient(main_profile)
-        market_price = main_client.get_market_price()
 
+        def fetch_market_and_max():
+            """Возвращает (market_price, max_per_ruby, source)."""
+            am = main_client.get_actual_min_ruby_price_silver()
+            if am > 0:
+                src = "реальная минималка"
+                mp = am
+            else:
+                mp = main_client.get_market_price()
+                src = "форма (fallback)"
+            if mp <= 0:
+                return 0, 0, src
+            raw = mp * self.config["price_multiplier"]
+            sf = self.config.get("safety_factor", 1.0)
+            return mp, int(raw * sf), src
+
+        market_price, max_per_ruby, price_source = fetch_market_and_max()
         if market_price <= 0:
             results["success"] = False
             results["error"] = "Не удалось получить рыночную цену рубина"
             return results
 
-        # Применяем safety_factor (0.9 по умолчанию) — фактический множитель ~x72
-        # вместо номинального x80, чтобы оставаться подальше от серверного лимита.
-        raw_max = market_price * self.config["price_multiplier"]
         safety = self.config.get("safety_factor", 1.0)
-        max_per_ruby = int(raw_max * safety)
         self._log(
-            f"Рыночная цена: {market_price}с, макс за рубин: {max_per_ruby}с = "
-            f"{max_per_ruby // 100}з (x{self.config['price_multiplier']} * safety={safety})"
+            f"Рыночная цена ({price_source}): {market_price}с, "
+            f"макс за рубин: {max_per_ruby}с = {max_per_ruby // 100}з "
+            f"(x{self.config['price_multiplier']} * safety={safety})"
         )
+
+        # Счётчик лотов — перечитываем рынок каждые refresh_market_every лотов.
+        # Рынок волатилен (другие игроки выставляют дешевле, бот ставит дороже —
+        # отбой). При фейле сразу обновляем минималку.
+        refresh_every = self.config.get("refresh_market_every", 30)
+        lot_counter = 0
 
         # Проверяем хватает ли рубинов у мейна для всех трансферов
         total_silver_needed = sum(t["amount"] * 100 for t in transfers)
@@ -893,22 +1015,96 @@ class GoldTransfer:
                     detail["error"] = "У мейна нет рубинов"
                     break
 
-                # Считаем сколько рубинов нужно для оставшейся суммы
-                # max_per_ruby - максимум серебра за 1 рубин (рыночная * 100)
-                rubies_needed = (amount_silver + max_per_ruby - 1) // max_per_ruby  # округление вверх
-                rubies_to_use = min(rubies_needed, ruby_count)
+                # Рынок волатилен — каждые refresh_every лотов перечитываем
+                # минималку и пересчитываем max_per_ruby.
+                if lot_counter > 0 and lot_counter % refresh_every == 0:
+                    new_mp, new_max, src = fetch_market_and_max()
+                    if new_mp > 0 and new_max != max_per_ruby:
+                        self._log(
+                            f"♻ Рынок обновился ({src}): {market_price}→{new_mp}с, "
+                            f"макс за рубин: {max_per_ruby}→{new_max}с"
+                        )
+                        market_price, max_per_ruby = new_mp, new_max
 
-                # Определяем цену лота (сколько серебра передаём этим лотом)
-                lot_price = min(amount_silver, rubies_to_use * max_per_ruby)
+                # Сервер похоже анти-флудит одинаковые лоты подряд.
+                # Рандомизируем количество и цену в безопасных пределах.
+                import random as _random
+                target_amount = self.config.get("target_lot_amount", 10)
+                max_lot_silver = self.config.get("max_lot_gold", 70) * 100
+
+                # Рандомное количество: 8..12 (но не больше чем есть)
+                rubies_to_use = min(_random.randint(8, 12), ruby_count)
+                # Рандомизируем верхнюю границу: 0.7..1.0 от max_lot_silver
+                # → лоты 49..70з. Sequence будет выглядеть менее монотонной.
+                rand_cap = int(max_lot_silver * _random.uniform(0.7, 1.0))
+                lot_price = min(amount_silver, rand_cap, rubies_to_use * max_per_ruby)
+
+                # Если остаток к переводу совсем маленький — берём пропорционально.
+                if amount_silver < target_amount * max_per_ruby:
+                    rubies_to_use = max(1, (amount_silver + max_per_ruby - 1) // max_per_ruby)
+                    rubies_to_use = min(rubies_to_use, ruby_count, target_amount)
+                    lot_price = min(amount_silver, rubies_to_use * max_per_ruby)
+
+                # Лёгкий рандомный sleep ДО создания лота — антифлуд имитация.
+                time.sleep(_random.uniform(0.3, 1.0))
 
                 self._log(f"Выставляю {rubies_to_use} рубин(ов) за {lot_price}с ({lot_price // 100}з)")
+                lot_counter += 1
 
                 # Мейн выставляет рубины
                 if not main_client.create_lot(rubies_to_use, lot_price):
                     self._log(f"Не удалось создать лот")
-                    detail["status"] = "error"
-                    detail["error"] = "Не удалось создать лот"
-                    break
+                    # Рынок мог дёрнуться — сразу перечитываем минималку и
+                    # пробуем тот же лот ещё раз с пересчитанной ценой.
+                    self._log("♻ Перечитываю рынок и пробую снова...")
+                    new_mp, new_max, src = fetch_market_and_max()
+                    if new_mp > 0:
+                        self._log(f"Новая минималка ({src}): {market_price}→{new_mp}с, макс/рубин: {max_per_ruby}→{new_max}с")
+                        market_price, max_per_ruby = new_mp, new_max
+                        # Пересчитываем лот с новой ценой (тот же target_amount).
+                        rubies2 = min(target_amount, ruby_count)
+                        lot_price2 = min(amount_silver, max_lot_silver, rubies2 * max_per_ruby)
+                        if amount_silver < target_amount * max_per_ruby:
+                            rubies2 = max(1, (amount_silver + max_per_ruby - 1) // max_per_ruby)
+                            rubies2 = min(rubies2, ruby_count, target_amount)
+                            lot_price2 = min(amount_silver, rubies2 * max_per_ruby)
+                        self._log(f"Повтор: {rubies2} рубин(ов) за {lot_price2}с ({lot_price2 // 100}з)")
+                        if main_client.create_lot(rubies2, lot_price2):
+                            self._log("✓ Лот создан после перечитки рынка")
+                            rubies_to_use = rubies2
+                            lot_price = lot_price2
+                            # Продолжаем как обычно — покупаем альтом
+                        else:
+                            # Анти-флуд: попробуем агрессивнее — пауза + сниженные цены
+                            self._log("⏸ Ещё один fail. Жду 30с и пробую с пониженной ценой...")
+                            time.sleep(30)
+                            import random as _rnd
+                            rubies3 = _rnd.randint(8, 10)
+                            # Существенно более дешёвый лот (40-55з), чтобы прокатить
+                            lot_price3 = min(
+                                amount_silver,
+                                _rnd.randint(40, 55) * 100,
+                                rubies3 * max_per_ruby,
+                            )
+                            self._log(f"3-я попытка: {rubies3} рубин(ов) за {lot_price3}с ({lot_price3 // 100}з)")
+                            if main_client.create_lot(rubies3, lot_price3):
+                                self._log("✓ Лот создан после паузы")
+                                rubies_to_use = rubies3
+                                lot_price = lot_price3
+                            else:
+                                detail["status"] = "error"
+                                detail["error"] = "Не удалось создать лот (3 попытки)"
+                                if self.config.get("stop_on_first_error", False):
+                                    self._log("⛔ STOP: ошибка после 3 попыток — останавливаю")
+                                    request_stop()
+                                break
+                    else:
+                        detail["status"] = "error"
+                        detail["error"] = "Не удалось создать лот"
+                        if self.config.get("stop_on_first_error", False):
+                            self._log("⛔ STOP: первая ошибка создания лота — останавливаю весь трансфер")
+                            request_stop()
+                        break
 
                 # Альт покупает по точной цене
                 time.sleep(1)  # даём время на появление лота
@@ -918,6 +1114,9 @@ class GoldTransfer:
                     self._log(f"Альт не смог купить лот")
                     detail["status"] = "partial"
                     detail["error"] = "Не удалось купить лот"
+                    if self.config.get("stop_on_first_error", False):
+                        self._log("⛔ STOP: первая ошибка покупки лота — останавливаю весь трансфер")
+                        request_stop()
                     break
 
                 # Успех - уменьшаем остаток
