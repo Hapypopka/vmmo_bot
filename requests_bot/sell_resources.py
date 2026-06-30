@@ -227,6 +227,15 @@ class ResourceSellerClient:
         if result == "success":
             print(f"[SELL] Лот создан: {res_name} x{amount}")
             self.sold_count += 1
+            # Трекинг выставленного лота — нужно для матчинга продажи по цене
+            # (письмо о продаже не содержит имени предмета).
+            try:
+                from .sales_tracker import record_listed
+                from .config import get_profile_name
+                record_listed(res_name, amount, gold, silver,
+                              profile=get_profile_name() or "unknown")
+            except Exception:
+                pass
             return True
         elif result == "low_price":
             print(f"[SELL] Цена слишком низкая для {res_name}")

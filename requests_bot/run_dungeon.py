@@ -38,6 +38,7 @@ class DungeonRunner:
         self.current_difficulty = "brutal"  # Текущая сложность
         self.collected_loot = set()  # ID собранного лута
         self.loot_take_url = None  # Сохраняем URL для сбора лута из начальной боевой страницы
+        self._loot_url_warned = False  # Троттлинг warning'а lootTakeUrl NOT FOUND
         self.report_back_url = None  # URL для activity reporter (lnkReportBack)
         self.last_report_back_time = 0  # Время последнего report back
         self.metronome_url = None  # URL для metronome heartbeat
@@ -62,6 +63,24 @@ class DungeonRunner:
         # Detail последней lock-блокировки (имя prereq-данжа или мин-уровень).
         # Читает bot.py чтобы прокинуть в record_lock для deaths.json.
         self.last_lock_detail = None
+
+    def _register_entry_failure(self, dungeon_id):
+        """Регистрирует неудачу входа (unknown). После threshold подряд —
+        ставит in-memory cooldown, чтобы не долбить недоступный данж."""
+        rec = self._entry_failures.get(dungeon_id) or {"count": 0, "skip_until": 0}
+        rec["count"] += 1
+        if rec["count"] >= self._entry_fail_threshold:
+            rec["skip_until"] = time.time() + self._entry_skip_duration
+            log_warning(
+                f"[ENTRY] {dungeon_id}: {rec['count']} неудач подряд — "
+                f"скип на {self._entry_skip_duration // 60} мин"
+            )
+        self._entry_failures[dungeon_id] = rec
+
+    def _is_entry_skipped(self, dungeon_id):
+        """True, если данж сейчас на in-memory cooldown после неудач входа."""
+        rec = self._entry_failures.get(dungeon_id)
+        return bool(rec and rec.get("skip_until", 0) > time.time())
 
     def _get_combat_parser(self):
         """Возвращает CombatParser, кэширован по identity client.current_page.
@@ -88,8 +107,26 @@ class DungeonRunner:
         if loot_url:
             self.loot_take_url = loot_url
             log_debug(f"[LOOT] Saved loot URL")
-        else:
-            log_error(f"[LOOT] WARNING: lootTakeUrl NOT FOUND!")
+        elif not getattr(self, "_loot_url_warned", False):
+            # Метод вызывается на КАЖДОЙ итерации боя — без троттлинга получаем
+            # тысячи одинаковых строк (3443/сутки по всем ботам). Логируем один
+            # раз на данж. Лут обычно всё равно собирается: refresher-ответ тоже
+            # содержит lootTakeUrl и подхватывает его (см. _collect_loot_via_refresher).
+            self._loot_url_warned = True
+            log_warning(
+                f"[LOOT] lootTakeUrl не найден на стр. боя "
+                f"({self.current_dungeon_id}) — рассчитываем на refresher"
+            )
+            # Одноразовый (на процесс) дамп страницы боя для анализа корня.
+            if not getattr(DungeonRunner, "_loot_dump_done", False):
+                DungeonRunner._loot_dump_done = True
+                try:
+                    dump_path = os.path.join(SCRIPT_DIR, "debug_no_loot_url.html")
+                    with open(dump_path, "w", encoding="utf-8") as f:
+                        f.write(html)
+                    log_debug(f"[LOOT] HTML dump (no loot url): {dump_path}")
+                except Exception:
+                    pass
 
         # КРИТИЧНО: Отправляем "page rendered ping" - это активирует отправку лута!
         # Браузер отправляет этот запрос после рендеринга страницы
@@ -322,6 +359,8 @@ class DungeonRunner:
                     pass  # На КД - не логируем
                 elif dng_id in skipped_ids:
                     pass  # Скипнут - не логируем
+                elif self._is_entry_skipped(dng_id):
+                    pass  # На in-memory cooldown после неудач входа - не логируем
                 elif config_module.ONLY_DUNGEONS and dng_id not in config_module.ONLY_DUNGEONS:
                     pass  # Не в списке - не логируем
                 else:
@@ -521,6 +560,7 @@ class DungeonRunner:
         self.current_dungeon_id = dungeon_id  # Сохраняем для лимитов
         self.collected_loot.clear()  # Очищаем лут от предыдущего данжена
         self.loot_take_url = None  # Сбрасываем URL лута
+        self._loot_url_warned = False  # Троттлинг warning'а NOT FOUND (раз на данж)
 
         # Проверяем и ремонтируем снаряжение перед входом
         try:
@@ -620,9 +660,14 @@ class DungeonRunner:
             with open(debug_path, "w", encoding="utf-8") as f:
                 f.write(html)
             log_debug(f"[ENTRY] HTML dump: {debug_path}")
+            # Считаем неудачу входа: после N подряд ставим in-memory кулдаун,
+            # чтобы не долбить недоступный данж каждые ~15с (кейс char17/Underlight).
+            self._register_entry_failure(dungeon_id)
             return False
 
         print(f"[*] Clicking enter button...")
+        # Вход доступен — сбрасываем счётчик неудач для этого данжа
+        self._entry_failures.pop(dungeon_id, None)
 
         # 5. Кликаем enter
         resp = self.client.get(enter_btn_url)

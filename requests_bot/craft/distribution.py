@@ -61,17 +61,17 @@ else:
 
 # Все профитные рецепты для автовыбора
 # Исключены: copperOre (убыточная), twilightSteel/twilightAnthracite (требуют сапфиры/рубины)
+# ВАЖНО: должен совпадать с requests_bot/craft_prices.py:FINAL_RECIPES (живой путь
+# выбора рецепта использует именно craft_prices). 2026-06-30: убраны thor/thorBar
+# (не продаются, 0/800 за 14д) и bronzeBar (невыгоден) — синхронизировано.
 FINAL_RECIPES = [
     "ironBar",       # Железный Слиток
     "copperBar",     # Медный Слиток
-    "bronzeBar",     # Бронзовый Слиток
     "platinumBar",   # Платиновый Слиток
-    "thorBar",       # Слиток Тора
     "bronze",        # Бронза
     "iron",          # Железо
     "platinum",      # Платина
     "rawOre",        # Железная Руда
-    "thor",          # Тор
     "copper",        # Медь
 ]
 

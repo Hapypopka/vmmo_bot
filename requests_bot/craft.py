@@ -1014,6 +1014,13 @@ class IronCraftClient:
                 if result == "success":
                     log_info(f"[CRAFT] Выставлено!")
                     sold_count += 1
+                    # Трекинг выставленного лота — для матчинга продажи по цене
+                    # (письмо о продаже не содержит имени предмета).
+                    try:
+                        from requests_bot.sales_tracker import record_listed
+                        record_listed(name, my_count, gold, silver, profile=self.profile)
+                    except Exception:
+                        pass
                 elif result == "low_price":
                     log_info(f"[CRAFT] Цена слишком низкая, пропускаю '{name}'")
                     skipped_items.add(name)  # Больше не пытаемся продать этот тип

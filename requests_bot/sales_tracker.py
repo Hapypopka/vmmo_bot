@@ -57,13 +57,45 @@ def save_sales_stats(stats: dict):
         print(f"[SALES] Ошибка сохранения: {e}")
 
 
+# Комиссия аукциона (продавец получает меньше выставленной цены)
+AUCTION_FEE = 0.05
+
+# Имя-заглушка, когда из письма не удалось извлечь название лота
+UNKNOWN_ITEM = "(неизвестно)"
+
+
+def _guess_item_by_price(stats: dict, profile: str, total_silver: int):
+    """
+    Восстанавливает название проданного лота по сумме прихода.
+
+    Игра НЕ кладёт имя предмета в письмо о продаже (только "Твоя продажа" +
+    деньги). Но при выставлении мы пишем лот в stats["listed"] с ценой и именем.
+    Приход ≈ цена лота (возможно за вычетом 5% комиссии), поэтому ищем самый
+    свежий лот этого профиля с совпадающей (gross или net) ценой.
+
+    Returns:
+        (item_name, count) или (None, None) если однозначного совпадения нет.
+    """
+    listed = stats.get("listed", [])
+    for lot in reversed(listed):  # от свежих к старым
+        if lot.get("profile") != profile:
+            continue
+        lot_total = lot.get("gold", 0) * 100 + lot.get("silver", 0)
+        net = round(lot_total * (1 - AUCTION_FEE))
+        # допускаем ±1s на округление комиссии
+        if abs(lot_total - total_silver) <= 1 or abs(net - total_silver) <= 1:
+            return lot.get("item"), lot.get("count", 1)
+    return None, None
+
+
 @_with_file_lock
 def record_sale(item_name: str, count: int, gold: int, silver: int, profile: str = "unknown"):
     """
     Записывает успешную продажу.
 
     Args:
-        item_name: Название предмета
+        item_name: Название предмета (может быть UNKNOWN_ITEM/None — тогда
+                   попытаемся восстановить по цене из stats["listed"])
         count: Количество
         gold: Золото
         silver: Серебро
@@ -74,18 +106,32 @@ def record_sale(item_name: str, count: int, gold: int, silver: int, profile: str
     total_silver = gold * 100 + silver
     price_per_unit = total_silver // count if count > 0 else total_silver
 
+    # Если имя не извлеклось из письма — пробуем сматчить по сумме прихода
+    # с выставленным ранее лотом этого же профиля.
+    guessed = False
+    if not item_name or item_name == UNKNOWN_ITEM:
+        g_name, g_count = _guess_item_by_price(stats, profile, total_silver)
+        if g_name:
+            item_name = g_name
+            if count <= 1 and g_count:
+                count = g_count
+            price_per_unit = total_silver // count if count > 0 else total_silver
+            guessed = True
+
     stats["sold"].append({
-        "item": item_name,
+        "item": item_name or UNKNOWN_ITEM,
         "count": count,
         "gold": gold,
         "silver": silver,
         "price_per_unit": price_per_unit,
         "profile": profile,
+        "guessed": guessed,  # имя восстановлено по цене, а не из письма
         "timestamp": datetime.now().isoformat(),
     })
 
     save_sales_stats(stats)
-    print(f"[SALES] Записана продажа: {item_name} x{count} за {gold}g {silver}s")
+    suffix = " (по цене)" if guessed else ""
+    print(f"[SALES] Записана продажа: {item_name or UNKNOWN_ITEM}{suffix} x{count} за {gold}g {silver}s")
 
 
 @_with_file_lock

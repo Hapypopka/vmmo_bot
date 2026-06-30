@@ -327,17 +327,15 @@ class MailClient:
                 print(f"[MAIL DEBUG] msg_text: {msg['text']}")
                 print(f"[MAIL DEBUG] is_sold={is_sold}, is_expired={is_expired}")
 
+            # Имя истекшего лота фиксируем, но записываем в статистику и
+            # blacklist ТОЛЬКО после успешного удаления письма (см. ниже).
+            # Иначе если collect_message_items не удалит письмо (рюкзак полон /
+            # нет кнопки) — тот же лот запишется повторно в следующей сессии.
+            pending_expired_name = None
             if is_expired:
-                item_name = self.extract_expired_item_name(msg["text"])
-                if item_name:
-                    stats["expired_items"].append(item_name)
-                    print(f"[MAIL] Истекший лот: {item_name}")
-                    # Записываем в статистику
-                    record_expired(item_name, count=1, profile=self.profile)
-                    # Добавляем в blacklist (кроме крафта, осколков, камней, рун)
-                    if not is_blacklist_exempt(item_name):
-                        add_to_auction_blacklist(item_name)
-                        print(f"[MAIL] '{item_name}' добавлен в blacklist (не продался)")
+                pending_expired_name = self.extract_expired_item_name(msg["text"])
+                if pending_expired_name:
+                    print(f"[MAIL] Истекший лот: {pending_expired_name}")
 
             # Парсим информацию о проданном лоте ДО открытия письма.
             # В списке писем приходит только "Аукцион:Твоя продажа" без [имени],
@@ -389,6 +387,14 @@ class MailClient:
 
             elif result == "success":
                 stats["messages"] += 1
+                # Письмо удалено — теперь безопасно записать истекший лот
+                # (ровно один раз, без двойного счёта при рюкзак-полон/ретраях).
+                if pending_expired_name:
+                    stats["expired_items"].append(pending_expired_name)
+                    record_expired(pending_expired_name, count=1, profile=self.profile)
+                    if not is_blacklist_exempt(pending_expired_name):
+                        add_to_auction_blacklist(pending_expired_name)
+                        print(f"[MAIL] '{pending_expired_name}' добавлен в blacklist (не продался)")
                 # После сбора нас редиректит обратно в список, продолжаем
 
             else:
