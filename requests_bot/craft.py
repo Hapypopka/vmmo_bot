@@ -1016,9 +1016,14 @@ class IronCraftClient:
                     sold_count += 1
                     # Трекинг выставленного лота — для матчинга продажи по цене
                     # (письмо о продаже не содержит имени предмета).
+                    # profile матчится с продажей, поэтому "unknown" недопустим:
+                    # IronCraftClient из веб-панельного sell_crafts создаётся без
+                    # профиля — берём реальный через get_profile_name().
                     try:
                         from requests_bot.sales_tracker import record_listed
-                        record_listed(name, my_count, gold, silver, profile=self.profile)
+                        from requests_bot.config import get_profile_name
+                        prof = self.profile if self.profile and self.profile != "unknown" else get_profile_name()
+                        record_listed(name, my_count, gold, silver, profile=prof or "unknown")
                     except Exception:
                         pass
                 elif result == "low_price":
