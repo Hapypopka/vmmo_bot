@@ -525,6 +525,48 @@ class BackpackClient:
 
         return dropped
 
+    # Префиксы предметов-неликвида, которые ВЫКИДЫВАЕМ, а не продаём.
+    # Осколки продаются копейками (~5 лотов = ~1 золото за сутки) и вечно
+    # висят на аукционе (exempt от блэклиста) — по решению юзера выкидываем.
+    JUNK_DROP_PREFIXES = ("Осколок",)
+
+    def drop_junk_stacks(self, skip_open=False):
+        """
+        Выкидывает неликвидные стаки (осколки) — даже если у них есть кнопка
+        аукциона. Вызывается ДО шага аукциона, чтобы они не выставлялись.
+
+        Returns:
+            int: Количество выброшенных
+        """
+        if not skip_open:
+            if not self.open_backpack():
+                return 0
+
+        dropped = 0
+        for _ in range(50):
+            items = self.get_items()
+            target = None
+            for item in items:
+                if item["is_protected"]:
+                    continue
+                if not item["name"].startswith(self.JUNK_DROP_PREFIXES):
+                    continue
+                if "drop" not in item["buttons"]:
+                    continue
+                target = item
+                break
+
+            if not target:
+                break
+
+            log_backpack(f"Выбрасываю неликвид: {target['name']}")
+            if self.drop_item(target):
+                dropped += 1
+            else:
+                break
+
+        return dropped
+
     def drop_unusable(self, skip_open=False):
         """
         Выбрасывает ВСЕ предметы (не только зелёные) без кнопок аукциона/разборки.
@@ -628,6 +670,15 @@ class BackpackClient:
 
             opened = self.open_all_bonuses()
             stats["bonuses"] += opened
+
+        # 1.5 Выкидываем неликвид (осколки) ДО аукциона — чтобы не выставлялись
+        for page in range(1, max_pages + 1):
+            if not self.open_backpack():
+                break
+            if page > 1:
+                if not self.go_to_next_page(page - 1):
+                    break
+            stats["dropped"] += self.drop_junk_stacks(skip_open=True)
 
         # 2. Выставляем на аукцион (аукцион сам обрабатывает все страницы)
         try:
