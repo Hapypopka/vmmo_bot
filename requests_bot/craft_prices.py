@@ -361,6 +361,33 @@ def calculate_quotas(profitable_recipes, total_bots=21):
     return quotas
 
 
+def _find_open_probe_recipe(locks, now, current_recipe):
+    """
+    Возвращает probe-рецепт (из RECIPE_BOT_CAP) со СВОБОДНЫМ слотом и профитом
+    ВЫШЕ текущего рецепта бота, если такой есть.
+
+    Нужно, чтобы новый probe-рецепт активировался САМ при обычном продлении
+    лока — без ручной чистки shared_craft_locks.json и без рестартов по таймеру.
+    Кап гарантирует, что переключится ровно 1 бот (дальше слот занят, остальные
+    продлевают как обычно).
+    """
+    if not RECIPE_BOT_CAP:
+        return None
+    counts = {}
+    for _p, li in locks.items():
+        r = li.get("recipe_id")
+        if r and now - li.get("timestamp", 0) <= LOCK_TTL:
+            counts[r] = counts.get(r, 0) + 1
+    profit = dict(get_sorted_recipes_by_profit())
+    cur_profit = profit.get(current_recipe, 0)
+    for r, cap in RECIPE_BOT_CAP.items():
+        if r in AUTO_SELECT_EXCLUDED or r not in FINAL_RECIPES:
+            continue
+        if counts.get(r, 0) < cap and profit.get(r, 0) > cur_profit:
+            return r
+    return None
+
+
 def acquire_craft_lock(profile):
     """
     Берёт лок на крафт для профиля (с file lock для атомарности).
@@ -368,7 +395,8 @@ def acquire_craft_lock(profile):
     Структура: {profile: {"recipe_id": "ironBar", "timestamp": 123}, ...}
 
     Логика (равномерное распределение):
-    1. Если у профиля есть активный лок - продлеваем
+    1. Если у профиля есть активный лок - продлеваем (но уступаем свободному
+       probe-слоту более выгодного рецепта — чтобы проба активировалась сама)
     2. Считаем сколько ботов на каждом рецепте (без протухших)
     3. Находим минимальное количество ботов
     4. Среди рецептов с минимумом берём самый выгодный
@@ -396,9 +424,16 @@ def acquire_craft_lock(profile):
                     elif recipe_id not in FINAL_RECIPES:
                         print(f"[CRAFT_LOCKS] {profile}: {recipe_id} больше не в FINAL_RECIPES, выбираю другой")
                     else:
-                        locks[profile]["timestamp"] = now
-                        save_craft_locks(locks)
-                        return recipe_id
+                        # Уступаем свободному probe-слоту более выгодного рецепта
+                        # (иначе новый probe-рецепт никогда не активируется — все
+                        # вечно продлевают старое). Переключится только 1 бот (cap).
+                        probe = _find_open_probe_recipe(locks, now, recipe_id)
+                        if probe is None:
+                            locks[profile]["timestamp"] = now
+                            save_craft_locks(locks)
+                            return recipe_id
+                        print(f"[CRAFT_LOCKS] {profile}: свободен probe-слот '{probe}' (выгоднее {recipe_id}) — перевыбираю")
+                        # проваливаемся в реселект ниже — он выберет probe как топ
 
             # Считаем ботов на каждом рецепте (внутри лока!)
             bot_counts = {recipe: 0 for recipe in FINAL_RECIPES}
