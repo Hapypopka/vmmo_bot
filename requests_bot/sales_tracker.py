@@ -34,17 +34,20 @@ def load_sales_stats() -> dict:
     """Загружает статистику продаж"""
     if not SALES_FILE.exists():
         return {
-            "sold": [],      # Проданные лоты
-            "expired": [],   # Истекшие (не проданные)
-            "listed": [],    # Выставленные на аукцион
+            "sold": [],       # Проданные лоты
+            "expired": [],    # Истекшие (не проданные)
+            "listed": [],     # Выставленные на аукцион
+            "transfers": [],  # Лоты перегона золота (gold_transfer, не доход)
         }
 
     try:
         with open(SALES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            data.setdefault("transfers", [])
+            return data
     except Exception as e:
         print(f"[SALES] Ошибка загрузки: {e}")
-        return {"sold": [], "expired": [], "listed": []}
+        return {"sold": [], "expired": [], "listed": [], "transfers": []}
 
 
 def save_sales_stats(stats: dict):
@@ -62,6 +65,59 @@ AUCTION_FEE = 0.05
 
 # Имя-заглушка, когда из письма не удалось извлечь название лота
 UNKNOWN_ITEM = "(неизвестно)"
+
+
+# Окно, в течение которого приход денег матчится с лотом перегона
+TRANSFER_MATCH_WINDOW_SEC = 24 * 3600
+
+
+@_with_file_lock
+def record_transfer(gold: int, silver: int, profile: str = "unknown"):
+    """
+    Записывает лот ПЕРЕГОНА золота (gold_transfer): мейн продал рубины альту
+    по завышенной цене. Это НЕ доход — деньги перекладываются между своими
+    чарами. Позже record_sale сматчит приход и пометит продажу как transfer.
+    """
+    stats = load_sales_stats()
+    stats["transfers"].append({
+        "gold": gold,
+        "silver": silver,
+        "total_silver": gold * 100 + silver,
+        "profile": profile,
+        "consumed": False,
+        "timestamp": datetime.now().isoformat(),
+    })
+    save_sales_stats(stats)
+    print(f"[SALES] Записан лот перегона: {gold}g {silver}s")
+
+
+def _match_and_consume_transfer(stats: dict, total_silver: int) -> bool:
+    """
+    Проверяет, не является ли пришедшая сумма выкупом лота перегона.
+    Перегонные лоты дорогие (Рубин 49-70g) и записаны в stats["transfers"];
+    продавец получает цену за вычетом 5% комиссии. Матчим по сумме (gross или
+    net) в пределах окна, помечаем лот consumed (чтобы не сматчить дважды).
+
+    Returns:
+        True, если приход — это перегон (не реальный доход).
+    """
+    from datetime import datetime as _dt
+    now = _dt.now().timestamp()
+    for t in reversed(stats.get("transfers", [])):
+        if t.get("consumed"):
+            continue
+        try:
+            ts = _dt.fromisoformat(t["timestamp"]).timestamp()
+        except Exception:
+            ts = now
+        if now - ts > TRANSFER_MATCH_WINDOW_SEC:
+            continue
+        gross = t.get("total_silver", 0)
+        net = round(gross * (1 - AUCTION_FEE))
+        if abs(gross - total_silver) <= 1 or abs(net - total_silver) <= 1:
+            t["consumed"] = True
+            return True
+    return False
 
 
 def _guess_item_by_price(stats: dict, profile: str, total_silver: int):
@@ -106,10 +162,14 @@ def record_sale(item_name: str, count: int, gold: int, silver: int, profile: str
     total_silver = gold * 100 + silver
     price_per_unit = total_silver // count if count > 0 else total_silver
 
-    # Если имя не извлеклось из письма — пробуем сматчить по сумме прихода
-    # с выставленным ранее лотом этого же профиля.
+    # 1. Сначала проверяем — не выкуп ли это лота перегона золота.
+    #    Это НЕ доход (деньги перекладываются между своими чарами).
+    is_transfer = _match_and_consume_transfer(stats, total_silver)
+
+    # 2. Если имя не извлеклось из письма — пробуем сматчить по сумме прихода
+    #    с выставленным ранее лотом этого же профиля.
     guessed = False
-    if not item_name or item_name == UNKNOWN_ITEM:
+    if not is_transfer and (not item_name or item_name == UNKNOWN_ITEM):
         g_name, g_count = _guess_item_by_price(stats, profile, total_silver)
         if g_name:
             item_name = g_name
@@ -125,13 +185,17 @@ def record_sale(item_name: str, count: int, gold: int, silver: int, profile: str
         "silver": silver,
         "price_per_unit": price_per_unit,
         "profile": profile,
-        "guessed": guessed,  # имя восстановлено по цене, а не из письма
+        "guessed": guessed,      # имя восстановлено по цене, а не из письма
+        "transfer": is_transfer,  # перегон золота, не считать доходом
         "timestamp": datetime.now().isoformat(),
     })
 
     save_sales_stats(stats)
-    suffix = " (по цене)" if guessed else ""
-    print(f"[SALES] Записана продажа: {item_name or UNKNOWN_ITEM}{suffix} x{count} за {gold}g {silver}s")
+    if is_transfer:
+        print(f"[SALES] Перегон золота (не доход): {gold}g {silver}s")
+    else:
+        suffix = " (по цене)" if guessed else ""
+        print(f"[SALES] Записана продажа: {item_name or UNKNOWN_ITEM}{suffix} x{count} за {gold}g {silver}s")
 
 
 @_with_file_lock

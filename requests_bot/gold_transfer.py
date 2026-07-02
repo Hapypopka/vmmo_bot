@@ -1123,6 +1123,14 @@ class GoldTransfer:
                 amount_silver -= lot_price
                 transferred_silver += lot_price
 
+                # Помечаем лот перегона, чтобы приход денег НЕ считался доходом
+                # в статистике продаж (record_sale сматчит по сумме).
+                try:
+                    from .sales_tracker import record_transfer
+                    record_transfer(lot_price // 100, lot_price % 100, profile=main_profile)
+                except Exception:
+                    pass
+
                 self._log(f"Передано {lot_price // 100}з, осталось {amount_silver // 100}з")
 
                 time.sleep(0.5)
