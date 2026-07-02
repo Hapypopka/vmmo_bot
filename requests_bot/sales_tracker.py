@@ -120,28 +120,39 @@ def _match_and_consume_transfer(stats: dict, total_silver: int) -> bool:
     return False
 
 
-def _guess_item_by_price(stats: dict, profile: str, total_silver: int):
-    """
-    Восстанавливает название проданного лота по сумме прихода.
+# Окно, в пределах которого продажу можно сматчить с выставленным лотом
+MATCH_WINDOW_SEC = 3 * 24 * 3600
 
-    Игра НЕ кладёт имя предмета в письмо о продаже (только "Твоя продажа" +
-    деньги). Но при выставлении мы пишем лот в stats["listed"] с ценой и именем.
-    Приход ≈ цена лота (возможно за вычетом 5% комиссии), поэтому ищем самый
-    свежий лот этого профиля с совпадающей (gross или net) ценой.
+
+def _match_listed_lot(stats: dict, profile: str, total_silver: int):
+    """
+    Матчит продажу с ранее выставленным лотом (FIFO — самый старый непогашенный
+    первым) по профилю + цене (gross или net −5%). Помечает лот consumed,
+    чтобы один лот не матчился с двумя продажами. Возвращает имя, количество и
+    timestamp выставления (для расчёта времени до продажи).
 
     Returns:
-        (item_name, count) или (None, None) если однозначного совпадения нет.
+        (item_name, count, listed_ts) или (None, None, None).
     """
-    listed = stats.get("listed", [])
-    for lot in reversed(listed):  # от свежих к старым
+    now = datetime.now().timestamp()
+    for lot in stats.get("listed", []):  # forward = от старых к свежим (FIFO)
+        if lot.get("consumed"):
+            continue
         if lot.get("profile") != profile:
+            continue
+        ts_str = lot.get("timestamp", "")
+        try:
+            ts = datetime.fromisoformat(ts_str).timestamp()
+        except Exception:
+            continue
+        if now - ts > MATCH_WINDOW_SEC:
             continue
         lot_total = lot.get("gold", 0) * 100 + lot.get("silver", 0)
         net = round(lot_total * (1 - AUCTION_FEE))
-        # допускаем ±1s на округление комиссии
         if abs(lot_total - total_silver) <= 1 or abs(net - total_silver) <= 1:
-            return lot.get("item"), lot.get("count", 1)
-    return None, None
+            lot["consumed"] = True
+            return lot.get("item"), lot.get("count", 1), ts_str
+    return None, None, None
 
 
 @_with_file_lock
@@ -166,17 +177,25 @@ def record_sale(item_name: str, count: int, gold: int, silver: int, profile: str
     #    Это НЕ доход (деньги перекладываются между своими чарами).
     is_transfer = _match_and_consume_transfer(stats, total_silver)
 
-    # 2. Если имя не извлеклось из письма — пробуем сматчить по сумме прихода
-    #    с выставленным ранее лотом этого же профиля.
+    # 2. Если имя не извлеклось из письма — матчим по сумме прихода с ранее
+    #    выставленным лотом (даёт и имя, и время до продажи = спрос).
     guessed = False
+    time_to_sell = None  # секунд от выставления до продажи
     if not is_transfer and (not item_name or item_name == UNKNOWN_ITEM):
-        g_name, g_count = _guess_item_by_price(stats, profile, total_silver)
+        g_name, g_count, listed_ts = _match_listed_lot(stats, profile, total_silver)
         if g_name:
             item_name = g_name
             if count <= 1 and g_count:
                 count = g_count
             price_per_unit = total_silver // count if count > 0 else total_silver
             guessed = True
+            if listed_ts:
+                try:
+                    delta = datetime.now().timestamp() - datetime.fromisoformat(listed_ts).timestamp()
+                    if delta >= 0:
+                        time_to_sell = int(delta)
+                except Exception:
+                    pass
 
     stats["sold"].append({
         "item": item_name or UNKNOWN_ITEM,
@@ -185,8 +204,9 @@ def record_sale(item_name: str, count: int, gold: int, silver: int, profile: str
         "silver": silver,
         "price_per_unit": price_per_unit,
         "profile": profile,
-        "guessed": guessed,      # имя восстановлено по цене, а не из письма
-        "transfer": is_transfer,  # перегон золота, не считать доходом
+        "guessed": guessed,           # имя восстановлено по цене, а не из письма
+        "transfer": is_transfer,       # перегон золота, не считать доходом
+        "time_to_sell": time_to_sell,  # секунд от выставления до продажи (спрос)
         "timestamp": datetime.now().isoformat(),
     })
 

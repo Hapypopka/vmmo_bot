@@ -86,7 +86,24 @@ FINAL_RECIPES = [
 ]
 
 # Рецепты исключённые из автовыбора (слишком долгие/невыгодные)
-AUTO_SELECT_EXCLUDED = {"platinumBar", "bronze", "copperBar"}
+AUTO_SELECT_EXCLUDED = {"platinumBar", "bronze"}
+
+# Персональный жёсткий лимит ботов на рецепт (переопределяет time-based
+# get_max_bots_for_recipe). PROBE-режим: рецепт с НЕИЗВЕСТНЫМ спросом крафтит
+# ровно N ботов, мы меряем sell-through/время до продажи, потом решаем —
+# масштабировать (убрать из этого дикта) или выкинуть (обратно в EXCLUDED).
+# 2026-07: copperBar (Медный Слиток) — топ по теории профита, но спрос не
+# проверен. Раньше флудили и убрали. Возвращаем как пробу: 1 бот.
+RECIPE_BOT_CAP = {
+    "copperBar": 1,
+}
+
+
+def get_bot_cap(recipe_id):
+    """Жёсткий лимит ботов на рецепт: probe-override или time-based по умолчанию."""
+    if recipe_id in RECIPE_BOT_CAP:
+        return RECIPE_BOT_CAP[recipe_id]
+    return get_max_bots_for_recipe(recipe_id)
 
 
 # ============================================
@@ -397,6 +414,14 @@ def acquire_craft_lock(profile):
             # Получаем рецепты отсортированные по профиту (без исключённых)
             sorted_recipes = get_sorted_recipes_by_profit()
             sorted_recipes = [(r, p) for r, p in sorted_recipes if r not in AUTO_SELECT_EXCLUDED]
+
+            # PROBE-лимит: рецепты с жёстким капом (RECIPE_BOT_CAP), уже забившие
+            # его, убираем из выбора — чтобы новый предмет не наспамили все боты.
+            # Остальные рецепты (без override) распределяются как раньше.
+            sorted_recipes = [
+                (r, p) for r, p in sorted_recipes
+                if r not in RECIPE_BOT_CAP or bot_counts.get(r, 0) < RECIPE_BOT_CAP[r]
+            ]
 
             # Находим минимальное кол-во ботов среди доступных рецептов
             available_counts = [bot_counts.get(r, 0) for r, _ in sorted_recipes]
