@@ -217,6 +217,17 @@ class ResourceSellerClient:
         if total_silver < 1:
             total_silver = 1
 
+        # Динамический множитель спроса (Череп/Минерал улетают за час при
+        # суточном лоте — системно недооценены). Контроллер: pricing.py.
+        try:
+            from .pricing import apply_multiplier, get_price_multiplier
+            _mult = get_price_multiplier(res_name)
+            if _mult > 1.0:
+                print(f"[SELL] Множитель спроса для '{res_name}': x{_mult:.2f}")
+            total_silver = apply_multiplier(total_silver, res_name)
+        except Exception:
+            pass
+
         gold = total_silver // 100
         silver = total_silver % 100
         print(f"[SELL] Цена за {amount} шт: {gold}з {silver}с ({price_per_unit:.2f}с/шт - 1с)")

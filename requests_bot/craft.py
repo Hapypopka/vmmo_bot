@@ -993,6 +993,15 @@ class IronCraftClient:
 
                     # Умножаем на количество для стопки
                     final_price = price_per_unit * my_count
+                    # Динамический множитель спроса (pricing.py)
+                    try:
+                        from requests_bot.pricing import get_price_multiplier
+                        _mult = get_price_multiplier(name)
+                        if _mult > 1.0:
+                            final_price *= _mult
+                            log_info(f"[CRAFT] Множитель спроса для '{name}': x{_mult:.2f}")
+                    except Exception:
+                        pass
                     gold = int(final_price)
                     silver = int((final_price - gold) * 100)
                     log_info(f"[CRAFT] Цена из кэша: {cached_price:.2f}з/шт → продаём {my_count} шт за {final_price:.2f}з ({gold}з {silver}с)")

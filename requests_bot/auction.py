@@ -298,6 +298,20 @@ class AuctionClient:
 
         return gold, silver, count
 
+    @staticmethod
+    def _apply_demand_multiplier(total_silver, item_name):
+        """Множитель спроса из pricing.py; при любой ошибке — цена без изменений."""
+        if not item_name:
+            return total_silver
+        try:
+            from requests_bot.pricing import apply_multiplier, get_price_multiplier
+            mult = get_price_multiplier(item_name)
+            if mult > 1.0:
+                print(f"[AUCTION] Множитель спроса для '{item_name}': x{mult:.2f}")
+            return apply_multiplier(total_silver, item_name)
+        except Exception:
+            return total_silver
+
     def calculate_price(self, my_count, item_name=None):
         """
         Рассчитывает цену для нашего лота.
@@ -328,6 +342,7 @@ class AuctionClient:
             if item_name and item_name in DEFAULT_PRICES:
                 price_per_unit = DEFAULT_PRICES[item_name]
                 our_total = price_per_unit * my_count
+                our_total = self._apply_demand_multiplier(our_total, item_name)
                 gold = our_total // 100
                 silver = our_total % 100
                 print(f"[AUCTION] Нет конкурентов, дефолтная цена: {price_per_unit}с/шт")
@@ -345,6 +360,9 @@ class AuctionClient:
         our_price_per_unit = price_per_unit
 
         our_total = our_price_per_unit * my_count
+        # Динамический множитель спроса: товар, улетающий за час при суточном
+        # лоте, продаём дороже рынка (контроллер в pricing.py, шаги ±5%)
+        our_total = self._apply_demand_multiplier(our_total, item_name)
         if our_total < DEFAULT_MIN_PRICE:
             our_total = DEFAULT_MIN_PRICE
             our_price_per_unit = max(1, our_total // my_count)
