@@ -783,19 +783,35 @@ def save_profile_config():
 
     config_file = os.path.join(PROFILES_DIR, _current_profile, "config.json")
     try:
-        # Читаем актуальный конфиг с диска и мержим внешние изменения
+        # Диск — источник правды для ВСЕХ пользовательских настроек: тумблеры,
+        # resource_sell, резервы/стаки, dungeon_difficulties, craft_mode,
+        # backpack_threshold и т.д. Их правит панель/TG в отдельном процессе, а
+        # цикл бота держит СТАРЫЙ конфиг в памяти — поэтому нельзя стелить памятью
+        # поверх диска (иначе правки из панели «сбрасываются» при первом же
+        # save_profile_config от бота: смерть, смена сложности, крафт).
+        # Из памяти сохраняем только рантайм-ключи, которые пишет сам цикл бота.
+        BOT_RUNTIME_KEYS = ("craft_finish_time",)
         if os.path.exists(config_file):
             with open(config_file, "r", encoding="utf-8") as f:
                 disk_config = json.load(f)
-            # Подтягиваем все toggle-настройки с диска (они меняются через веб-панель)
-            for key in disk_config:
-                if key not in _profile_config or (isinstance(disk_config[key], bool) and key != "craft_finish_time"):
-                    _profile_config[key] = disk_config[key]
-            # Всегда берём craft_items и auto_select_craft с диска
-            if "craft_items" in disk_config:
-                _profile_config["craft_items"] = disk_config["craft_items"]
-            if "auto_select_craft" in disk_config:
-                _profile_config["auto_select_craft"] = disk_config["auto_select_craft"]
+
+            # Спец-случай миграции craft_queue → craft_items: если в памяти уже
+            # мигрировано (есть craft_items), а на диске ещё старый craft_queue —
+            # миграция в процессе, память главнее, чтобы не откатить её.
+            mid_migration = (
+                "craft_items" in _profile_config
+                and "craft_queue" in disk_config
+                and "craft_items" not in disk_config
+            )
+            saved_items = _profile_config.get("craft_items") if mid_migration else None
+            runtime = {k: _profile_config[k] for k in BOT_RUNTIME_KEYS if k in _profile_config}
+
+            # Берём с диска всё пользовательское, поверх — рантайм-ключи из памяти
+            _profile_config = disk_config
+            _profile_config.update(runtime)
+            if mid_migration:
+                _profile_config["craft_items"] = saved_items
+                _profile_config.pop("craft_queue", None)
 
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(_profile_config, f, ensure_ascii=False, indent=2)
