@@ -320,6 +320,13 @@ def run_tavern_caravans(client, dungeon_runner, force=False):
         if quests is None:
             return 0
 
+        # Видимость в панели/TG: чем бот занят
+        try:
+            from requests_bot.bot import set_activity
+            set_activity("🐫 Караваны таверны")
+        except Exception:
+            pass
+
         log_debug(f"[TAVERN] Караваны в таверне: "
                   f"{[(q['id'], q.get('status')) for q in quests]}")
 
