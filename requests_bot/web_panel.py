@@ -1363,6 +1363,7 @@ def api_toggle_setting(profile, setting):
         "pet_resurrection_enabled": False,
         "admin_mail_enabled": True,
         "is_light_side": False,
+        "tavern_caravans_enabled": True,
     }
     config = get_config(profile)
     current = config.get(setting, SETTING_DEFAULTS.get(setting, False))
