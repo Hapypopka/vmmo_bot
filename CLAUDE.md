@@ -184,6 +184,15 @@ char1-char21 - все боты работают параллельно
 - `bronze` - крафт бронзы
 - `platinum` - крафт платины
 
+### Режим «только крафт» (craft_only_mode)
+**Персонаж:** char28 (Пупупу Пупупу) — получатель золота.
+- Флаг профиля `craft_only_mode: true` → бот делает ТОЛЬКО крафт и продажу крафта.
+- НЕ чистит рюкзак, НЕ собирает почту, НЕ ходит в данжи/ивенты/арену/шахту.
+- Причина: на его рюкзак и рубины завязан трансфер золота через аукцион (gold_transfer) — трогать нельзя.
+- Реализация: `config.is_craft_only_mode()` + `bot._run_craft_only_cycle()` (ранний выход в `run_dungeon_cycle`).
+- Веб-панель: выделен в отдельный блок «🔨 Только крафт» в самом верху (`get_grouped_stats` → `craft_only_bots`).
+- Если крафт не настроен (`iron_craft_enabled: false`) — просто простаивает («💤 Простой»).
+
 ## Основные файлы (requests_bot/)
 
 | Файл | Назначение |
@@ -200,6 +209,8 @@ char1-char21 - все боты работают параллельно
 | hell_games.py | Адские Игры |
 | survival_mines.py | Заброшенная Шахта |
 | arena.py | PvP арена (дуэли) |
+| heal.py | Отхил перед данжем: HP% из шапки (`i12-heart_NN` на любой странице), кружка в таверне (apiDrinkUrl, 1с) |
+| tavern_quests.py | Дэйли-караваны таверны: взносы (5 минералов/5 сапфиров/3 рубина), бои /training/h/→/fight, сюжетная цепочка qKaravanFirst..Seven |
 | **Инвентарь** | |
 | backpack.py | Рюкзак, открытие бонусов |
 | auction.py | Аукцион, продажа, разборка |
@@ -209,6 +220,8 @@ char1-char21 - все боты работают параллельно
 | craft_prices.py | Цены крафта |
 | sell_resources.py | Продажа ресурсов |
 | sell_crafts.py | Продажа крафтовых предметов |
+| sales_tracker.py | Статистика продаж: sold/expired/listed/transfers, time-to-sell, матчинг продажи с лотом по цене |
+| pricing.py | Динамический множитель цены по спросу (sell-through + time-to-sell, ±5%, кап 1.4, пересчёт 6ч) |
 | resources.py | Трекер ресурсов по сессиям |
 | resource_history.py | История ресурсов |
 | **Утилиты** | |
@@ -488,9 +501,27 @@ for pid in $(pgrep -f 'python3.*bot'); do echo "PID $pid: $(readlink /proc/$pid/
 `profiles/<char>/status.json` - текущая активность бота.
 Обновляется через `set_activity()` для отображения в TG боте.
 
-### Deaths.json
-`profiles/<char>/deaths.json` - счётчик смертей по данженам.
-Используется для понижения сложности: brutal → hero → normal → skip
+### Deaths.json и эффективная сложность (переделано 2026-07-10)
+`profiles/<char>/deaths.json` - история смертей по данженам (list с time/difficulty/suspect).
+Сложность НЕ хранится, а ВЫЧИСЛЯЕТСЯ (`config.get_dungeon_difficulty`):
+- Лесенка: base − ступень за каждую смерть за последние 7 дней (`DEATH_WINDOW_DAYS`)
+- Смерти протухают → данж сам карабкается обратно normal → hero → brutal
+- Skip не вечный: 3 дня тишины → пробный заход на normal (`SKIP_RETEST_DAYS`)
+- Смерти при сетевых сбоях (`client.had_recent_net_error`, 5 мин) — suspect, не считаются
+- Блокировки игрой (record_lock: prerequisite/level) — skip с TTL 24ч
+- `current_difficulty`/`skipped` в файле — только кэш для UI, не источник правды
+Причина переделки: 1 любая смерть = -ступень навсегда; мусорные смерти (полез
+недохиленным, сервер упал в бою) выключили половине ботов по 5-9 данжей.
+
+### Караваны таверны (tavern_quests.py, 2026-07-10)
+- `/tavern` → SPA-конфиг `apiFullUrl/apiQuestAcceptUrl/apiQuestCompleteUrl` (Wicket)
+- Цепочка дэйли (период 1440м): взнос (accept→complete, ресурс списывается с рюкзака)
+  → сопровождение (accept → redirect `/training/h/<id>` → `/fight?0=<id>`, движок combat)
+  → награда (взнос назад + бонус)
+- Победа в training-бою = redirect `/tavern?quest=<id>&take=true` (движок видит 'unknown')
+- Сюжетка qKaravanFirst..Seven+ открывает дэйлики (Seven → взнос 30/Elite)
+- Взнос только если ресурс ≥ резерв (resource_sell) + взнос — рубины трансфера не съедаются
+- Тогл `tavern_caravans_enabled` (дефолт вкл), вызов при «все данжи на КД», раз в 3ч
 
 ## Создание персонажа (create_character.py)
 
