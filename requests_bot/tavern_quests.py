@@ -217,22 +217,30 @@ def _fight_training(client, dungeon_runner, battle_url, quest_id):
             log_debug(f"[TAVERN] {quest_id}: standby не привёл в бой (url={client.current_url})")
             return "no_battle"
     # Паттерн ивент-данжей: combat_url = текущая страница, тот же движок.
-    # Лимит 60 действий: реальные бои каравана — 5-15 действий, 500 дефолтных
-    # означало 17 минут молотьбы при любом сбое детекции.
+    # КРИТИЧНО: _save_loot_url_from_combat_page() парсит metronome/refresher
+    # со страницы боя — без heartbeat сервер не тикает бой (волны не
+    # спавнятся, победа не регистрируется; баг «HP 0, а бой висит»).
+    # Лимит 60 действий: реальные бои каравана — 5-15 действий.
     dungeon_runner.current_dungeon_id = f"tavern:{quest_id}"
     dungeon_runner.combat_url = client.current_url
+    try:
+        dungeon_runner._save_loot_url_from_combat_page()
+    except Exception as e:
+        log_debug(f"[TAVERN] init combat page: {e}")
     result, actions = dungeon_runner.fight_until_done(max_actions=60)
     log_info(f"[TAVERN] Бой {quest_id}: {result} ({actions} действий)")
     if result == "died":
         dungeon_runner.resurrect()
         return "died"
-    if result == "completed" or (
-            # После победы в training-бою игра редиректит в таверну
-            # (/tavern?quest=<id>&take=true) — движок видит 'unknown'.
-            result == "unknown" and "/tavern" in (client.current_url or "")):
-        _take_profession_loot(client)
-        return "won"
-    return "error"
+    _take_profession_loot(client)
+    # КЛЮЧЕВОЕ (2026-07-10): победа в бою каравана регистрируется только при
+    # возврате на квестовый URL (в браузере это делает JS-редирект). Движок
+    # часто выходит по max_actions с зачищенным полем — поле пустое, а бой
+    # «висит». Заходим на /training/h/<id>: сервер видит зачистку и ставит
+    # progress 1/1. Поэтому исход боя тут не важен — правду скажет статус
+    # квеста, который перечитывает вызывающий _run_battle_quest.
+    client.get(f"/training/h/{quest_id}")
+    return "won"
 
 
 def _take_profession_loot(client):
@@ -300,6 +308,8 @@ def _process_quest(client, urls, dungeon_runner, q):
 
 def _run_battle_quest(client, urls, dungeon_runner, qid, battle_url):
     """Серия боёв до выполнения прогресса, потом сдача."""
+    last_progress = -1
+    stall = 0
     for i in range(MAX_FIGHTS_PER_QUEST):
         outcome = _fight_training(client, dungeon_runner, battle_url, qid)
         if outcome == "died":
@@ -316,9 +326,19 @@ def _run_battle_quest(client, urls, dungeon_runner, qid, battle_url):
             log_info(f"[TAVERN] {qid} исчез из списка после боя — считаем сделанным")
             return True
         prog = state.get("progress") or {}
-        if state.get("status") == "complete" or prog.get("current", 0) >= prog.get("total", 1):
+        cur = prog.get("current", 0)
+        if state.get("status") == "complete" or cur >= prog.get("total", 1):
             return _complete(client, urls, qid)
-        log_debug(f"[TAVERN] {qid}: прогресс {prog.get('current')}/{prog.get('total')}, ещё бой")
+        # Прогресс не растёт два боя подряд — что-то не так, откладываем на 3ч
+        if cur <= last_progress:
+            stall += 1
+            if stall >= 2:
+                log_warning(f"[TAVERN] {qid}: прогресс застрял на {cur} — откладываю")
+                return False
+        else:
+            stall = 0
+        last_progress = cur
+        log_debug(f"[TAVERN] {qid}: прогресс {cur}/{prog.get('total')}, ещё бой")
     log_warning(f"[TAVERN] {qid}: не добили за {MAX_FIGHTS_PER_QUEST} боёв")
     return False
 
