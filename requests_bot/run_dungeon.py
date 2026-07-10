@@ -338,11 +338,13 @@ class DungeonRunner:
 
         try:
 
-            # Загружаем актуальный список скипнутых данжей из deaths.json
+            # Скипы считаем через ЭФФЕКТИВНУЮ сложность (decay смертей +
+            # авто-ретест + TTL game-lock), а не по устаревшему кэшу в файле —
+            # иначе данжи навсегда оставались бы в skip.
             deaths = load_deaths()
-            skipped_ids = set(SKIP_DUNGEONS)  # Из конфига
-            for dungeon_id, data in deaths.items():
-                if data.get("skipped") or data.get("current_difficulty") == "skip":
+            skipped_ids = set(SKIP_DUNGEONS)  # Ручной список из конфига
+            for dungeon_id in deaths:
+                if get_dungeon_difficulty(dungeon_id) == "skip":
                     skipped_ids.add(dungeon_id)
 
             # Если пати-данж включён — скипаем его в соло (пройдём через party_dungeon)
@@ -568,6 +570,11 @@ class DungeonRunner:
                 print("[*] Снаряжение отремонтировано перед данженом")
         except Exception as e:
             print(f"[*] Ошибка проверки ремонта: {e}")
+
+        # Отхил перед входом (кружка в таверне) — недохиленные заходы были
+        # главным источником мусорных смертей и вечных скипов
+        from requests_bot.heal import ensure_healed
+        ensure_healed(self.client)
 
         headers = {
             "Accept": "application/json, text/javascript, */*; q=0.01",

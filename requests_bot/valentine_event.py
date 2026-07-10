@@ -500,6 +500,9 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
         diff_name = {"brutal": "брутал", "hero": "героик", "normal": "норма"}.get(difficulty, difficulty)
 
         log_debug(f"[EVENT] Проверяю: {name} ({diff_name})...")
+        # Отхил перед ивент-данжем (та же защита от мусорных смертей)
+        from requests_bot.heal import ensure_healed
+        ensure_healed(client)
         result, cd = try_enter_dungeon(client, dungeon_id)
 
         if result == "skipped":
@@ -530,7 +533,10 @@ def run_valentine_dungeons(client, dungeon_runner) -> dict:
                 set_cooldown_after_completion(client, dungeon_id)
             elif fight_result == "died":
                 # Понижение сложности через deaths.json как у обычных данжей.
-                new_diff, should_skip = record_death(full_id, name, difficulty)
+                # Смерть при сетевых сбоях помечается suspect и не считается.
+                new_diff, should_skip = record_death(
+                    full_id, name, difficulty,
+                    suspect=client.had_recent_net_error())
                 if should_skip:
                     log_warning(f"[EVENT] Смерть в {name} → СКИП")
                 else:

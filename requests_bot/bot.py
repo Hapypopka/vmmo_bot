@@ -532,8 +532,10 @@ class VMMOBot:
                         self.check_craft()
                     elif fight_result == "died":
                         self.stats["deaths"] += 1
-                        # Понижаем сложность
-                        new_diff, should_skip = record_death(full_id, name, difficulty)
+                        # Понижаем сложность (смерть при сетевых сбоях не считается)
+                        new_diff, should_skip = record_death(
+                            full_id, name, difficulty,
+                            suspect=self.client.had_recent_net_error())
                         if should_skip:
                             log_warning(f"[EVENT] Смерть в {name} → СКИП")
                         else:
@@ -1226,7 +1228,9 @@ class VMMOBot:
                     self.stats["deaths"] += 1
                     # Записываем смерть и снижаем сложность
                     current_diff = self.dungeon_runner.current_difficulty
-                    new_diff, should_skip = record_death(dungeon_id, dungeon_name, current_diff)
+                    new_diff, should_skip = record_death(
+                        dungeon_id, dungeon_name, current_diff,
+                        suspect=self.client.had_recent_net_error())
                     username = get_profile_username()
                     if should_skip:
                         log_warning(f"💀 [{username}] Умер в {dungeon_name} (normal) - данж скипается!")
@@ -1282,7 +1286,9 @@ class VMMOBot:
 
                     # Записываем смерть и снижаем сложность
                     current_diff = self.dungeon_runner.current_difficulty
-                    new_diff, should_skip = record_death(dungeon_id, dungeon_name, current_diff)
+                    new_diff, should_skip = record_death(
+                        dungeon_id, dungeon_name, current_diff,
+                        suspect=self.client.had_recent_net_error())
 
                     username = get_profile_username()
                     if should_skip:
@@ -1336,7 +1342,9 @@ class VMMOBot:
 
                         # Записываем в deaths.json для системы сложности
                         current_difficulty = get_dungeon_difficulty(dungeon_id)
-                        new_difficulty, should_skip = record_death(dungeon_id, dungeon_name, current_difficulty)
+                        new_difficulty, should_skip = record_death(
+                            dungeon_id, dungeon_name, current_difficulty,
+                            suspect=self.client.had_recent_net_error())
                         if should_skip:
                             log_warning(f"Данжен {dungeon_name} добавлен в скип (много смертей)")
                         else:

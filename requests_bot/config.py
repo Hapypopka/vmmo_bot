@@ -341,8 +341,9 @@ def set_profile(profile_name):
     if "dungeon_action_limits" in _profile_config:
         DUNGEON_ACTION_LIMITS.update(_profile_config["dungeon_action_limits"])
 
-    # Загружаем скипнутые данжены из deaths.json
-    _load_skipped_from_deaths()
+    # ВАЖНО: скипы из deaths.json больше НЕ грузятся в SKIP_DUNGEONS намертво.
+    # Эффективный skip вычисляется get_dungeon_difficulty (decay + авто-ретест),
+    # SKIP_DUNGEONS остаётся только для ручного списка из конфига профиля.
 
     return _profile_config
 
@@ -952,6 +953,38 @@ _deaths_file = None
 # Уровни сложности (от высокой к низкой)
 DIFFICULTY_LEVELS = ["brutal", "hero", "normal"]
 
+# Анти-мусорная логика смертей (2026-07):
+# Раньше 1 любая смерть = -ступень, 3 смерти = данж в ВЕЧНОМ скипе. Но куча
+# смертей мусорные: полез недохиленным, сервер упал посреди боя. В итоге у
+# половины ботов по 5-9 фарм-данжей выключено навсегда.
+# Теперь: смерти протухают, скип перепроверяется, сетевые смерти не считаются.
+DEATH_WINDOW_DAYS = 7      # к понижению считаются только смерти за окно
+SKIP_RETEST_DAYS = 3       # тишина после последней смерти → проба на normal
+GAME_LOCK_TTL_HOURS = 24   # блок игрой (prerequisite/level) перепроверяем раз в сутки
+
+
+def _recent_deaths(data, now=None):
+    """Смерти за окно DEATH_WINDOW_DAYS, без suspect (сетевые сбои).
+
+    Легаси-формат (deaths как int) считается протухшим — истории нет.
+    """
+    from datetime import datetime, timedelta
+    entries = data.get("deaths", [])
+    if not isinstance(entries, list):
+        return []
+    now = now or datetime.now()
+    cutoff = now - timedelta(days=DEATH_WINDOW_DAYS)
+    out = []
+    for e in entries:
+        if not isinstance(e, dict) or e.get("suspect"):
+            continue
+        try:
+            if datetime.fromisoformat(e["time"]) >= cutoff:
+                out.append(e)
+        except Exception:
+            continue
+    return out
+
 
 def _get_deaths_file():
     """Получает путь к файлу смертей"""
@@ -980,21 +1013,6 @@ def load_deaths():
     return {}
 
 
-def _load_skipped_from_deaths():
-    """
-    Загружает скипнутые данжены из deaths.json в SKIP_DUNGEONS.
-    Вызывается при загрузке профиля.
-    """
-    global SKIP_DUNGEONS
-    deaths = load_deaths()
-
-    for dungeon_id, data in deaths.items():
-        if data.get("skipped") or data.get("current_difficulty") == "skip":
-            if dungeon_id not in SKIP_DUNGEONS:
-                SKIP_DUNGEONS.append(dungeon_id)
-                print(f"[CONFIG] Скипаем {data.get('name', dungeon_id)} (из deaths.json)")
-
-
 def save_deaths(deaths):
     """Сохраняет историю смертей в файл"""
     deaths_file = _get_deaths_file()
@@ -1006,10 +1024,12 @@ def save_deaths(deaths):
 
 
 def record_lock(dungeon_id, dungeon_name, reason, detail=None):
-    """Помечает данж как постоянно заблокированный (prerequisite, level).
+    """Помечает данж как заблокированный игрой (prerequisite, level).
 
     В отличие от record_death (для смертей), это не "мы проиграли", а
-    "игра не даёт войти". Записываем в deaths.json + SKIP_DUNGEONS.
+    "игра не даёт войти". Скип действует GAME_LOCK_TTL_HOURS, потом данж
+    перепроверяется (locked_at обновится при повторном отказе): сервер-пад
+    иногда выглядит как блок, а prerequisite мог быть уже пройден.
 
     Args:
         dungeon_id: 'dng:Barony'
@@ -1017,7 +1037,6 @@ def record_lock(dungeon_id, dungeon_name, reason, detail=None):
         reason: 'prerequisite' | 'level'
         detail: имя prerequisite или мин-уровень
     """
-    global SKIP_DUNGEONS
     from datetime import datetime
     deaths = load_deaths()
 
@@ -1030,105 +1049,124 @@ def record_lock(dungeon_id, dungeon_name, reason, detail=None):
     deaths[dungeon_id]["lock_detail"] = detail
     deaths[dungeon_id]["locked_at"] = datetime.now().isoformat()
 
-    if dungeon_id not in SKIP_DUNGEONS:
-        SKIP_DUNGEONS.append(dungeon_id)
-
     save_deaths(deaths)
-    print(f"[CONFIG] {dungeon_name}: заблокирован игрой ({reason}: {detail}), скипаем")
+    print(f"[CONFIG] {dungeon_name}: заблокирован игрой ({reason}: {detail}), "
+          f"скип на {GAME_LOCK_TTL_HOURS}ч")
 
 
-def record_death(dungeon_id, dungeon_name, difficulty="brutal"):
+def record_death(dungeon_id, dungeon_name, difficulty="brutal", suspect=False):
     """
     Записывает смерть в данжене.
+
+    Смерть с suspect=True (во время сетевых сбоев) логируется, но НЕ
+    считается к понижению сложности — сервер-пад не должен выключать данж.
+    Эффективная сложность после смерти вычисляется get_dungeon_difficulty
+    (decay-окно + авто-ретест), а не хранится намертво.
 
     Args:
         dungeon_id: ID данжена (например 'dng:RestMonastery')
         dungeon_name: Название данжена
-        difficulty: Текущая сложность
+        difficulty: Сложность на которой умерли
+        suspect: True если во время пробега были сетевые ошибки
 
     Returns:
         tuple: (new_difficulty, should_skip) - новая сложность и нужно ли скипать
     """
-    global SKIP_DUNGEONS
+    from datetime import datetime
     deaths = load_deaths()
 
-    if dungeon_id not in deaths:
-        deaths[dungeon_id] = {
-            "name": dungeon_name,
-            "deaths": [],
-            "current_difficulty": difficulty,
-        }
+    data = deaths.get(dungeon_id)
+    if not data or not isinstance(data.get("deaths"), list):
+        # Нет записи или легаси-формат (int) — начинаем чистую историю
+        data = {"name": dungeon_name, "deaths": []}
+        deaths[dungeon_id] = data
+    data["name"] = dungeon_name
 
-    # Добавляем запись о смерти
-    from datetime import datetime
-    deaths[dungeon_id]["deaths"].append({
-        "time": datetime.now().isoformat(),
-        "difficulty": difficulty,
-    })
-
-    # Если умер на normal - добавляем в skip
-    if difficulty == "normal":
-        deaths[dungeon_id]["current_difficulty"] = "skip"
-        deaths[dungeon_id]["skipped"] = True
-        print(f"[CONFIG] {dungeon_name}: умер на normal, данж будет скипаться!")
-
-        # Добавляем в SKIP_DUNGEONS если ещё нет
-        if dungeon_id not in SKIP_DUNGEONS:
-            SKIP_DUNGEONS.append(dungeon_id)
-
-        save_deaths(deaths)
-        return "skip", True
-
-    # Снижаем сложность
-    current_diff = deaths[dungeon_id].get("current_difficulty", "brutal")
-
-    # Если уже skip - оставляем skip
-    if current_diff == "skip":
-        print(f"[CONFIG] {dungeon_name}: уже в skip, оставляем")
-        save_deaths(deaths)
-        return "skip", True
-
-    try:
-        current_idx = DIFFICULTY_LEVELS.index(current_diff)
-        if current_idx < len(DIFFICULTY_LEVELS) - 1:
-            new_diff = DIFFICULTY_LEVELS[current_idx + 1]
-            deaths[dungeon_id]["current_difficulty"] = new_diff
-            print(f"[CONFIG] {dungeon_name}: сложность снижена {current_diff} -> {new_diff}")
-        else:
-            print(f"[CONFIG] {dungeon_name}: уже минимальная сложность (normal)")
-            new_diff = "normal"
-    except ValueError:
-        # Неизвестная сложность - ставим normal
-        deaths[dungeon_id]["current_difficulty"] = "normal"
-        new_diff = "normal"
-
+    entry = {"time": datetime.now().isoformat(), "difficulty": difficulty}
+    if suspect:
+        entry["suspect"] = True
+    data["deaths"].append(entry)
     save_deaths(deaths)
-    return new_diff, False
+
+    # Эффективная сложность (decay + retest) — единый источник правды
+    new_diff = get_dungeon_difficulty(dungeon_id)
+    should_skip = new_diff == "skip"
+
+    # Кэшируем для UI (веб-панель/TG читают deaths.json напрямую)
+    data["current_difficulty"] = new_diff
+    data["skipped"] = should_skip
+    save_deaths(deaths)
+
+    if suspect:
+        print(f"[CONFIG] {dungeon_name}: смерть при сетевых сбоях — записана, но НЕ считается")
+    elif should_skip:
+        print(f"[CONFIG] {dungeon_name}: skip (ретест через {SKIP_RETEST_DAYS}д тишины)")
+    else:
+        print(f"[CONFIG] {dungeon_name}: сложность теперь {new_diff}")
+
+    return new_diff, should_skip
 
 
 def get_dungeon_difficulty(dungeon_id):
     """
-    Получает рекомендуемую сложность для данжена.
+    ЭФФЕКТИВНАЯ сложность данжена (вычисляется, а не хранится).
 
-    Приоритет:
-    1. deaths.json (если там есть запись)
-    2. dungeon_difficulties из профиля (начальная сложность)
-    3. "brutal" по умолчанию
+    Лесенка: base (из профиля, дефолт brutal) минус ступень за каждую
+    НЕДАВНЮЮ не-suspect смерть (окно DEATH_WINDOW_DAYS). За пределами
+    normal — skip, но не вечный: SKIP_RETEST_DAYS тишины после последней
+    смерти → пробный заход на normal. Смерти протухают → данж сам
+    карабкается обратно normal → hero → brutal.
+
+    Блокировки игрой (record_lock: prerequisite/level) скипают данж на
+    GAME_LOCK_TTL_HOURS, потом перепроверяются (сервер-пад мог наврать).
 
     Returns:
-        str: 'brutal', 'hero', или 'normal'
+        str: 'brutal' | 'hero' | 'normal' | 'skip'
     """
-    # Сначала проверяем deaths.json
-    deaths = load_deaths()
-    if dungeon_id in deaths:
-        return deaths[dungeon_id].get("current_difficulty", "brutal")
+    from datetime import datetime, timedelta
 
-    # Проверяем настройку профиля для начальной сложности
     profile_difficulties = _profile_config.get("dungeon_difficulties", {})
-    if dungeon_id in profile_difficulties:
-        return profile_difficulties[dungeon_id]
+    base = profile_difficulties.get(dungeon_id, "brutal")
 
-    return "brutal"  # По умолчанию Брутал
+    deaths = load_deaths()
+    data = deaths.get(dungeon_id)
+    if not data:
+        return base
+
+    now = datetime.now()
+
+    # Блокировка игрой — skip с TTL (без даты = старый формат, даём пробу)
+    if data.get("lock_reason"):
+        try:
+            locked_at = datetime.fromisoformat(data["locked_at"])
+            if now - locked_at < timedelta(hours=GAME_LOCK_TTL_HOURS):
+                return "skip"
+        except Exception:
+            pass  # нет/битая дата — блок протух, пробуем данж
+
+    recent = _recent_deaths(data, now)
+    try:
+        idx = DIFFICULTY_LEVELS.index(base)
+    except ValueError:
+        idx = 0
+    idx += len(recent)
+
+    if idx < len(DIFFICULTY_LEVELS):
+        return DIFFICULTY_LEVELS[idx]
+
+    # Смертей больше лесенки — skip, но с авто-ретестом после тишины
+    last_time = None
+    for e in recent:
+        t = e.get("time")
+        if t and (last_time is None or t > last_time):
+            last_time = t
+    if last_time:
+        try:
+            if now - datetime.fromisoformat(last_time) >= timedelta(days=SKIP_RETEST_DAYS):
+                return "normal"  # пробный заход
+        except Exception:
+            pass
+    return "skip"
 
 
 def get_death_stats():
@@ -1136,11 +1174,15 @@ def get_death_stats():
     deaths = load_deaths()
     stats = []
     for dungeon_id, data in deaths.items():
+        raw = data.get("deaths", [])
+        total = len(raw) if isinstance(raw, list) else int(raw or 0)
         stats.append({
             "id": dungeon_id,
             "name": data.get("name", dungeon_id),
-            "deaths": len(data.get("deaths", [])),
-            "difficulty": data.get("current_difficulty", "brutal"),
+            "deaths": total,
+            "recent_deaths": len(_recent_deaths(data)),
+            # Эффективная сложность (decay + ретест), а не устаревший кэш
+            "difficulty": get_dungeon_difficulty(dungeon_id),
         })
     return stats
 

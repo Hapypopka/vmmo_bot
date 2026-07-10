@@ -43,6 +43,9 @@ class VMMOClient:
         self.current_page = None  # Последний загруженный HTML
         self.current_url = None
         self.base_url = BASE_URL  # Для использования в других модулях
+        # Время последней сетевой ошибки (Timeout/ConnectionError) — чтобы
+        # смерти во время сбоев сервера помечались suspect и не роняли сложность
+        self.last_net_error_ts = 0.0
         # Кэш soup: ловим identity current_page (новый resp.text = новый object)
         self._cached_soup = None
         self._cached_soup_for = None
@@ -177,6 +180,7 @@ class VMMOClient:
                 return resp
 
             except (requests.Timeout, requests.ConnectionError) as e:
+                self.last_net_error_ts = time.time()
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 sec
                     print(f"[CLIENT] GET {url[:50]}... failed ({e.__class__.__name__}), retry in {wait_time}s")
@@ -186,6 +190,14 @@ class VMMOClient:
                     raise
 
         return None
+
+    def had_recent_net_error(self, window_sec=300):
+        """Были ли сетевые ошибки за последние window_sec (дефолт 5 мин).
+
+        Используется чтобы помечать смерти во время сбоев сервера как
+        suspect — они логируются, но не считаются к понижению сложности.
+        """
+        return (time.time() - self.last_net_error_ts) < window_sec
 
     def _handle_server_update(self, resp, original_url, method="get", **kwargs):
         """Обрабатывает страницу 'Идет обновление сервера'"""
@@ -322,6 +334,7 @@ class VMMOClient:
                 return resp
 
             except (requests.Timeout, requests.ConnectionError) as e:
+                self.last_net_error_ts = time.time()
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 sec
                     print(f"[CLIENT] POST {url[:50]}... failed ({e.__class__.__name__}), retry in {wait_time}s")
