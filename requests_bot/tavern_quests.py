@@ -44,6 +44,16 @@ DONATE_COSTS = {
     "qKaravanEliteDayli30pre": ("рубины", "ruby", 3),
 }
 
+# Минимальный запас для взноса. Резерв продаж (resource_sell.reserve) тут НЕ
+# подходит: он means «копить до N», а караван взнос ВОЗВРАЩАЕТ + даёт сверху —
+# с резервом 5000 минералов взнос в 5 шт блокировался бы вечно.
+# Исключение — рубины: они зарезервированы под gold_transfer, их уважаем
+# по полному резерву из конфига (см. _donate_allowed).
+DONATE_MIN_KEEP = {
+    "mineral": 50,
+    "sapphire": 10,
+}
+
 
 def _cache_file():
     from requests_bot.config import PROFILE_DIR
@@ -103,19 +113,26 @@ def _resource_counts():
 
 
 def _donate_allowed(quest_id):
-    """Хватает ли ресурса на взнос с учётом резерва (resource_sell)."""
+    """Хватает ли ресурса на взнос (взнос возвращается — floor маленький).
+
+    Рубины — особый случай: зарезервированы под gold_transfer, уважаем
+    полный резерв из resource_sell.
+    """
     if quest_id not in DONATE_COSTS:
         return True
     res_name, sell_key, cost = DONATE_COSTS[quest_id]
     have = _resource_counts().get(res_name)
     if have is None:
-        # Не знаем сколько ресурса — не рискуем резервом
+        # Не знаем сколько ресурса — не рискуем
         log_debug(f"[TAVERN] {quest_id}: количество '{res_name}' неизвестно — пропуск")
         return False
-    from requests_bot.config import get_resource_sell_config
-    reserve = int(get_resource_sell_config(sell_key).get("reserve", 0) or 0)
-    if have - cost < reserve:
-        log_info(f"[TAVERN] {quest_id}: {res_name} {have} - взнос {cost} < резерв {reserve} — пропуск")
+    if sell_key == "ruby":
+        from requests_bot.config import get_resource_sell_config
+        keep = int(get_resource_sell_config(sell_key).get("reserve", 10) or 10)
+    else:
+        keep = DONATE_MIN_KEEP.get(sell_key, 10)
+    if have - cost < keep:
+        log_info(f"[TAVERN] {quest_id}: {res_name} {have} - взнос {cost} < запас {keep} — пропуск")
         return False
     return True
 
@@ -178,23 +195,33 @@ def _fight_training(client, dungeon_runner, battle_url, quest_id):
     # Готовый бой: /quest_dungeon/<id>, внутри которого JS-редирект на
     # /dungeon/standby/Karavan-* (HTTP-клиент JS не исполняет — достаём URL
     # из HTML сами). Дальше стандартный данж-бой, наш движок.
-    page = client.current_page or ""
-    if "attack-button-link" not in page and "battlefield" not in page:
+    #
+    # ВАЖНО: критерий «мы в бою» — ТОЛЬКО attack-button-link/ptx_combat_rich.
+    # Слово 'battlefield' есть даже на главной (JS-конфиг) — с ним движок
+    # молотил 500 холостых действий на главной странице (баг 2026-07-10).
+    def _in_combat():
+        p = client.current_page or ""
+        return "attack-button-link" in p or "ptx_combat_rich" in p
+
+    if not _in_combat():
+        # Не в бою: ищем ССЫЛКУ на караванный данж (обязательно Karavan в
+        # пути, чтобы не уйти в чужой данж со страницы таверны/города)
         m = re.search(
-            r'["\']((?:https?://[^"\']+)?/dungeon/(?:standby|combat|lobby)[^"\']*)["\']',
-            page)
+            r'["\']((?:https?://[^"\']+)?/dungeon/(?:standby|combat|lobby)/[^"\']*[Kk]aravan[^"\']*)["\']',
+            client.current_page or "")
         if not m:
             log_debug(f"[TAVERN] {quest_id}: бой ещё не готов (url={client.current_url}) — караван в пути")
             return "no_battle"
         client.get(m.group(1).replace("&amp;", "&"))
-        page = client.current_page or ""
-        if "attack-button-link" not in page and "battlefield" not in page:
+        if not _in_combat():
             log_debug(f"[TAVERN] {quest_id}: standby не привёл в бой (url={client.current_url})")
             return "no_battle"
-    # Паттерн ивент-данжей: combat_url = текущая страница, тот же движок
+    # Паттерн ивент-данжей: combat_url = текущая страница, тот же движок.
+    # Лимит 60 действий: реальные бои каравана — 5-15 действий, 500 дефолтных
+    # означало 17 минут молотьбы при любом сбое детекции.
     dungeon_runner.current_dungeon_id = f"tavern:{quest_id}"
     dungeon_runner.combat_url = client.current_url
-    result, actions = dungeon_runner.fight_until_done()
+    result, actions = dungeon_runner.fight_until_done(max_actions=60)
     log_info(f"[TAVERN] Бой {quest_id}: {result} ({actions} действий)")
     if result == "died":
         dungeon_runner.resurrect()
