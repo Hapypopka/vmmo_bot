@@ -173,26 +173,53 @@ def _fight_training(client, dungeon_runner, battle_url, quest_id):
     resp = client.get(battle_url)
     if resp is None:
         return "error"
-    # Если игра не пустила в бой (редирект на главную/город) — не бой
-    if "battlefield" not in (client.current_page or "") or "/fight" not in (client.current_url or ""):
-        log_debug(f"[TAVERN] {quest_id}: {battle_url} не привёл в бой (url={client.current_url})")
-        return "no_battle"
+    # Караван «едет» реальное время между этапами: если бой ещё не готов,
+    # /training/h/<id> редиректит на карточку в таверне — вернёмся позже (3ч).
+    # Готовый бой: /quest_dungeon/<id>, внутри которого JS-редирект на
+    # /dungeon/standby/Karavan-* (HTTP-клиент JS не исполняет — достаём URL
+    # из HTML сами). Дальше стандартный данж-бой, наш движок.
+    page = client.current_page or ""
+    if "attack-button-link" not in page and "battlefield" not in page:
+        m = re.search(
+            r'["\']((?:https?://[^"\']+)?/dungeon/(?:standby|combat|lobby)[^"\']*)["\']',
+            page)
+        if not m:
+            log_debug(f"[TAVERN] {quest_id}: бой ещё не готов (url={client.current_url}) — караван в пути")
+            return "no_battle"
+        client.get(m.group(1).replace("&amp;", "&"))
+        page = client.current_page or ""
+        if "attack-button-link" not in page and "battlefield" not in page:
+            log_debug(f"[TAVERN] {quest_id}: standby не привёл в бой (url={client.current_url})")
+            return "no_battle"
     # Паттерн ивент-данжей: combat_url = текущая страница, тот же движок
     dungeon_runner.current_dungeon_id = f"tavern:{quest_id}"
     dungeon_runner.combat_url = client.current_url
     result, actions = dungeon_runner.fight_until_done()
     log_info(f"[TAVERN] Бой {quest_id}: {result} ({actions} действий)")
-    if result == "completed":
-        return "won"
     if result == "died":
         dungeon_runner.resurrect()
         return "died"
-    # После победы в training-бою игра редиректит в таверну
-    # (/tavern?quest=<id>&take=true) — движок данжей видит это как 'unknown'.
-    # Прогресс всё равно перечитывается после — считаем шаг сделанным.
-    if result == "unknown" and "/tavern" in (client.current_url or ""):
+    if result == "completed" or (
+            # После победы в training-бою игра редиректит в таверну
+            # (/tavern?quest=<id>&take=true) — движок видит 'unknown'.
+            result == "unknown" and "/tavern" in (client.current_url or "")):
+        _take_profession_loot(client)
         return "won"
     return "error"
+
+
+def _take_profession_loot(client):
+    """После боя каравана бывает кнопка «Забрать» (professionPanel) — жмём."""
+    try:
+        page = client.current_page or ""
+        m = re.search(r'href="([^"]*professionPanel[^"]*)"[^>]*>\s*Забрать', page)
+        if not m:
+            # Кнопка может быть на странице боя, а мы уже в таверне — не страшно
+            return
+        client.get(m.group(1).replace("&amp;", "&"))
+        log_info("[TAVERN] Забрал лут каравана")
+    except Exception as e:
+        log_debug(f"[TAVERN] Ошибка забора лута: {e}")
 
 
 def _process_quest(client, urls, dungeon_runner, q):
@@ -214,7 +241,9 @@ def _process_quest(client, urls, dungeon_runner, q):
     if status == "active":
         if done:
             return _complete(client, urls, qid)
-        # Активный боевой — идём в бой по стандартному training-URL
+        # Активный боевой: ре-accept (= кнопка «Приступить» у бармена, двигает
+        # этап «караван едет»), потом пробуем бой по стандартному training-URL
+        _accept(client, urls, qid)
         return _run_battle_quest(client, urls, dungeon_runner, qid,
                                  f"/training/h/{qid}")
 
