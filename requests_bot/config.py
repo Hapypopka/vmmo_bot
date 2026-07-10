@@ -400,6 +400,11 @@ def get_party_dungeon_config():
     }
 
 
+def is_tavern_caravans_enabled():
+    """Дэйли-караваны таверны (tavern_quests.py). Дефолт: включено."""
+    return _profile_config.get("tavern_caravans_enabled", True)
+
+
 def is_valentine_event_enabled():
     """Проверяет, включен ли февральский ивент-данж для текущего профиля"""
     return _profile_config.get("valentine_event_enabled", False)

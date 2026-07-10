@@ -1,0 +1,321 @@
+# ============================================
+# VMMO Tavern Quests - дэйли-караваны таверны
+# ============================================
+# Разведка 2026-07-10 (за Пупупу, проба на char10):
+# - GET /tavern → SPA-конфиг с apiFullUrl / apiQuestAcceptUrl /
+#   apiQuestCompleteUrl (те же Wicket-endpoints, что в туториале)
+# - apiFullUrl → JSON: {player, quests: [секции, в них content[]]}
+# - Цепочка обычного каравана (дэйли, период 1440м):
+#     qKaravanDayli20prequest  «Взнос» — сдай 5 минералов (списываются на
+#         complete; после accept status сразу 'complete', если ресурс есть)
+#     qKaravanDayli20          «Пора в путь» — accept даёт redirect на
+#         /training/h/<id> → обычный бой (движок combat как в данжах)
+#     qKaravanReward20         награда: взнос возвращается + бонус
+# - Аналогично «Новые» (5 сапфиров) и «Элитные» (3 рубина).
+# - Сюжетная цепочка qKaravanFirst..Seven+ (тоже training-бои) открывает
+#   дэйлики: до её прохождения у чара виден только обычный взнос или ничего.
+# - Караваны есть во всех 4 светлых городах (igles/quazar/default/shade).
+#
+# Резервы: взнос делаем только если ресурса хватает с запасом — не съедаем
+# рубины, зарезервированные под gold_transfer.
+# ============================================
+
+import json
+import os
+import re
+import time
+
+from requests_bot.logger import log_info, log_warning, log_debug
+
+API_HEADERS = {
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "X-Requested-With": "XMLHttpRequest",
+}
+
+CARAVAN_MARKER = "Karavan"
+CHECK_INTERVAL = 3 * 3600   # проверяем таверну не чаще раза в 3ч (дэйли и есть)
+MAX_FIGHTS_PER_QUEST = 20   # сюжетные «убей N бандитов» — серия боёв
+MAX_QUESTS_PER_RUN = 6      # предохранитель на один заход
+
+# Взносы: quest_id -> (ключ в resources.json, ключ resource_sell, сколько сдаём)
+DONATE_COSTS = {
+    "qKaravanDayli20prequest": ("минералы", "mineral", 5),
+    "qKaravanDayli30prequest": ("сапфиры", "sapphire", 5),
+    "qKaravanEliteDayli30pre": ("рубины", "ruby", 3),
+}
+
+
+def _cache_file():
+    from requests_bot.config import PROFILE_DIR
+    return os.path.join(PROFILE_DIR, "tavern_quests.json")
+
+
+def _load_cache():
+    try:
+        with open(_cache_file(), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_cache(cache):
+    try:
+        with open(_cache_file(), "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_debug(f"[TAVERN] Ошибка сохранения кэша: {e}")
+
+
+def _get_tavern_api(client):
+    """Открывает таверну и парсит API-endpoints. None если не в городе/в бою."""
+    resp = client.get("/tavern")
+    if resp is None:
+        return None
+    urls = dict(re.findall(r"(api\w+Url)\s*=\s*'([^']+)'", resp.text))
+    if "apiFullUrl" not in urls:
+        log_debug("[TAVERN] apiFullUrl не найден (в бою или редирект) — пропуск")
+        return None
+    return urls
+
+
+def _fetch_quests(client, urls):
+    """Возвращает список караван-квестов из apiFullUrl."""
+    resp = client.session.get(urls["apiFullUrl"], headers=API_HEADERS, timeout=30)
+    if resp.status_code != 200:
+        return None
+    data = resp.json()
+    quests = []
+    for sec in data.get("quests", []):
+        for q in sec.get("content", []):
+            if CARAVAN_MARKER in q.get("id", ""):
+                quests.append(q)
+    return quests
+
+
+def _resource_counts():
+    """Текущие ресурсы из resources.json профиля ({'минералы': N, ...})."""
+    from requests_bot.config import PROFILE_DIR
+    try:
+        with open(os.path.join(PROFILE_DIR, "resources.json"), encoding="utf-8") as f:
+            return json.load(f).get("current_session", {}).get("current", {}) or {}
+    except Exception:
+        return {}
+
+
+def _donate_allowed(quest_id):
+    """Хватает ли ресурса на взнос с учётом резерва (resource_sell)."""
+    if quest_id not in DONATE_COSTS:
+        return True
+    res_name, sell_key, cost = DONATE_COSTS[quest_id]
+    have = _resource_counts().get(res_name)
+    if have is None:
+        # Не знаем сколько ресурса — не рискуем резервом
+        log_debug(f"[TAVERN] {quest_id}: количество '{res_name}' неизвестно — пропуск")
+        return False
+    from requests_bot.config import get_resource_sell_config
+    reserve = int(get_resource_sell_config(sell_key).get("reserve", 0) or 0)
+    if have - cost < reserve:
+        log_info(f"[TAVERN] {quest_id}: {res_name} {have} - взнос {cost} < резерв {reserve} — пропуск")
+        return False
+    return True
+
+
+def _accept(client, urls, quest_id):
+    """Принимает квест. Возвращает (ok, redirect_url|None)."""
+    resp = client.session.get(urls["apiQuestAcceptUrl"] + f"&quest_id={quest_id}",
+                              headers=API_HEADERS, timeout=30)
+    if resp.status_code != 200:
+        return False, None
+    try:
+        data = resp.json()
+    except Exception:
+        return False, None
+    if data.get("status") == "Fail":
+        log_debug(f"[TAVERN] accept {quest_id}: {data.get('answer')}")
+        return False, None
+    url = data.get("url")
+    # redirect на /training/ = боевой квест; redirect на /tavern = мирный
+    return True, (url if url and "/training/" in url else None)
+
+
+def _complete(client, urls, quest_id):
+    resp = client.session.get(urls["apiQuestCompleteUrl"] + f"&quest_id={quest_id}",
+                              headers=API_HEADERS, timeout=30)
+    if resp.status_code != 200:
+        return False
+    try:
+        ok = resp.json().get("status") == "OK"
+    except Exception:
+        return False
+    if ok:
+        log_info(f"[TAVERN] Квест {quest_id} сдан ✓")
+    return ok
+
+
+def _quest_state(client, urls, quest_id):
+    """Перечитывает статус/прогресс квеста. None если квест исчез из списка."""
+    quests = _fetch_quests(client, urls) or []
+    for q in quests:
+        if q.get("id") == quest_id:
+            return q
+    return None
+
+
+def _fight_training(client, dungeon_runner, battle_url, quest_id):
+    """Боевой шаг: /training/h/<id> редиректит на /fight?0=<id> — бой движком данжей.
+
+    Returns: 'won' | 'died' | 'error' | 'no_battle'
+    """
+    # Отхил перед боем (караваны — те же мусорные смерти без него)
+    from requests_bot.heal import ensure_healed
+    ensure_healed(client)
+
+    resp = client.get(battle_url)
+    if resp is None:
+        return "error"
+    # Если игра не пустила в бой (редирект на главную/город) — не бой
+    if "battlefield" not in (client.current_page or "") or "/fight" not in (client.current_url or ""):
+        log_debug(f"[TAVERN] {quest_id}: {battle_url} не привёл в бой (url={client.current_url})")
+        return "no_battle"
+    # Паттерн ивент-данжей: combat_url = текущая страница, тот же движок
+    dungeon_runner.current_dungeon_id = f"tavern:{quest_id}"
+    dungeon_runner.combat_url = client.current_url
+    result, actions = dungeon_runner.fight_until_done()
+    log_info(f"[TAVERN] Бой {quest_id}: {result} ({actions} действий)")
+    if result == "completed":
+        return "won"
+    if result == "died":
+        dungeon_runner.resurrect()
+        return "died"
+    # После победы в training-бою игра редиректит в таверну
+    # (/tavern?quest=<id>&take=true) — движок данжей видит это как 'unknown'.
+    # Прогресс всё равно перечитывается после — считаем шаг сделанным.
+    if result == "unknown" and "/tavern" in (client.current_url or ""):
+        return "won"
+    return "error"
+
+
+def _process_quest(client, urls, dungeon_runner, q):
+    """Обрабатывает один караван-квест. Возвращает True если что-то сделали."""
+    qid = q.get("id")
+    status = q.get("status")
+    progress = q.get("progress") or {}
+    done = progress.get("current", 0) >= progress.get("total", 1)
+
+    # Дэйли на КД — не трогаем
+    period = q.get("period") or {}
+    if (period.get("left") or {}).get("num", 0) > 0:
+        return False
+
+    # Готов к сдаче (после accept взнос сразу 'complete', если ресурс есть)
+    if status == "complete":
+        return _complete(client, urls, qid)
+
+    if status == "active":
+        if done:
+            return _complete(client, urls, qid)
+        # Активный боевой — идём в бой по стандартному training-URL
+        return _run_battle_quest(client, urls, dungeon_runner, qid,
+                                 f"/training/h/{qid}")
+
+    if status == "none":
+        if not _donate_allowed(qid):
+            return False
+        ok, battle_url = _accept(client, urls, qid)
+        if not ok:
+            return False
+        log_info(f"[TAVERN] Принят квест {qid}" + (" (бой)" if battle_url else ""))
+        if battle_url:
+            return _run_battle_quest(client, urls, dungeon_runner, qid, battle_url)
+        # Мирный (взнос/награда): перечитываем — если готов, сдаём
+        state = _quest_state(client, urls, qid)
+        if state and state.get("status") == "complete":
+            return _complete(client, urls, qid)
+        if state and state.get("status") == "active":
+            prog = state.get("progress") or {}
+            if prog.get("current", 0) >= prog.get("total", 1):
+                return _complete(client, urls, qid)
+            log_debug(f"[TAVERN] {qid}: принят, прогресс "
+                      f"{prog.get('current')}/{prog.get('total')} — дождёмся")
+        return True
+
+    return False
+
+
+def _run_battle_quest(client, urls, dungeon_runner, qid, battle_url):
+    """Серия боёв до выполнения прогресса, потом сдача."""
+    for i in range(MAX_FIGHTS_PER_QUEST):
+        outcome = _fight_training(client, dungeon_runner, battle_url, qid)
+        if outcome == "died":
+            log_warning(f"[TAVERN] Смерть в бою {qid} — караваны отложены")
+            return False
+        if outcome == "no_battle":
+            # Игра не пустила (этап ещё не готов / караван в пути) — не ошибка
+            return False
+        if outcome == "error":
+            return False
+        state = _quest_state(client, urls, qid)
+        if state is None:
+            # Квест исчез из списка — вероятно завершён игрой
+            log_info(f"[TAVERN] {qid} исчез из списка после боя — считаем сделанным")
+            return True
+        prog = state.get("progress") or {}
+        if state.get("status") == "complete" or prog.get("current", 0) >= prog.get("total", 1):
+            return _complete(client, urls, qid)
+        log_debug(f"[TAVERN] {qid}: прогресс {prog.get('current')}/{prog.get('total')}, ещё бой")
+    log_warning(f"[TAVERN] {qid}: не добили за {MAX_FIGHTS_PER_QUEST} боёв")
+    return False
+
+
+def run_tavern_caravans(client, dungeon_runner, force=False):
+    """
+    Главный вход: проходит доступные караван-квесты (взносы, сопровождения,
+    награды, сюжетную цепочку). Вызывается из цикла бота, когда данжи на КД.
+
+    Безопасность: любая ошибка гасится, цикл бота не ломается.
+    """
+    try:
+        from requests_bot.config import is_tavern_caravans_enabled
+        if not is_tavern_caravans_enabled():
+            return 0
+
+        cache = _load_cache()
+        if not force and time.time() < cache.get("next_check", 0):
+            return 0
+
+        urls = _get_tavern_api(client)
+        if urls is None:
+            return 0
+
+        quests = _fetch_quests(client, urls)
+        if quests is None:
+            return 0
+
+        log_debug(f"[TAVERN] Караваны в таверне: "
+                  f"{[(q['id'], q.get('status')) for q in quests]}")
+
+        done = 0
+        for q in quests:
+            if done >= MAX_QUESTS_PER_RUN:
+                break
+            try:
+                if _process_quest(client, urls, dungeon_runner, q):
+                    done += 1
+                    # Список квестов мог поменяться (next открылся) — перечитываем
+                    quests_new = _fetch_quests(client, urls)
+                    if quests_new is not None:
+                        seen = {x.get("id") for x in quests}
+                        fresh = [x for x in quests_new if x.get("id") not in seen]
+                        quests.extend(fresh)
+            except Exception as e:
+                log_warning(f"[TAVERN] Ошибка квеста {q.get('id')}: {e}")
+
+        cache["next_check"] = time.time() + CHECK_INTERVAL
+        cache["last_run"] = time.time()
+        _save_cache(cache)
+        if done:
+            log_info(f"[TAVERN] Караваны: обработано квестов: {done}")
+        return done
+    except Exception as e:
+        log_warning(f"[TAVERN] Ошибка run_tavern_caravans: {e}")
+        return 0

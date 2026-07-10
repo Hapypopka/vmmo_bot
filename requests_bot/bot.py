@@ -1087,6 +1087,15 @@ class VMMOBot:
             if valentine_done > 0:
                 log_info(f"[EVENT] Пройдено {valentine_done} ивент-данженов во время КД")
 
+            # Дэйли-караваны таверны (не чаще раза в 3ч, см. tavern_quests)
+            try:
+                from requests_bot.tavern_quests import run_tavern_caravans
+                caravans_done = run_tavern_caravans(self.client, self.dungeon_runner)
+                if caravans_done:
+                    log_info(f"[TAVERN] Караваны: сделано {caravans_done} квестов во время КД")
+            except Exception as e:
+                log_warning(f"[TAVERN] Ошибка караванов: {e}")
+
             # Выбираем чем заняться
             min_cd, _ = self.get_min_dungeon_cooldown()
 
