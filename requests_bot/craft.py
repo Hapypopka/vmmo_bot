@@ -1487,6 +1487,23 @@ class CyclicCraftClient(IronCraftClient):
         except Exception as e:
             log_info(f"[CRAFT] Ошибка обновления лока: {e}")
 
+        # Граница партии — единственное правильное место пересмотреть выбор
+        # рецепта. Раньше _selected_recipe жил в памяти вечно, и новый
+        # probe-рецепт (bronze, copperBar...) подхватывался ТОЛЬКО рестартом
+        # после деплоя — «добавление через жопу». Теперь: партия продана →
+        # если появился свободный probe-слот выгоднее текущего рецепта —
+        # сбрасываем кэш, следующий цикл перевыберет через acquire_craft_lock
+        # (атомарно под file-lock, кап гарантирует ровно 1 бота).
+        try:
+            import time as _time
+            from requests_bot.craft_prices import _find_open_probe_recipe, load_craft_locks
+            probe = _find_open_probe_recipe(load_craft_locks(), _time.time(), item_id)
+            if probe:
+                log_info(f"[CRAFT] Свободен probe-слот '{probe}' выгоднее '{item_id}' — перевыберу рецепт")
+                self._selected_recipe = None
+        except Exception as e:
+            log_info(f"[CRAFT] Ошибка probe-проверки: {e}")
+
         log_info(f"[CRAFT] Продажа завершена")
 
     def _get_recipe_for_item(self, item_id):
