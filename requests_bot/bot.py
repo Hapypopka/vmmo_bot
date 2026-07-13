@@ -16,6 +16,11 @@ MSK = timezone(timedelta(hours=3))
 NIGHT_START = 0   # 00:00 МСК
 NIGHT_END = 8     # 08:00 МСК
 
+
+def is_night_msk():
+    """Ночь по МСК (00:00-08:00). Ночного сна нет — но Адские Игры ночью не идут."""
+    return NIGHT_START <= datetime.now(MSK).hour < NIGHT_END
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from requests_bot.client import VMMOClient
@@ -1133,8 +1138,8 @@ class VMMOBot:
                     tb_module.print_exc()
                     self.stats["errors"] += 1
 
-                # После крафта идём в Hell Games (если включены)
-                if is_hell_games_enabled():
+                # После крафта идём в Hell Games (если включены; ночью не ходим)
+                if is_hell_games_enabled() and not is_night_msk():
                     # Перепроверяем данжи - может КД уже закончился!
                     dungeons_check, _ = self.dungeon_runner.get_all_available_dungeons()
                     if dungeons_check:
@@ -1162,16 +1167,16 @@ class VMMOBot:
                             self.check_craft()
                             self.check_valentine_dungeons()
                 else:
-                    # Hell Games не включены - проверяем почту/рюкзак и ждём
+                    # Hell Games не включены (или ночь) - проверяем почту/рюкзак и ждём
                     wait_time = min(min_cd, 60)
                     set_activity(f"⏳ Ждём КД ({min_cd // 60}м)")
-                    log_info(f"Hell Games выключены, проверяю почту и ждём {wait_time}с...")
+                    log_info(f"Hell Games выключены/ночь, проверяю почту и ждём {wait_time}с...")
                     self.check_and_collect_mail()
                     self.cleanup_backpack()
                     time.sleep(wait_time)
 
-            elif min_cd > 0 and is_hell_games_enabled():
-                # Приоритет 3: Hell Games
+            elif min_cd > 0 and is_hell_games_enabled() and not is_night_msk():
+                # Приоритет 3: Hell Games (ночью 00-08 МСК не ходим)
                 set_activity("🔥 Адские Игры")
                 log_info(f"Все данжены на КД. Hell Games на {min_cd // 60}м...")
                 self.stats["hell_games_time"] += min_cd
@@ -1433,25 +1438,10 @@ class VMMOBot:
         cycle = 0
         try:
             while True:
-                # Ночной режим: 00:00-08:00 МСК — спим
-                now_msk = datetime.now(MSK)
-                if NIGHT_START <= now_msk.hour < NIGHT_END:
-                    if is_wake_for_event_party_at_night() and is_valentine_event_enabled():
-                        # Особый режим: спим, но просыпаемся для соло-ивента
-                        # (Затерянный храм) когда КД=0. Раньше тут была пати —
-                        # её больше нет, но флаг wake_for_event_party_at_night
-                        # переиспользуем (чтобы не менять конфиги профилей).
-                        # Никаких обычных данжей/крафта/арены ночью.
-                        self._sleep_with_event_party_wakeup()
-                    else:
-                        # Обычный ночной режим: глухой sleep до 08:00
-                        wake_up = now_msk.replace(hour=NIGHT_END, minute=0, second=0, microsecond=0)
-                        sleep_seconds = int((wake_up - now_msk).total_seconds())
-                        log_info(f"🌙 Ночной режим: сплю до 08:00 МСК ({sleep_seconds // 3600}ч {(sleep_seconds % 3600) // 60}м)")
-                        set_activity("🌙 Сон до 08:00")
-                        time.sleep(sleep_seconds)
-                        log_info("☀️ Просыпаюсь!")
-                        set_activity("☀️ Просыпаюсь")
+                # Ночного сна больше НЕТ (2026-07-13): ночью (00:00-08:00 МСК)
+                # работаем как днём — данжи/крафт/караваны/шахта. Единственное
+                # ночное ограничение — не ходим в Адские Игры (см. is_night_msk
+                # в ветках Hell Games ниже).
 
                 cycle += 1
                 log_cycle_start(cycle)
