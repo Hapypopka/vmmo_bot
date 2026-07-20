@@ -1131,6 +1131,15 @@ class GoldTransfer:
                 except Exception:
                     pass
 
+                # Компенсируем списание в сессии ресурсов альта — иначе после
+                # перегона панель рисует ему «-1000з/ч» (деньги ушли, но это
+                # не убыток фарма).
+                try:
+                    from .resources import compensate_transfer
+                    compensate_transfer(alt_profile, lot_price, "out")
+                except Exception:
+                    pass
+
                 self._log(f"Передано {lot_price // 100}з, осталось {amount_silver // 100}з")
 
                 time.sleep(0.5)
@@ -1151,6 +1160,17 @@ class GoldTransfer:
         main_client = GoldTransferClient(main_profile)
         mail_stats = main_client.collect_mail()
         results["mail_collected"] = mail_stats
+
+        # Зеркальная компенсация у мейна: приход перегона — не фарм-доход,
+        # иначе его сессия рисует дикий «+з/ч».
+        if results["total_transferred"] > 0:
+            try:
+                from .resources import compensate_transfer
+                received_silver = int(
+                    results["total_transferred"] * 100 * (1 - self.config["auction_fee"]))
+                compensate_transfer(main_profile, received_silver, "in")
+            except Exception:
+                pass
 
         self._log(f"Итого: передано {results['total_transferred']}з, получено ~{results['total_received']}з")
 

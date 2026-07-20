@@ -249,6 +249,49 @@ def update_resources(resources):
     _save_resources_data(data)
 
 
+def compensate_transfer(profile, silver_amount, direction):
+    """
+    Компенсирует перегон золота (gold_transfer) в сессии ресурсов, чтобы
+    з/час в панели не врал: перегон — перекладывание денег между своими
+    карманами, а не фарм-доход/убыток.
+
+    Механика: заработок = current - start. Сдвигаем СТАРТ сессии на сумму
+    перегона в ту же сторону, куда сдвинулся current — diff не меняется.
+      direction='out' — альт выкупил лот перегона (золото ушло): start -= X
+      direction='in'  — мейн получил золото почтой: start += X
+
+    Вызывается из процесса веб-панели/TG (не бота), поэтому профиль передаётся
+    явно и файл правится по прямому пути.
+
+    Args:
+        profile: имя профиля чей resources.json правим
+        silver_amount: сумма в серебре (1з = 100с)
+        direction: 'out' или 'in'
+    """
+    filepath = os.path.join(PROFILES_DIR, profile, "resources.json")
+    if not os.path.exists(filepath):
+        return
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        session = data.get("current_session")
+        if not session or not session.get("start"):
+            return
+        sign = -1 if direction == "out" else 1
+        start = session["start"]
+        # Отрицательный/зашкальный start не страшен — важен только diff
+        start["money_gold"] = start.get("money_gold", 0) + sign * (silver_amount // 100)
+        start["money_silver"] = start.get("money_silver", 0) + sign * (silver_amount % 100)
+        key = "transfers_out_silver" if direction == "out" else "transfers_in_silver"
+        session[key] = session.get(key, 0) + silver_amount
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        arrow = "→ мейну" if direction == "out" else "← с альтов"
+        print(f"[RESOURCES] {profile}: перегон {silver_amount // 100}з {arrow} учтён, з/час не пострадает")
+    except Exception as e:
+        print(f"[RESOURCES] Ошибка учёта перегона для {profile}: {e}")
+
+
 def _calc_duration_hours(start_time_str, end_time_str):
     """Вычисляет длительность в часах"""
     try:
