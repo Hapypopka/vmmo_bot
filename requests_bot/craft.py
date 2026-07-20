@@ -1496,11 +1496,21 @@ class CyclicCraftClient(IronCraftClient):
         # (атомарно под file-lock, кап гарантирует ровно 1 бота).
         try:
             import time as _time
-            from requests_bot.craft_prices import _find_open_probe_recipe, load_craft_locks
-            probe = _find_open_probe_recipe(load_craft_locks(), _time.time(), item_id)
-            if probe:
-                log_info(f"[CRAFT] Свободен probe-слот '{probe}' выгоднее '{item_id}' — перевыберу рецепт")
+            from requests_bot.craft_prices import (
+                AUTO_SELECT_EXCLUDED, FINAL_RECIPES,
+                _find_open_probe_recipe, load_craft_locks,
+            )
+            if item_id in AUTO_SELECT_EXCLUDED or item_id not in FINAL_RECIPES:
+                # Рецепт выведен из ротации (протухает/удалён) — уходим с него,
+                # даже если свободных probe-слотов нет: acquire_craft_lock увидит
+                # исключённый рецепт в локе и выберет новый по распределению.
+                log_info(f"[CRAFT] Рецепт '{item_id}' исключён из ротации — перевыберу рецепт")
                 self._selected_recipe = None
+            else:
+                probe = _find_open_probe_recipe(load_craft_locks(), _time.time(), item_id)
+                if probe:
+                    log_info(f"[CRAFT] Свободен probe-слот '{probe}' выгоднее '{item_id}' — перевыберу рецепт")
+                    self._selected_recipe = None
         except Exception as e:
             log_info(f"[CRAFT] Ошибка probe-проверки: {e}")
 
