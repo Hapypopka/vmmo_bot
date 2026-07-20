@@ -467,12 +467,20 @@ class HellGamesClient:
 
             resp = self._make_ajax_request(full_url)
             if resp and resp.status_code == 200:
+                if "не бей так часто" in resp.text:
+                    # Серверный антиспам: <~0.8с от прошлого действия. Отбой
+                    # сбрасывает таймер, спам = прогрессирующий штраф до 15с+
+                    print("[HELL] Антиспам отбил скилл — пауза 2.5с")
+                    time.sleep(2.5)
+                    return False
                 self.last_gcd_time = now
                 # Собираем лут через refresher каждые 3 атаки
                 self.attack_count += 1
                 if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                     self._collect_loot_via_refresher()
-                time.sleep(0.5)  # Задержка после скилла
+                # 1.2с: было 0.5с — атака сразу после скилла гарантированно
+                # отбивалась антиспамом (замер 2026-07-20)
+                time.sleep(1.2)
                 # Обновляем страницу
                 self.client.get(self.client.current_url)
                 return True
@@ -493,11 +501,15 @@ class HellGamesClient:
         try:
             resp = self._make_ajax_request(full_url)
             if resp and resp.status_code == 200:
+                if "не бей так часто" in resp.text:
+                    print("[HELL] Антиспам отбил атаку — пауза 2.5с")
+                    time.sleep(2.5)
+                    return False
                 # Собираем лут через refresher каждые 3 атаки
                 self.attack_count += 1
                 if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                     self._collect_loot_via_refresher()
-                time.sleep(1.0)  # Задержка после атаки
+                time.sleep(1.0)  # Задержка после атаки (антиспам ~0.8с + запас)
                 # Обновляем страницу
                 self.client.get(self.client.current_url)
                 return True

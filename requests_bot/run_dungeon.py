@@ -42,6 +42,18 @@ DUNGEON_TARGET_RULES = {
 # дёргать правила в этом бою (защита от бесконечного цикла кликов)
 TARGET_RULE_MAX_FAILS = 8
 
+# Серверный антиспам боевых действий (замерено экспериментально 2026-07-20
+# на живом бою АИ, char12):
+#   - ЛЮБЫЕ два действия (атака/скилл) ближе ~0.75-0.8с — второе отбивается
+#     с "не бей так часто! Прицеливание занимает время." и урона НЕТ
+#   - отбой СБРАСЫВАЕТ таймер: спам = отбивается всё подряд
+#   - серия отбоев = прогрессирующий штраф (10-15с+ не проходят даже редкие)
+# Поэтому: держим >= 1.0с между действиями по ФАКТИЧЕСКОМУ времени (перезагрузка
+# страницы засчитывается в интервал — суммарно бой стал даже быстрее, чем со
+# старым фиксированным sleep), а отбой детектим по маркеру и уходим в бэкофф.
+MIN_ACTION_INTERVAL = 1.0
+ATTACK_REJECT_MARK = "не бей так часто"
+
 
 class DungeonRunner:
     """Полное прохождение данжена"""
@@ -70,6 +82,8 @@ class DungeonRunner:
         self._cached_parser_html = None
 
         self._target_rule_fails = 0  # Неудачные смены цели подряд (таргет-правила)
+        self._last_action_ts = 0.0   # Время последнего боевого действия (антиспам)
+        self._reject_streak = 0      # Отбитые сервером действия подряд
 
         # Защита от зацикливания входа в данж: если API говорит "готов",
         # но landing-страница не даёт кнопку Войти — бот может крутиться бесконечно.
@@ -1104,9 +1118,40 @@ class DungeonRunner:
             return True
         return False
 
+    def _pace_before_action(self):
+        """Досыпает до MIN_ACTION_INTERVAL с прошлого боевого действия.
+        Перезагрузка страницы/парсинг уже съедают часть интервала — доспим
+        только остаток, поэтому это быстрее старого фиксированного sleep."""
+        wait = MIN_ACTION_INTERVAL - (time.time() - self._last_action_ts)
+        if wait > 0:
+            time.sleep(wait)
+
+    def _register_action_result(self, resp):
+        """
+        Фиксирует боевое действие и проверяет, не отбил ли его серверный
+        антиспам ("не бей так часто").
+
+        Returns:
+            bool: True — действие принято; False — отбито (бэкофф уже сделан)
+        """
+        self._last_action_ts = time.time()
+        body = resp.text if resp is not None else ""
+        if ATTACK_REJECT_MARK in body:
+            self._reject_streak += 1
+            # Штраф у сервера прогрессирующий — бэкофф тоже: 2.5с -> 5 -> 10 -> 15
+            backoff = min(2.5 * (2 ** (self._reject_streak - 1)), 15.0)
+            print(f"[PACE] Антиспам отбил действие (#{self._reject_streak} подряд), пауза {backoff:.1f}с")
+            time.sleep(backoff)
+            self._last_action_ts = time.time()
+            return False
+        self._reject_streak = 0
+        return True
+
     def fight_until_done(self, max_actions=None):
         """Бьёмся до конца данжена"""
         self._target_rule_fails = 0
+        self._last_action_ts = 0.0
+        self._reject_streak = 0
         # Определяем лимит действий для этого данжена
         if max_actions is None:
             max_actions = DUNGEON_ACTION_LIMITS.get(
@@ -1226,8 +1271,11 @@ class DungeonRunner:
                         if enemy_hp < min_hp:
                             continue  # HP врага ниже порога, пропускаем скилл
 
+                    self._pace_before_action()
                     resp = self._make_ajax_request(skill["url"])
                     if resp and resp.status_code == 200:
+                        if not self._register_action_result(resp):
+                            break  # Антиспам отбил — бэкофф сделан, новый круг
                         print(f"[SKILL] Used skill {pos} (enemy HP: {enemy_hp})")
                         actions += 1
                         last_gcd_time = time.time()
@@ -1239,7 +1287,8 @@ class DungeonRunner:
                         self.attack_count += 1
                         if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                             self._collect_loot_via_refresher()
-                        time.sleep(GCD)
+                        # GCD гейтит только следующий СКИЛЛ (last_gcd_time);
+                        # атака после скилла ждёт лишь MIN_ACTION_INTERVAL
                         skill_used = True
                         break  # После одного скилла выходим, т.к. GCD
 
@@ -1251,8 +1300,11 @@ class DungeonRunner:
             action_url = parser.get_attack_url()
 
             if action_url:
+                self._pace_before_action()
                 resp = self._make_ajax_request(action_url)
                 if resp and resp.status_code == 200:
+                    if not self._register_action_result(resp):
+                        continue  # Антиспам отбил — не считаем действием
                     actions += 1
                     reset_watchdog()  # Успешное действие
                     consecutive_no_units = 0
@@ -1264,7 +1316,9 @@ class DungeonRunner:
                     self.attack_count += 1
                     if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
                         self._collect_loot_via_refresher()
-                    time.sleep(ATTACK_CD)
+                    # Фиксированный sleep(ATTACK_CD) убран: интервал держит
+                    # _pace_before_action по фактическому времени (перезагрузка
+                    # страницы уже в него входит) — бой быстрее и без отбоев
                 else:
                     print(f"[ERR] Attack failed")
                     consecutive_no_units += 1
