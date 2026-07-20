@@ -130,6 +130,39 @@ class CombatParser:
                 })
         return units
 
+    def get_current_target_name(self):
+        """Имя текущей цели боя (шапка справа), или None."""
+        el = self.soup.select_one(".battlefield-head-right .battlefield-head-name")
+        return el.get_text(strip=True) if el else None
+
+    def get_clickable_units(self):
+        """
+        Вражеские юниты на поле (позиции 21-25), по которым можно кликнуть
+        для смены цели. Имя юнита — в title ссылки a.unit-link, AJAX-обработчик
+        зарегистрирован на её id (проверено на живом бое /basin/combat).
+
+        Returns:
+            list: [{"pos": 22, "name": "Малый Титан", "url": "..."}]
+        """
+        units = []
+        for a in self.soup.select("a.unit-link"):
+            url = self._ajax_urls.get(a.get("id"))
+            if not url:
+                continue
+            panel = a.find_parent(class_="combat-entity-panel")
+            unit_el = panel.select_one(".unit") if panel else None
+            if unit_el is None:
+                continue
+            classes = " ".join(unit_el.get("class", []))
+            m = re.search(r"_unit-pos-(\d+)", classes)
+            if not m:
+                continue
+            pos = int(m.group(1))
+            if not (21 <= pos <= 25):
+                continue
+            units.append({"pos": pos, "name": a.get("title") or "", "url": url})
+        return units
+
     def get_enemy_hp(self):
         """Возвращает текущий HP врага (из шапки справа)
 

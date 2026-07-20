@@ -26,6 +26,23 @@ from requests_bot import config as config_module  # Для доступа к ONL
 from requests_bot.logger import log_info, log_debug, log_error, log_warning
 
 
+# Таргет-правила особых данжей: кого НЕ бить и кого фокусить.
+# Некрополь (2026-07-20, разведка юзера за Пупупу): центральный Нефилим с
+# 1.5B HP — обманка, его убить нельзя (боты ковыряли его до лимита действий и
+# сливались). Правильно: выносить волны титанов на поле, после них появляется
+# Сердце Титана (4.5K HP) — его смерть завершает данж. Нефилима не трогаем.
+DUNGEON_TARGET_RULES = {
+    "dng:Necropolis": {
+        "banned": {"Нефилим"},
+        "priority": {"Сердце Титана"},
+    },
+}
+
+# Сколько неудачных кликов смены цели подряд терпим, прежде чем перестать
+# дёргать правила в этом бою (защита от бесконечного цикла кликов)
+TARGET_RULE_MAX_FAILS = 8
+
+
 class DungeonRunner:
     """Полное прохождение данжена"""
 
@@ -51,6 +68,8 @@ class DungeonRunner:
         # Ловим identity (is not) — requests возвращает новую строку на каждый resp.text.
         self._cached_parser = None
         self._cached_parser_html = None
+
+        self._target_rule_fails = 0  # Неудачные смены цели подряд (таргет-правила)
 
         # Защита от зацикливания входа в данж: если API говорит "готов",
         # но landing-страница не даёт кнопку Войти — бот может крутиться бесконечно.
@@ -1041,8 +1060,53 @@ class DungeonRunner:
         print("[EVENT] Не удалось активировать Печать за 10 попыток")
         return False
 
+    def _apply_target_rules(self, parser):
+        """
+        Смена цели по правилам данжа (DUNGEON_TARGET_RULES): не бить запрещённых
+        (Нефилим в Некрополе), фокусить приоритетных (Сердце Титана).
+
+        Returns:
+            bool: True если кликнули смену цели (страница обновлена, нужен
+                  новый круг цикла), False — цель ок или переключить не вышло.
+        """
+        rules = DUNGEON_TARGET_RULES.get(self.current_dungeon_id)
+        if not rules or self._target_rule_fails >= TARGET_RULE_MAX_FAILS:
+            return False
+
+        banned = rules.get("banned", set())
+        priority = rules.get("priority", set())
+        current = parser.get_current_target_name()
+
+        units = parser.get_clickable_units()
+        priority_unit = next((u for u in units if u["name"] in priority), None)
+
+        # Цель уже правильная — сбрасываем счётчик неудач
+        if current in priority or (current not in banned and priority_unit is None):
+            self._target_rule_fails = 0
+            return False
+
+        # Выбираем кого кликнуть: приоритет > любой не запрещённый
+        target = priority_unit
+        if target is None:
+            target = next(
+                (u for u in units if u["name"] and u["name"] not in banned), None)
+        if target is None:
+            # Переключаться не на кого (между волнами) — бьём что есть,
+            # чтобы не встал watchdog и продолжал тикать сбор лута
+            return False
+
+        self._target_rule_fails += 1  # Сбросится когда увидим правильную цель
+        resp = self._make_ajax_request(target["url"])
+        if resp and resp.status_code == 200:
+            print(f"[TARGET] Смена цели: {current} -> {target['name']} (поз. {target['pos']})")
+            time.sleep(0.3)
+            self.client.get(self.combat_url)
+            return True
+        return False
+
     def fight_until_done(self, max_actions=None):
         """Бьёмся до конца данжена"""
+        self._target_rule_fails = 0
         # Определяем лимит действий для этого данжена
         if max_actions is None:
             max_actions = DUNGEON_ACTION_LIMITS.get(
@@ -1126,16 +1190,26 @@ class DungeonRunner:
             if self.check_and_use_stalker_seal():
                 continue  # После активации печати продолжаем бой
 
+            # Таргет-правила данжа (Некрополь: не бить Нефилима, фокус — Сердце)
+            if self._apply_target_rules(parser):
+                continue  # Цель сменили, страница обновлена — новый круг
+
             # Показываем врагов
             units = parser.get_units_info()
             if units and actions % 10 == 0:  # Каждые 10 действий
                 enemies = ", ".join([u["name"] for u in units])
                 print(f"[*] Enemies: {enemies}")
 
+            # Не жжём скиллы по запрещённой цели (Нефилим 1.5B — только
+            # автоатака для поддержания боя, КД скиллов бережём для волн)
+            _rules = DUNGEON_TARGET_RULES.get(self.current_dungeon_id)
+            target_banned = bool(
+                _rules and parser.get_current_target_name() in _rules.get("banned", set()))
+
             # Пробуем скиллы если GCD прошёл
             now = time.time()
             skill_used = False
-            if (now - last_gcd_time) >= GCD:
+            if (now - last_gcd_time) >= GCD and not target_banned:
                 ready_skills = parser.get_ready_skills()
                 # Получаем HP врага и пороги скиллов
                 enemy_hp = parser.get_enemy_hp()
