@@ -1496,18 +1496,35 @@ class CyclicCraftClient(IronCraftClient):
         # (атомарно под file-lock, кап гарантирует ровно 1 бота).
         try:
             import time as _time
-            from requests_bot.craft_prices import (
-                AUTO_SELECT_EXCLUDED, FINAL_RECIPES,
-                _find_open_probe_recipe, load_craft_locks,
+            from requests_bot import craft_prices as _cp
+
+            # Авто-ребаланс капов по спросу (реально срабатывает раз в сутки,
+            # кто из ботов первый дошёл до границы партии — тот и пересчитал)
+            for decision in _cp.maybe_rebalance():
+                log_info(f"[CRAFT] Авторебаланс: {decision}")
+
+            excluded = _cp.get_excluded()
+            caps = _cp.get_caps()
+            locks = _cp.load_craft_locks()
+            now = _time.time()
+            fresh_same = sum(
+                1 for li in locks.values()
+                if li.get("recipe_id") == item_id
+                and now - li.get("timestamp", 0) <= _cp.LOCK_TTL
             )
-            if item_id in AUTO_SELECT_EXCLUDED or item_id not in FINAL_RECIPES:
+            cap = caps.get(item_id)
+            if item_id in excluded or item_id not in _cp.FINAL_RECIPES:
                 # Рецепт выведен из ротации (протухает/удалён) — уходим с него,
                 # даже если свободных probe-слотов нет: acquire_craft_lock увидит
                 # исключённый рецепт в локе и выберет новый по распределению.
                 log_info(f"[CRAFT] Рецепт '{item_id}' исключён из ротации — перевыберу рецепт")
                 self._selected_recipe = None
+            elif cap is not None and fresh_same > cap:
+                # Кап срезали — лишние уходят по одному на границах партий
+                log_info(f"[CRAFT] На '{item_id}' ботов больше капа ({fresh_same}>{cap}) — перевыберу рецепт")
+                self._selected_recipe = None
             else:
-                probe = _find_open_probe_recipe(load_craft_locks(), _time.time(), item_id)
+                probe = _cp._find_open_probe_recipe(locks, now, item_id)
                 if probe:
                     log_info(f"[CRAFT] Свободен probe-слот '{probe}' выгоднее '{item_id}' — перевыберу рецепт")
                     self._selected_recipe = None

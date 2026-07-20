@@ -113,6 +113,10 @@ AUTO_SELECT_EXCLUDED = {"platinumBar", "copper", "copperBar"}
 #   → масштабируем, протухает → обратно в EXCLUDED.
 # 2026-07-20: проба бронзы удалась — sell-through 82% (лучший из крафта),
 #   0 проблем за неделю → cap 1→2. copper/copperBar ушли в EXCLUDED (см. выше).
+# 2026-07-20 (v2): константы ниже — только СИД для craft_caps.json при первом
+#   создании. Живой источник правды — craft_caps.json (get_caps/get_excluded),
+#   его правит авто-ребаланс (maybe_rebalance) или человек руками; боты
+#   перечитывают файл на каждой границе партии — рестарты не нужны.
 RECIPE_BOT_CAP = {
     "iron": 6,        # топ-earner, но 52% спрос при 9 фактических ботах — не растим
     "rawOre": 7,      # спрос 60%, дёшево/быстро
@@ -120,10 +124,170 @@ RECIPE_BOT_CAP = {
 }
 
 
+# ============================================
+# Динамические капы (craft_caps.json) + авто-ребаланс
+# ============================================
+CRAFT_CAPS_FILE = os.path.join(SCRIPT_DIR, "craft_caps.json")
+CRAFT_CAPS_LOCKFILE = os.path.join(SCRIPT_DIR, "craft_caps.lock")
+SALES_STATS_FILE = os.path.join(SCRIPT_DIR, "profiles", "sales_stats.json")
+
+REBALANCE_INTERVAL = 24 * 3600   # решения не чаще раза в сутки
+REBALANCE_WINDOW_DAYS = 3        # окно статистики продаж
+REBALANCE_MIN_LOTS = 10          # меньше лотов — не решаем, мало данных
+ST_SCALE_UP = 0.75               # спрос выше — +1 слот
+ST_SCALE_DOWN = 0.40             # спрос ниже — -1 слот
+ST_EXCLUDE = 0.25                # спрос ниже при cap<=1 — рецепт в исключения
+CAP_HARD_MAX = 8                 # потолок слотов на рецепт
+
+_caps_cache = {"mtime": None, "data": None}
+
+
+def _seed_caps_data():
+    return {
+        "caps": dict(RECIPE_BOT_CAP),
+        "excluded": sorted(AUTO_SELECT_EXCLUDED),
+        "last_rebalance": 0,
+        "log": [],
+    }
+
+
+def _read_caps_file():
+    """craft_caps.json с кэшем по mtime; нет файла — сид из констант."""
+    try:
+        mtime = os.path.getmtime(CRAFT_CAPS_FILE)
+        if _caps_cache["mtime"] == mtime and _caps_cache["data"] is not None:
+            return _caps_cache["data"]
+        with open(CRAFT_CAPS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        _caps_cache["mtime"] = mtime
+        _caps_cache["data"] = data
+        return data
+    except Exception:
+        return _seed_caps_data()
+
+
+def get_caps():
+    """Живые капы {recipe_id: N}. Рецепт без капа — без лимита (распределение)."""
+    return dict(_read_caps_file().get("caps") or {})
+
+
+def get_excluded():
+    """Живой набор исключённых из автовыбора рецептов."""
+    return set(_read_caps_file().get("excluded") or [])
+
+
+def _sales_window_lots(days):
+    """(sold, expired): {item_name: лотов} за окно, трансферы не считаются."""
+    sold, expired = {}, {}
+    try:
+        import datetime as _dt
+        since = (_dt.datetime.now() - _dt.timedelta(days=days)).isoformat()
+        with open(SALES_STATS_FILE, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        _norm = lambda n: re.sub(r"\s*x\d+$", "", str(n))
+        for r in d.get("sold", []):
+            if not r.get("transfer") and str(r.get("timestamp", "")) >= since:
+                k = _norm(r.get("item"))
+                sold[k] = sold.get(k, 0) + 1
+        for r in d.get("expired", []):
+            if str(r.get("timestamp", "")) >= since:
+                k = _norm(r.get("item"))
+                expired[k] = expired.get(k, 0) + 1
+    except Exception as e:
+        print(f"[CRAFT_CAPS] Ошибка чтения статистики продаж: {e}")
+    return sold, expired
+
+
+def maybe_rebalance():
+    """
+    Авто-ребаланс капов по реальному спросу. Дёргается любым ботом на границе
+    партии; реально пересчитывает максимум раз в сутки (кто первый успел —
+    тот и решил, остальные видят свежий last_rebalance и выходят).
+
+    Гистерезис против раскачки: 1 шаг на рецепт в сутки, окно 3 дня,
+    минимум 10 лотов для решения. Возврат из excluded — только руками.
+
+    Returns:
+        list[str]: принятые решения (для лога бота), [] если ничего.
+    """
+    decisions = []
+    try:
+        with FileLock(CRAFT_CAPS_LOCKFILE):
+            if not os.path.exists(CRAFT_CAPS_FILE):
+                # Первый запуск: создаём файл из констант, решения — через сутки
+                # (свежим слотам надо накопить статистику).
+                data = _seed_caps_data()
+                data["last_rebalance"] = time.time()
+                _write_caps(data)
+                print("[CRAFT_CAPS] Создан craft_caps.json (сид из констант)")
+                return []
+
+            data = _read_caps_file()
+            now = time.time()
+            if now - data.get("last_rebalance", 0) < REBALANCE_INTERVAL:
+                return []
+
+            caps = dict(data.get("caps") or {})
+            excluded = set(data.get("excluded") or [])
+            sold, expired = _sales_window_lots(REBALANCE_WINDOW_DAYS)
+            bot_counts = get_recipe_bot_counts()
+
+            for recipe_id in FINAL_RECIPES:
+                if recipe_id in excluded or recipe_id not in RECIPES:
+                    continue
+                item_name = RECIPES[recipe_id].get("name")
+                s = sold.get(item_name, 0)
+                e = expired.get(item_name, 0)
+                lots = s + e
+                if lots < REBALANCE_MIN_LOTS:
+                    continue
+                st = s / lots
+                cap = caps.get(recipe_id)
+                if st >= ST_SCALE_UP:
+                    if cap is not None and cap < CAP_HARD_MAX:
+                        caps[recipe_id] = cap + 1
+                        decisions.append(
+                            f"{recipe_id}: спрос {st:.0%} ({s}/{lots}) -> cap {cap}->{cap + 1}")
+                elif st < ST_EXCLUDE and (cap if cap is not None else bot_counts.get(recipe_id, 0)) <= 1:
+                    excluded.add(recipe_id)
+                    caps.pop(recipe_id, None)
+                    decisions.append(
+                        f"{recipe_id}: спрос {st:.0%} ({s}/{lots}) -> в исключения")
+                elif st < ST_SCALE_DOWN:
+                    base = cap if cap is not None else bot_counts.get(recipe_id, 0)
+                    if base > 1:
+                        caps[recipe_id] = base - 1
+                        decisions.append(
+                            f"{recipe_id}: спрос {st:.0%} ({s}/{lots}) -> cap {base}->{base - 1}")
+
+            data["caps"] = caps
+            data["excluded"] = sorted(excluded)
+            data["last_rebalance"] = now
+            if decisions:
+                import datetime as _dt
+                stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                data.setdefault("log", []).extend(f"[{stamp}] {d}" for d in decisions)
+                data["log"] = data["log"][-50:]
+            _write_caps(data)
+            for d in decisions:
+                print(f"[CRAFT_CAPS] Ребаланс: {d}")
+    except Exception as e:
+        print(f"[CRAFT_CAPS] Ошибка ребаланса: {e}")
+        return []
+    return decisions
+
+
+def _write_caps(data):
+    with open(CRAFT_CAPS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    _caps_cache["mtime"] = None  # сброс кэша — перечитаем при следующем запросе
+
+
 def get_bot_cap(recipe_id):
-    """Жёсткий лимит ботов на рецепт: probe-override или time-based по умолчанию."""
-    if recipe_id in RECIPE_BOT_CAP:
-        return RECIPE_BOT_CAP[recipe_id]
+    """Жёсткий лимит ботов на рецепт: живой кап из craft_caps.json или time-based."""
+    caps = get_caps()
+    if recipe_id in caps:
+        return caps[recipe_id]
     return get_max_bots_for_recipe(recipe_id)
 
 
@@ -248,8 +412,9 @@ def get_profitable_recipes():
     """
     sorted_recipes = get_sorted_recipes_by_profit()
 
-    # Исключаем рецепты из автовыбора
-    sorted_recipes = [(r, p) for r, p in sorted_recipes if r not in AUTO_SELECT_EXCLUDED]
+    # Исключаем рецепты из автовыбора (живой список из craft_caps.json)
+    excluded = get_excluded()
+    sorted_recipes = [(r, p) for r, p in sorted_recipes if r not in excluded]
 
     # Считаем средний профит среди положительных
     profits = [p for _, p in sorted_recipes if p > 0]
@@ -392,8 +557,10 @@ def _find_open_probe_recipe(locks, now, current_recipe):
     Кап гарантирует, что переключится ровно 1 бот (дальше слот занят, остальные
     продлевают как обычно).
     """
-    if not RECIPE_BOT_CAP:
+    caps = get_caps()
+    if not caps:
         return None
+    excluded = get_excluded()
     counts = {}
     for _p, li in locks.items():
         r = li.get("recipe_id")
@@ -401,8 +568,8 @@ def _find_open_probe_recipe(locks, now, current_recipe):
             counts[r] = counts.get(r, 0) + 1
     profit = dict(get_sorted_recipes_by_profit())
     cur_profit = profit.get(current_recipe, 0)
-    for r, cap in RECIPE_BOT_CAP.items():
-        if r in AUTO_SELECT_EXCLUDED or r not in FINAL_RECIPES:
+    for r, cap in caps.items():
+        if r in excluded or r not in FINAL_RECIPES:
             continue
         if counts.get(r, 0) < cap and profit.get(r, 0) > cur_profit:
             return r
@@ -433,17 +600,32 @@ def acquire_craft_lock(profile):
             locks = load_craft_locks()
             now = time.time()
 
+            excluded_now = get_excluded()
+            caps_now = get_caps()
+
             # Проверяем - может у нас уже есть активный лок?
             if profile in locks:
                 lock_info = locks[profile]
                 if now - lock_info.get("timestamp", 0) <= LOCK_TTL:
                     recipe_id = lock_info.get("recipe_id")
+                    # Считаем других свежих ботов на этом же рецепте (для капа)
+                    same_others = sum(
+                        1 for p2, li in locks.items()
+                        if p2 != profile and li.get("recipe_id") == recipe_id
+                        and now - li.get("timestamp", 0) <= LOCK_TTL
+                    )
+                    cap = caps_now.get(recipe_id)
                     # Если рецепт в исключениях ИЛИ уже не в FINAL_RECIPES
                     # (был удалён из списка автовыбора) — сбрасываем лок и выбираем заново.
-                    if recipe_id in AUTO_SELECT_EXCLUDED:
+                    if recipe_id in excluded_now:
                         print(f"[CRAFT_LOCKS] {profile}: {recipe_id} в исключениях, выбираю другой")
                     elif recipe_id not in FINAL_RECIPES:
                         print(f"[CRAFT_LOCKS] {profile}: {recipe_id} больше не в FINAL_RECIPES, выбираю другой")
+                    elif cap is not None and same_others + 1 > cap:
+                        # Кап срезали (авто-ребаланс/руками) — лишние боты уходят
+                        # по одному: первый на границе партии перевыбирает, у
+                        # остальных счёт становится <= cap и они остаются.
+                        print(f"[CRAFT_LOCKS] {profile}: на {recipe_id} перебор по капу ({same_others + 1}>{cap}) — перевыбираю")
                     else:
                         # Уступаем свободному probe-слоту более выгодного рецепта
                         # (иначе новый probe-рецепт никогда не активируется — все
@@ -469,14 +651,14 @@ def acquire_craft_lock(profile):
 
             # Получаем рецепты отсортированные по профиту (без исключённых)
             sorted_recipes = get_sorted_recipes_by_profit()
-            sorted_recipes = [(r, p) for r, p in sorted_recipes if r not in AUTO_SELECT_EXCLUDED]
+            sorted_recipes = [(r, p) for r, p in sorted_recipes if r not in excluded_now]
 
-            # PROBE-лимит: рецепты с жёстким капом (RECIPE_BOT_CAP), уже забившие
+            # Кап-лимит: рецепты с живым капом (craft_caps.json), уже забившие
             # его, убираем из выбора — чтобы новый предмет не наспамили все боты.
-            # Остальные рецепты (без override) распределяются как раньше.
+            # Остальные рецепты (без капа) распределяются как раньше.
             sorted_recipes = [
                 (r, p) for r, p in sorted_recipes
-                if r not in RECIPE_BOT_CAP or bot_counts.get(r, 0) < RECIPE_BOT_CAP[r]
+                if r not in caps_now or bot_counts.get(r, 0) < caps_now[r]
             ]
 
             # Находим минимальное кол-во ботов среди доступных рецептов
