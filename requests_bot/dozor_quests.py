@@ -31,7 +31,7 @@ import time
 
 from requests_bot.logger import log_info, log_warning, log_debug
 from requests_bot.tavern_quests import (
-    API_HEADERS, _get_tavern_api, _accept, _quest_state,
+    API_HEADERS, _get_tavern_api, _accept,
 )
 
 DOZOR_PREFIX = "qDozorDaily"
@@ -78,6 +78,16 @@ def _fetch_dozor_quests(client, urls):
             if q.get("id", "").startswith(DOZOR_PREFIX):
                 quests.append(q)
     return quests
+
+
+def _quest_state(client, urls, quest_id):
+    """Статус/прогресс дозор-квеста. None если исчез из списка.
+    НЕ tavern_quests._quest_state — тот фильтрует список по маркеру Karavan
+    и для дозоров всегда возвращал бы None."""
+    for q in _fetch_dozor_quests(client, urls) or []:
+        if q.get("id") == quest_id:
+            return q
+    return None
 
 
 def _travel_to_dozor_city(client):
