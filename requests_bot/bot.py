@@ -1127,6 +1127,15 @@ class VMMOBot:
             except Exception as e:
                 log_warning(f"[TAVERN] Ошибка караванов: {e}")
 
+            # Дэйли-дозоры таверны (не чаще раза в 3ч, см. dozor_quests)
+            try:
+                from requests_bot.dozor_quests import run_dozor_quests
+                dozor_done = run_dozor_quests(self.client, self.dungeon_runner)
+                if dozor_done:
+                    log_info(f"[DOZOR] Дозоры: сделано {dozor_done} квестов во время КД")
+            except Exception as e:
+                log_warning(f"[DOZOR] Ошибка дозоров: {e}")
+
             # Выбираем чем заняться
             min_cd, _ = self.get_min_dungeon_cooldown()
 

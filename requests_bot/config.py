@@ -405,6 +405,11 @@ def is_tavern_caravans_enabled():
     return _profile_config.get("tavern_caravans_enabled", True)
 
 
+def is_dozor_enabled():
+    """Дэйли-дозоры таверны (dozor_quests.py). Дефолт: включено."""
+    return _profile_config.get("dozor_enabled", True)
+
+
 def is_valentine_event_enabled():
     """Проверяет, включен ли февральский ивент-данж для текущего профиля"""
     return _profile_config.get("valentine_event_enabled", False)
