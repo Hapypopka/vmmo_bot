@@ -6,17 +6,30 @@
 {% macro render_bot_card(bot, rank=0) %}
 <div class="card bot-card {{ bot.status }}">
     <div class="bot-card-header">
-        <div class="bot-name-wrapper">
-            {% if rank == 1 %}
-            <span class="rank-badge rank-1" title="Топ-1 по доходу">🥇</span>
-            {% elif rank == 2 %}
-            <span class="rank-badge rank-2" title="Топ-2 по доходу">🥈</span>
-            {% elif rank == 3 %}
-            <span class="rank-badge rank-3" title="Топ-3 по доходу">🥉</span>
-            {% endif %}
-            <span class="bot-name">{{ bot.name }}</span>
-            {% if bot.is_main %}
-            <span class="badge-main">MAIN</span>
+        <div class="bot-name-block">
+            <div class="bot-name-wrapper">
+                {% if rank == 1 %}
+                <span class="rank-badge rank-1" title="Топ-1 по доходу">🥇</span>
+                {% elif rank == 2 %}
+                <span class="rank-badge rank-2" title="Топ-2 по доходу">🥈</span>
+                {% elif rank == 3 %}
+                <span class="rank-badge rank-3" title="Топ-3 по доходу">🥉</span>
+                {% endif %}
+                <span class="bot-name">{{ bot.name }}</span>
+                {% if bot.is_main %}
+                <span class="badge-main">MAIN</span>
+                {% endif %}
+                {% if bot.char_info and bot.char_info.level %}
+                <span class="char-chip char-side-{{ bot.char_info.side }}"
+                      title="{{ bot.char_info.side_label }} {{ bot.char_info.class }}{% if bot.char_info.title %} — {{ bot.char_info.title }}{% endif %}">
+                    {{ bot.char_info.side_icon }}{% if bot.char_info.class %} {{ bot.char_info.class }}{% endif %} · {{ bot.char_info.level }} ур.
+                </span>
+                {% endif %}
+            </div>
+            {% if bot.char_info and bot.char_info.sum_stats %}
+            <div class="char-sumstats" title="Сумма характеристик (без бонусов)">
+                Σ характеристик <strong>{{ '{:,}'.format(bot.char_info.sum_stats).replace(',', ' ') }}</strong>
+            </div>
             {% endif %}
         </div>
         <span class="status status-{{ bot.status }}">
@@ -375,10 +388,54 @@
     .resource-box:hover { border-color: var(--border-active); }
     .resource-box .resource-change { margin-left: 0; }
 
+    .bot-name-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        min-width: 0;
+    }
+
     .bot-name-wrapper {
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .char-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        padding: 0.05rem 0.4rem;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        border: 1px solid var(--border);
+        border-radius: 2px;
+        white-space: nowrap;
+        color: var(--text-3);
+    }
+
+    /* Светлый — золото, Тёмный — фиолет */
+    .char-chip.char-side-1 {
+        color: #d9a441;
+        border-color: rgba(217, 164, 65, 0.4);
+        background: rgba(217, 164, 65, 0.07);
+    }
+    .char-chip.char-side-2 {
+        color: #a878e0;
+        border-color: rgba(168, 120, 224, 0.4);
+        background: rgba(168, 120, 224, 0.08);
+    }
+
+    .char-sumstats {
+        font-size: 11px;
+        color: var(--text-3);
+        letter-spacing: 0.02em;
+    }
+    .char-sumstats strong {
+        color: var(--amber);
+        font-weight: 700;
     }
 
     .bot-name-wrapper .rank-badge {

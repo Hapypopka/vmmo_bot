@@ -310,6 +310,34 @@ def get_resources(profile):
     return {}
 
 
+def get_char_info(profile):
+    """Загружает «паспорт» персонажа (сторона/класс/уровень/сумма характеристик).
+
+    Пишется ботом в profiles/<char>/char_info.json (см. char_info.py).
+    Добавляет удобные для шаблона поля side_label/side_icon.
+    """
+    path = os.path.join(PROFILES_DIR, profile, "char_info.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            info = json.load(f)
+    except Exception:
+        return None
+
+    side = info.get("side")
+    if side == 1:
+        info["side_label"] = "Светлый"
+        info["side_icon"] = "☀️"
+    elif side == 2:
+        info["side_label"] = "Тёмный"
+        info["side_icon"] = "🌑"
+    else:
+        info["side_label"] = ""
+        info["side_icon"] = ""
+    return info
+
+
 def get_bot_status(profile):
     """Проверяет статус бота"""
     lock_file = os.path.join(PROFILES_DIR, profile, ".lock")
@@ -461,6 +489,7 @@ def get_all_stats():
             "config": config,
             "is_main": config.get("is_main", False),
             "craft": craft_info,
+            "char_info": get_char_info(profile),
         }
 
         resources = get_resources(profile)
@@ -1226,9 +1255,18 @@ def api_restart_bot(profile):
 @app.route("/api/bot/start_all", methods=["POST"])
 @login_required
 def api_start_all():
-    """API: Запуск всех ботов"""
+    """API: Запуск всех ботов.
+
+    Craft-only боты (Пупупу — получатель золота через аукцион) НЕ трогаем:
+    на его рюкзак/рубины завязан gold_transfer, запускать пачкой нельзя.
+    """
     results = []
     for profile, name in PROFILE_NAMES.items():
+        if get_config(profile).get("craft_only_mode"):
+            results.append({"profile": profile, "name": name,
+                            "success": False, "skipped": True,
+                            "message": "craft-only, пропущен"})
+            continue
         success, msg = start_bot(profile)
         results.append({"profile": profile, "name": name, "success": success, "message": msg})
     return jsonify(results)

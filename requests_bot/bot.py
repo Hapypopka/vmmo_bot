@@ -218,6 +218,15 @@ class VMMOBot:
         self.bot_stats = init_stats()
         print_stats()  # Показываем накопленную статистику
 
+        # Снимок «паспорта» персонажа для веб-панели (сторона/класс/уровень/
+        # сумма характеристик). Дёргает сервер только если снимок протух.
+        try:
+            from requests_bot import char_info
+            if char_info.refresh_if_stale(self.client):
+                log_info("[CHAR] Обновлён паспорт персонажа для панели")
+        except Exception as e:
+            log_debug(f"[CHAR] Не удалось снять паспорт: {e}")
+
         return True
 
     def _init_resources_session(self):
