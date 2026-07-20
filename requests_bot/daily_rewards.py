@@ -7,6 +7,7 @@
 import re
 import os
 import json
+import time
 import random
 from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
@@ -518,85 +519,123 @@ class LibraryClient:
     def __init__(self, client):
         self.client = client
 
+    # Абсолютный потолок открытий за один заход — страховка от бесконечного
+    # цикла, если сервер по какой-то причине не уменьшает счётчик ключей.
+    MAX_OPENS = 30
+    # Пауза между открытиями (антиспам сервера)
+    OPEN_DELAY = 0.9
+
     def _is_library_page(self, html):
         """Проверяет что HTML — это реально страница библиотеки"""
         return "dailygifts" in (self.client.current_url or "") and "Библиотек" in html
 
-    def check_and_collect(self):
-        """Проверяет и открывает бесплатную книгу.
-
-        ВАЖНО: без ключа клик стоит 50 золота! Проверяем ключи перед кликом.
+    def _open_library_page(self):
+        """Заходит на страницу библиотеки (с fallback через город).
 
         Returns:
-            bool: True если книга открыта
+            str | None: HTML страницы библиотеки, либо None если попасть не удалось.
+        """
+        self.client.get(f"{BASE_URL}/dailygifts")
+        html = self.client.current_page or ""
+        if self._is_library_page(html):
+            return html
+
+        # Если персонаж в бою/арене — сервер редиректит на страницу боя.
+        # Пробуем выйти в город и зайти заново.
+        self.client.get(f"{BASE_URL}/city")
+        self.client.get(f"{BASE_URL}/dailygifts")
+        html = self.client.current_page or ""
+        if self._is_library_page(html):
+            return html
+        return None
+
+    def _parse_keys(self, html):
+        """Возвращает число ключей на странице, либо None если счётчик не найден.
+
+        Паттерн: "У тебя <span class="i_book_key"></span> N"
+        """
+        m = re.search(r'<span class="i_book_key"></span>\s*(\d+)', html)
+        return int(m.group(1)) if m else None
+
+    def check_and_collect(self):
+        """Открывает книги в Великой Библиотеке, пока есть ключи.
+
+        ВАЖНО: клик без ключа стоит 50 золота! Число ключей перечитывается
+        перед КАЖДЫМ открытием — как только 0, цикл останавливается. Таким
+        образом выгребаются все накопленные (в т.ч. бонусные) ключи, но ни
+        одного платного клика не делается.
+
+        Returns:
+            bool: True если открыта хотя бы одна книга
         """
         if is_library_collected_today():
-            log_debug("[LIBRARY] Книга уже собрана сегодня (кэш)")
+            log_debug("[LIBRARY] Книги уже собраны сегодня (кэш)")
             return False
 
         log_info("[LIBRARY] Проверяю Великую Библиотеку...")
 
-        # Переходим на страницу библиотеки
-        resp = self.client.get(f"{BASE_URL}/dailygifts")
-        html = self.client.current_page or ""
+        opened = 0
+        cap = self.MAX_OPENS  # уточним после первого чтения счётчика
+        while opened < cap:
+            html = self._open_library_page()
+            if html is None:
+                if opened == 0:
+                    current_url = self.client.current_url or "?"
+                    log_warning(f"[LIBRARY] Не попали на страницу библиотеки (URL: {current_url}), пропускаю до следующего цикла")
+                    return False
+                # Уже что-то открыли, но страница глюкнула — останавливаемся
+                log_warning("[LIBRARY] Страница библиотеки недоступна, останавливаю выгребание ключей")
+                break
 
-        # Проверяем что реально попали на страницу библиотеки
-        # (если персонаж в бою/арене — сервер редиректит на страницу боя)
-        if not self._is_library_page(html):
-            current_url = self.client.current_url or "?"
-            log_warning(f"[LIBRARY] Не попали на страницу библиотеки (URL: {current_url}), пробую через город...")
-            # Пробуем выйти в город и зайти заново
-            self.client.get(f"{BASE_URL}/city")
-            resp = self.client.get(f"{BASE_URL}/dailygifts")
-            html = self.client.current_page or ""
-            if not self._is_library_page(html):
-                current_url = self.client.current_url or "?"
-                log_warning(f"[LIBRARY] Повторно не попали на библиотеку (URL: {current_url}), пропускаю до следующего цикла")
-                return False
+            keys = self._parse_keys(html)
+            if keys is None:
+                if opened == 0:
+                    log_warning("[LIBRARY] Счётчик ключей не найден, помечаю как собранное")
+                    mark_library_collected()
+                    return False
+                log_warning("[LIBRARY] Счётчик ключей пропал со страницы, останавливаюсь")
+                break
 
-        # Проверяем количество ключей
-        # Паттерн: "У тебя <span class="i_book_key"></span> N"
-        key_match = re.search(
-            r'<span class="i_book_key"></span>\s*(\d+)',
-            html
-        )
+            if opened == 0:
+                log_info(f"[LIBRARY] Ключей: {keys}")
+                # Легитимно можно открыть keys книг + 1 бесплатную за день.
+                # +2 запаса, но не выше жёсткого потолка MAX_OPENS.
+                cap = min(self.MAX_OPENS, keys + 2)
 
-        if not key_match:
-            log_warning("[LIBRARY] Счётчик ключей не найден на странице библиотеки, помечаю как собранное")
+            if keys < 1:
+                if opened == 0:
+                    log_info("[LIBRARY] Ключей: 0, пропускаю (клик без ключа стоит 50 золота!)")
+                mark_library_collected()
+                break
+
+            # Ищем ссылки на книги
+            book_links = re.findall(
+                r'<a class="book_link" href="([^"]*ppAction=roll[^"]*)"',
+                html
+            )
+            if not book_links:
+                log_warning("[LIBRARY] Книги не найдены на странице, останавливаюсь")
+                break
+
+            # Выбираем случайную книгу
+            book_href = random.choice(book_links).replace("&amp;", "&")
+            if not book_href.startswith("http"):
+                book_href = urljoin(self.client.current_url, book_href)
+
+            num_match = re.search(r'num=(\d+)', book_href)
+            book_num = num_match.group(1) if num_match else "?"
+
+            log_info(f"[LIBRARY] Открываю книгу #{book_num} (осталось ключей: {keys})...")
+            self.client.get(book_href)
+            opened += 1
+            log_info(f"[LIBRARY] Книга #{book_num} открыта! Всего за заход: {opened}")
+
+            time.sleep(self.OPEN_DELAY)
+
+        if opened:
             mark_library_collected()
-            return False
-
-        keys = int(key_match.group(1))
-        if keys < 1:
-            log_info("[LIBRARY] Ключей: 0, пропускаю (клик без ключа стоит 50 золота!)")
-            mark_library_collected()
-            return False
-
-        log_info(f"[LIBRARY] Ключей: {keys}")
-
-        # Ищем ссылки на книги
-        book_links = re.findall(
-            r'<a class="book_link" href="([^"]*ppAction=roll[^"]*)"',
-            html
-        )
-        if not book_links:
-            log_warning("[LIBRARY] Книги не найдены на странице")
-            return False
-
-        # Выбираем случайную книгу
-        book_href = random.choice(book_links).replace("&amp;", "&")
-        if not book_href.startswith("http"):
-            book_href = urljoin(self.client.current_url, book_href)
-
-        num_match = re.search(r'num=(\d+)', book_href)
-        book_num = num_match.group(1) if num_match else "?"
-
-        log_info(f"[LIBRARY] Открываю книгу #{book_num}...")
-        self.client.get(book_href)
-
-        mark_library_collected()
-        log_info(f"[LIBRARY] Книга #{book_num} открыта!")
-        return True
+            log_info(f"[LIBRARY] Готово, открыто книг за заход: {opened}")
+        return opened > 0
 
 
 def test_daily_rewards(client, collect=False):
