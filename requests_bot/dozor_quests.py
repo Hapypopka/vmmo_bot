@@ -38,8 +38,11 @@ DOZOR_PREFIX = "qDozorDaily"
 DOZOR_CITY = "_igles"       # единственный город, где дозор есть у обеих фракций
 CHECK_INTERVAL = 3 * 3600   # дэйли — чаще раза в 3ч смотреть смысла нет
 DONE_TTL = 23 * 3600        # цепочка сделана — до завтра не дёргаемся
-MAX_QUESTS_PER_RUN = 12     # цепочка = 8 звеньев, с запасом
-MAX_FIGHTS_PER_QUEST = 3    # реально хватает одного боя на звено
+MAX_QUESTS_PER_RUN = 12     # цепочка = 7-8 звеньев, с запасом
+# Прогресс «тушек» = число УБИТЫХ МОБОВ. Сильный чар сносит поле целиком и
+# закрывает 20/20 одним боем; слабому падает 2-3 за бой — нужна серия.
+# Стоп-краны: stall-детект (прогресс не растёт 2 боя подряд) + лимит серии.
+MAX_FIGHTS_PER_QUEST = 25
 
 
 def _cache_file():
@@ -192,14 +195,33 @@ def _run_chain(client, urls, dungeon_runner, start_qid):
         if state.get("status") == "none":
             _accept(client, urls, qid)
             state = _quest_state(client, urls, qid)
-        # Бои до закрытия прогресса (реально хватает одного)
+            if state is None or state.get("status") == "none":
+                # accept не активировал квест — не жжём бои впустую
+                # (киллы непринятого квеста в прогресс не идут!)
+                log_warning(f"[DOZOR] {qid}: accept не активировал квест — пропуск")
+                return done, "error"
+        # Серия боёв до закрытия прогресса. Слабым чарам падает 2-3 тушки
+        # за бой. Re-accept перед каждым боем — как у караванов «кнопка
+        # Приступить»: двигает этап и переспавнивает поле после победы.
+        last_progress = -1
+        stall = 0
         for _ in range(MAX_FIGHTS_PER_QUEST):
             state = state or _quest_state(client, urls, qid)
             if state is None or state.get("status") == "complete":
                 break
             prog = state.get("progress") or {}
-            if prog.get("current", 0) >= prog.get("total", 1):
+            cur = prog.get("current", 0)
+            if cur >= prog.get("total", 1):
                 break
+            if cur <= last_progress:
+                stall += 1
+                if stall >= 2:
+                    log_warning(f"[DOZOR] {qid}: прогресс застрял на {cur} — откладываю")
+                    return done, "stall"
+            else:
+                stall = 0
+            last_progress = cur
+            _accept(client, urls, qid)
             outcome = _fight(client, dungeon_runner, qid)
             if outcome == "died":
                 return done, "died"
@@ -284,8 +306,16 @@ def run_dozor_quests(client, dungeon_runner, force=False):
                 log_warning(f"[DOZOR] Ошибка цепочки {q.get('id')}: {e}")
 
         if total:
-            cache["last_completed"] = now
             log_info(f"[DOZOR] Дозоры: сделано квестов: {total}")
+        # last_completed — только когда дозоров не осталось (всё сдано).
+        # Иначе недоделанный хвост (смерть/застрял) 23 часа считался бы
+        # «сделанным сегодня» и не доделывался.
+        try:
+            leftovers = _fetch_dozor_quests(client, urls)
+            if total and not leftovers:
+                cache["last_completed"] = now
+        except Exception:
+            pass
         cache["next_check"] = now + CHECK_INTERVAL
         _save_cache(cache)
         return total
