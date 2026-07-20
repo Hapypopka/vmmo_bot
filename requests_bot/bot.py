@@ -225,20 +225,46 @@ class VMMOBot:
         # ВСЕГДА сбрасываем время при старте бота
         reset_session_time()
 
-        try:
-            self.backpack_client.open_backpack()
-            resources = parse_resources(self.client.current_page)
-            if resources:
-                start_session(resources)
-                log_info(f"[RESOURCES] Старт сессии: {resources}")
+        # До 3 попыток снять свежий снимок ресурсов. Без него старт сессии
+        # остаётся на значениях ПРОШЛОЙ сессии, и если юзер между рестартами
+        # тратил/переводил золото руками — з/час весь день врёт («работает
+        # со 2-го раза»). Частая причина фейла: /city при старте перехвачен
+        # попапом/наградой, меню без ссылки на рюкзак, fallback GET /rack
+        # отдаёт 404-дракона.
+        resources = None
+        for attempt in range(1, 4):
+            try:
+                self.backpack_client.open_backpack()
+                resources = parse_resources(self.client.current_page)
+                if resources:
+                    break
+                log_warning(
+                    f"[RESOURCES] Попытка {attempt}/3: ресурсы не распарсились "
+                    f"(URL: {self.client.current_url})")
+                # Разгребаем попапы — они прячут меню города
+                try:
+                    if self.popups_client:
+                        self.popups_client.close_all_popups()
+                except Exception:
+                    pass
+                time.sleep(2)
+            except Exception as e:
+                log_warning(f"[RESOURCES] Попытка {attempt}/3: {e}")
+                time.sleep(2)
 
-                # Сохраняем в историю
+        if resources:
+            start_session(resources)
+            log_info(f"[RESOURCES] Старт сессии: {resources}")
+
+            # Сохраняем в историю
+            try:
                 session_id, _ = start_bot_session(resources)
                 self._history_session_id = session_id
-            else:
-                log_warning(f"[RESOURCES] Не удалось распарсить ресурсы! URL: {self.client.current_url}")
-        except Exception as e:
-            log_warning(f"[RESOURCES] Ошибка инициализации: {e}")
+            except Exception as e:
+                log_warning(f"[RESOURCES] Ошибка истории сессий: {e}")
+        else:
+            log_warning("[RESOURCES] Свежий снимок не снят за 3 попытки — "
+                        "точка отсчёта осталась от прошлой сессии!")
 
     def check_craft(self):
         """

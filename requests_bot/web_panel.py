@@ -660,8 +660,30 @@ def save_unprotected_items(items):
         return False
 
 
+def _reset_dungeon_entry(data):
+    """
+    Полный сброс данжа: история смертей + игровые локи, не только кэш-флаги.
+
+    С 2026-07-10 сложность/скип ВЫЧИСЛЯЮТСЯ из истории смертей
+    (config.get_dungeon_difficulty) — сбрасывать только skipped/current_difficulty
+    бесполезно: лесенка тут же пересчитает и вернёт скип обратно. Именно из-за
+    этого кнопка «Сбросить скипы» выглядела неработающей.
+
+    Returns:
+        bool: True если у данжа было что сбрасывать
+    """
+    had_something = bool(
+        data.get("deaths") or data.get("skipped") or data.get("locked_at"))
+    data["deaths"] = []
+    data["skipped"] = False
+    data["current_difficulty"] = "brutal"
+    for k in ("lock_reason", "lock_detail", "locked_at"):
+        data.pop(k, None)
+    return had_something
+
+
 def reset_all_skips():
-    """Сбрасывает все скипы данжей у всех персонажей"""
+    """Сбрасывает все скипы данжей у всех персонажей (вместе с историей смертей)"""
     results = []
     for profile in PROFILE_NAMES.keys():
         deaths_file = os.path.join(PROFILES_DIR, profile, "deaths.json")
@@ -672,20 +694,16 @@ def reset_all_skips():
                 with open(deaths_file, "r", encoding="utf-8") as f:
                     deaths = json.load(f)
 
-                skipped_count = sum(1 for d in deaths.values() if d.get("skipped", False))
+                reset_count = 0
+                for dungeon_id, data in deaths.items():
+                    if isinstance(data, dict) and _reset_dungeon_entry(data):
+                        reset_count += 1
 
-                if skipped_count > 0:
-                    for dungeon_id, data in deaths.items():
-                        if data.get("skipped", False):
-                            data["skipped"] = False
-                            data["current_difficulty"] = "brutal"
-
+                if reset_count > 0:
                     with open(deaths_file, "w", encoding="utf-8") as f:
                         json.dump(deaths, f, ensure_ascii=False, indent=2)
 
-                    results.append({"profile": profile, "name": name, "reset": skipped_count})
-                else:
-                    results.append({"profile": profile, "name": name, "reset": 0})
+                results.append({"profile": profile, "name": name, "reset": reset_count})
             except Exception as e:
                 results.append({"profile": profile, "name": name, "error": str(e)})
         else:
@@ -1472,13 +1490,12 @@ def api_delete_dungeon_deaths(profile, dungeon_id):
 @app.route("/api/deaths/<profile>/reset_skips", methods=["POST"])
 @login_required
 def api_reset_skips_profile(profile):
-    """API: Сбросить только скипы данжей (сохранить историю смертей)"""
+    """API: Сбросить скипы данжей профиля (вместе с историей смертей —
+    иначе лесенка пересчитает скип из истории и вернёт его)"""
     deaths = get_deaths(profile)
     reset_count = 0
     for dungeon_id, data in deaths.items():
-        if data.get("skipped", False):
-            data["skipped"] = False
-            data["current_difficulty"] = "brutal"
+        if isinstance(data, dict) and _reset_dungeon_entry(data):
             reset_count += 1
     if reset_count > 0:
         save_deaths(profile, deaths)
