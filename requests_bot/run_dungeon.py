@@ -1310,15 +1310,20 @@ class DungeonRunner:
                     consecutive_no_units = 0
                     if actions % 5 == 0:
                         print(f"[ATTACK] #{actions}")
-                    # Обновляем страницу для следующего действия
-                    self.client.get(self.combat_url)
-                    # Увеличиваем счётчик атак и собираем лут через refresher каждые 3 атаки
                     self.attack_count += 1
-                    if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
-                        self._collect_loot_via_refresher()
-                    # Фиксированный sleep(ATTACK_CD) убран: интервал держит
-                    # _pace_before_action по фактическому времени (перезагрузка
-                    # страницы уже в него входит) — бой быстрее и без отбоев
+                    # Перезагрузка страницы (~200KB + парс) стоила ~1.7с и шла
+                    # после КАЖДОЙ атаки → темп 2.7с/действие. Attack URL
+                    # многоразовый (проверено live), поэтому перезагружаемся
+                    # только раз в LOOT_COLLECT_INTERVAL атак (вместе с лутом)
+                    # или сразу, если ответ намекает на смену состояния боя.
+                    body = resp.text or ""
+                    state_changed = any(m in body for m in (
+                        "battlefield-modal", "_death-hero",
+                        "вы погибли", "пал в сражении", "пала в сражении"))
+                    if state_changed or self.attack_count % LOOT_COLLECT_INTERVAL == 0:
+                        self.client.get(self.combat_url)
+                        if self.attack_count % LOOT_COLLECT_INTERVAL == 0:
+                            self._collect_loot_via_refresher()
                 else:
                     print(f"[ERR] Attack failed")
                     consecutive_no_units += 1
