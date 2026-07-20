@@ -1159,6 +1159,12 @@ def get_dungeon_difficulty(dungeon_id):
     if idx < len(DIFFICULTY_LEVELS):
         return DIFFICULTY_LEVELS[idx]
 
+    # Одна смерть — не приговор: скип только при 2+ недавних смертях.
+    # Иначе ручная база normal (слабые чары) превращала единственную
+    # случайную смерть (недохил, лаг сервера) в мгновенный скип данжа.
+    if len(recent) < 2:
+        return DIFFICULTY_LEVELS[-1]  # остаёмся на normal — ещё попытка
+
     # Смертей больше лесенки — skip, но с авто-ретестом после тишины
     last_time = None
     for e in recent:
