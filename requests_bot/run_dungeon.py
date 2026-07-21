@@ -1586,6 +1586,28 @@ class DungeonRunner:
                 self.combat_url = cur_url
                 self._save_loot_url_from_combat_page()
                 return "next_stage"
+
+            # ДИАГНОСТИКА: не нашли кнопку продолжения за отведённое время.
+            # Логируем ВСЕ кнопки экрана (текст + href) в *_live.log и
+            # сохраняем HTML — чтобы написать точный обработчик застрявшего
+            # экрана (напр. профешн-панель ПШГ с 'Забрать'/'В подземелье!').
+            try:
+                dump_soup = self.client.soup()
+                btns = []
+                if dump_soup:
+                    for b in dump_soup.select("a.go-btn, a.btn, a.btn-brown-new"):
+                        btns.append((b.get_text(strip=True), b.get("href", "")))
+                log_warning(f"[INTERSTEP-DUMP] {self.current_dungeon_id}: не нашёл продолжение за {max_poll} поллов. URL={cur_url}")
+                for txt, href in btns[:25]:
+                    log_warning(f"[INTERSTEP-BTN] '{txt}' → {href[:150]}")
+                dump_name = f"debug_interstep_{self.current_dungeon_id.replace(':', '_')}.html"
+                dump_path = os.path.join(SCRIPT_DIR, dump_name)
+                with open(dump_path, "w", encoding="utf-8") as f:
+                    f.write(self.client.current_page or "")
+                log_warning(f"[INTERSTEP-DUMP] HTML сохранён: {dump_path}")
+            except Exception as e:
+                log_debug(f"[INTERSTEP-DUMP] ошибка дампа: {e}")
+
             return "continue"
 
         # Проверяем URL - всё ещё в бою
