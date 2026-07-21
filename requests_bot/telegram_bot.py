@@ -1194,8 +1194,11 @@ def get_settings_keyboard(profile: str):
 # Данжи по вкладкам
 DUNGEONS_TAB2 = {
     # Tab 2: 50+ уровень (по умолчанию)
+    "dng:dshadowforpost": "Форпост Теней",
     "dng:dSanctuary": "Святилище Накрила",
     "dng:dHellRuins": "Адские Развалины",
+    "dng:TaintedPrison": "Проклятый Острог",
+    "dng:Necropolis": "Некрополь",
     "dng:RestMonastery": "Монастырь Покоя",
     "dng:HighDungeon": "Высокая Темница",
     "dng:Underlight": "Логово Кобольдов",

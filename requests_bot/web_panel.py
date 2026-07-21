@@ -92,8 +92,11 @@ RESOURCE_NAMES_RU = {
 
 # Данжи Tab2: 1-29 уровень
 DUNGEONS_TAB2 = {
+    "dng:dshadowforpost": "Форпост Теней",
     "dng:dSanctuary": "Святилище Накрила",
     "dng:dHellRuins": "Адские Развалины",
+    "dng:TaintedPrison": "Проклятый Острог",
+    "dng:Necropolis": "Некрополь",
     "dng:RestMonastery": "Монастырь Покоя",
     "dng:HighDungeon": "Высокая Темница",
     "dng:Underlight": "Логово Кобольдов",
