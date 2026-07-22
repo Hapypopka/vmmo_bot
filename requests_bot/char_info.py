@@ -29,8 +29,10 @@ AJAX_HEADERS = {
     "Accept": "text/xml, */*; q=0.01",
 }
 
-# Снимок не чаще раза в N секунд (уровень/статы меняются медленно)
-REFRESH_TTL = 3 * 3600
+# Снимок не чаще раза в N секунд. Держим час: статы меняются при апгрейде
+# снаряжения, и ждать полдня обновления в панели — плохо. Разово по клику в
+# панели можно форснуть мимо TTL (см. CLI ниже / /api/char_info/<p>/refresh).
+REFRESH_TTL = 3600
 
 
 def _char_info_path():
@@ -135,16 +137,19 @@ def _is_fresh():
         return False
 
 
-def refresh_if_stale(client):
+def refresh_if_stale(client, force=False):
     """
     Снимает паспорт, если предыдущий снимок протух (или его нет).
     Никогда не роняет вызывающего — все ошибки глушим.
+
+    Args:
+        force: снять снимок даже если предыдущий ещё свежий (ручное обновление)
 
     Returns:
         bool: True если сняли и сохранили новый снимок
     """
     try:
-        if _is_fresh():
+        if not force and _is_fresh():
             return False
         info = fetch(client)
         if info:
@@ -152,3 +157,47 @@ def refresh_if_stale(client):
     except Exception:
         pass
     return False
+
+
+def _cli():
+    """
+    Ручное снятие паспорта из куков профилей (как debug_cli — без login/logout,
+    безопасно для работающих ботов). Форсит снимок мимо TTL.
+
+        python3 -m requests_bot.char_info            # все профили
+        python3 -m requests_bot.char_info char28     # один/несколько
+    """
+    import sys
+    import glob
+    os.environ.setdefault("VMMO_LOG_REQUESTS", "0")
+    from requests_bot import config as cfg
+    from requests_bot.client import VMMOClient
+
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    profs = sys.argv[1:]
+    if not profs:
+        profs = sorted(
+            (os.path.basename(os.path.dirname(p))
+             for p in glob.glob(os.path.join(base, "profiles", "char*", "cookies.json"))),
+            key=lambda s: int("".join(filter(str.isdigit, s)) or 0),
+        )
+
+    ok = 0
+    for prof in profs:
+        try:
+            cfg.set_profile(prof)
+            client = VMMOClient()
+            client.load_cookies(os.path.join(base, "profiles", prof, "cookies.json"))
+            info = fetch(client)
+            if info and save(info):
+                ok += 1
+                print(f"{prof}: {info['name']} {info['level']}ур side={info['side']} sum={info['sum_stats']}")
+            else:
+                print(f"{prof}: нет данных")
+        except Exception as e:
+            print(f"{prof}: ERR {e}")
+    print(f"OK {ok}/{len(profs)}")
+
+
+if __name__ == "__main__":
+    _cli()

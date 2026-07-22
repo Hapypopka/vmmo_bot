@@ -1255,6 +1255,29 @@ def api_restart_bot(profile):
     return jsonify({"success": success, "message": msg})
 
 
+@app.route("/api/char_info/<profile>/refresh", methods=["POST"])
+@login_required
+def api_refresh_char_info(profile):
+    """API: Форсить свежий снимок паспорта чара (после апгрейда снаряжения).
+
+    Гоняем как отдельный процесс (по кукам профиля, без login/logout —
+    безопасно для работающего бота), чтобы не мутить глобальный конфиг панели.
+    """
+    if profile not in PROFILE_NAMES:
+        return jsonify({"success": False, "error": "Профиль не найден"})
+    try:
+        subprocess.run(
+            ["python3", "-m", "requests_bot.char_info", profile],
+            cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=30
+        )
+        info = get_char_info(profile)
+        return jsonify({"success": bool(info), "info": info})
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "error": "Таймаут (30с)"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
 @app.route("/api/bot/start_all", methods=["POST"])
 @login_required
 def api_start_all():

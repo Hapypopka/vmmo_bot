@@ -1525,6 +1525,15 @@ class VMMOBot:
                         time.sleep(60)
                         continue
 
+                # Обновляем паспорт персонажа для панели, если протух (раз в TTL).
+                # В цикле, а не только в login() — чтобы апгрейд снаряжения
+                # долетал до панели без рестарта бота.
+                try:
+                    from requests_bot import char_info
+                    char_info.refresh_if_stale(self.client)
+                except Exception:
+                    pass
+
                 try:
                     if not self.run_dungeon_cycle():
                         break

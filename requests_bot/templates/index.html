@@ -21,7 +21,8 @@
                 {% endif %}
                 {% if bot.char_info and bot.char_info.level %}
                 <span class="char-chip char-side-{{ bot.char_info.side }}"
-                      title="{{ bot.char_info.side_label }} {{ bot.char_info.class }}{% if bot.char_info.title %} — {{ bot.char_info.title }}{% endif %}">
+                      onclick="refreshChar('{{ bot.profile }}', this)"
+                      title="{{ bot.char_info.side_label }} {{ bot.char_info.class }}{% if bot.char_info.title %} — {{ bot.char_info.title }}{% endif %} · нажми, чтобы обновить">
                     {{ bot.char_info.side_icon }}{% if bot.char_info.class %} {{ bot.char_info.class }}{% endif %} · {{ bot.char_info.level }} ур.
                 </span>
                 {% endif %}
@@ -414,7 +415,10 @@
         border-radius: 2px;
         white-space: nowrap;
         color: var(--text-3);
+        cursor: pointer;
     }
+    .char-chip:hover { filter: brightness(1.25); }
+    .char-chip.refreshing { opacity: 0.5; pointer-events: none; }
 
     /* Светлый — золото, Тёмный — фиолет */
     .char-chip.char-side-1 {
@@ -632,6 +636,23 @@
         } else {
             chain.style.display = 'none';
             if (arrow) arrow.textContent = '▼';
+        }
+    }
+
+    async function refreshChar(profile, el) {
+        if (el) el.classList.add('refreshing');
+        try {
+            const result = await apiCall(`/api/char_info/${profile}/refresh`, 'POST');
+            if (result.success) {
+                showToast('Паспорт обновлён', 'success');
+                setTimeout(() => location.reload(), 500);
+            } else {
+                showToast('Не удалось обновить: ' + (result.error || 'нет данных'), 'error');
+                if (el) el.classList.remove('refreshing');
+            }
+        } catch (e) {
+            showToast('Ошибка обновления', 'error');
+            if (el) el.classList.remove('refreshing');
         }
     }
 
