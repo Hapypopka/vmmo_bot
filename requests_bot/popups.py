@@ -264,18 +264,9 @@ class PopupsClient:
                         print(f"[UNSTUCK] Нажали: '{text}'")
                         return True
 
-        # Попробуем любую безопасную кнопку
-        for btn in soup.select("a.go-btn"):
-            text = btn.get_text(strip=True)
-            if any(skip in text.lower() for skip in skip_texts):
-                continue
-            href = btn.get("href")
-            if href:
-                url = urljoin(self.client.current_url, href)
-                self.client.get(url)
-                print(f"[UNSTUCK] Нажали любую: '{text}'")
-                return True
-
+        # Фолбек «нажать любую кнопку» ВЫПИЛЕН (2026-07-23): на странице
+        # рюкзака/аукциона он кликал «Надеть» — бот надевал хлам, а снятая
+        # экипировка потом разбиралась чисткой рюкзака. Только hard reset.
         return self._hard_reset()
 
     def _hard_reset(self):

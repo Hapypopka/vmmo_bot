@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from requests_bot.config import BASE_URL
+from requests_bot.watchdog import reset_watchdog
 
 try:
     from requests_bot.logger import log_debug, log_info, log_warning
@@ -973,6 +974,11 @@ class IronCraftClient:
 
                 name = target["name"]
                 auction_url = target["buttons"]["auction"]
+
+                # Выставление лота = активность: без сброса watchdog долгая
+                # продажа (50 лотов, минуты) считалась «простоем» и unstuck
+                # кликал по кнопкам рюкзака
+                reset_watchdog()
 
                 log_info(f"[CRAFT] Выставляю на аукцион: {name}")
 

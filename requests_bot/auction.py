@@ -19,6 +19,7 @@ from .backpack import (
 )
 from .config import get_craft_items
 from .sales_tracker import record_listed
+from .watchdog import reset_watchdog
 
 try:
     from .logger import log_debug
@@ -454,6 +455,10 @@ class AuctionClient:
         current_page = 1
 
         for iteration in range(100):  # Защита от бесконечного цикла
+            # Обработка лота = активность, иначе долгая распродажа рюкзака
+            # выглядит для watchdog как зависание
+            reset_watchdog()
+
             # Открываем рюкзак (всегда на стр.1)
             if not self.backpack.open_backpack():
                 print("[AUCTION] Не удалось открыть рюкзак")
